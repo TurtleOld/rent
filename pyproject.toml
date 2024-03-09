@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "rent"
+version = "0.1.0"
+description = ""
+authors = ["TurtleOld <dev@pavlovteam.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+django = "^5.0.3"
+python-dotenv = "^1.0.1"
+django-crispy-forms = "^2.1"
+crispy-bootstrap5 = "^2024.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

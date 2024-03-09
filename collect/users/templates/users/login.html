@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% translate 'Страница входа' %}{% endblock %}
+{% block content %}
+    <div class="container d-flex min-vh-100 flex-column justify-content-center align-items-center">
+        {% include 'error_modal.html' %}
+        <h1 class="text-light text-uppercase">Информация о квартплате</h1>
+        <p class="text-light text-center">{% translate 'Сбор информации о квартплате!' %}</p>
+        <form method="post" class="form text-light">
+            {% csrf_token %}
+            <p class="my-4">
+                {{ user_login_form | crispy }}
+            </p>
+            <div class="row align-items-center justify-content-center">
+                <div class="row justify-content-center align-items-center">
+                    <button type="submit" class="btn btn-primary">{% translate 'Войти' %}</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+{% endblock %}

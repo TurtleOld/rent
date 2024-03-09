@@ -1,0 +1,137 @@
+html, body {
+    width: 100% !important;
+    height: 100% !important;
+    overflow-x: hidden !important;
+}
+
+.table-buttons {
+    display: flex;
+    justify-content: center;
+    form {
+        margin-bottom: 0;
+    }
+}
+
+.logo {
+    padding-top: 0 !important;
+    color: #198754 !important;
+    font-family: 'Gloria Hallelujah', sans-serif !important;
+    font-size: 3rem;
+}
+
+.button-exit {
+    margin: 0 !important;
+}
+
+.who-login {
+    margin-left: 3rem;
+    color: #92dc7e !important;
+    height: .2rem !important;
+}
+
+.receipt {
+    position: relative !important;
+    overflow: scroll !important;
+    border: 1px solid black !important;
+    padding: 10px !important;
+    border-radius: 50% !important;
+    height: 16rem
+}
+
+.button-receipt {
+    height: 6rem !important;
+}
+
+.add-receipt-form {
+    margin-bottom: 10% !important;
+}
+
+.add-receipt-btn {
+    float: right !important;
+}
+
+#add-new-seller-btn {
+    position: absolute !important;
+    top: 2rem !important;
+    right: -14.5rem !important;
+    padding: .3rem .6rem !important;
+}
+
+.wrapper-table-income {
+    position: relative !important;
+}
+
+.wrapper-table-expense {
+    position: relative !important;
+}
+
+.link-application {
+    position: absolute !important;
+}
+
+.return-receipts-list {
+    position: absolute !important;
+    top: 5.7rem !important;
+}
+
+.return-incomes-list {
+    position: absolute !important;
+    top: 3rem !important;
+}
+
+.button-add-form-income {
+    font-size: 12px !important;
+}
+
+.form-remove-receipt-button {
+    position: relative !important;
+}
+
+.open-modal-expense-button {
+    font-size: 13px !important;
+}
+
+.open-modal-categories-income-button {
+    position: absolute !important;
+    top: .9rem !important;
+    right: -15rem !important;
+}
+
+.help-text-form {
+    .form-text {
+        color: #f8f9fb !important;
+    }
+}
+
+.navbar-nav {
+    margin: 0 auto !important;
+}
+
+.btn-border-light {
+    border: 1px solid #f8f9fa;
+}
+
+.count-receipt-list {
+    color: #1a2238;
+    li {
+        color: #ffffcc;
+        background-color: #05b055;
+    }
+}
+.error {
+    background-color: #dc3545;
+    color: #ffffff;
+    border-radius: 1rem;
+    padding: 1rem 0 1rem 0;
+}
+.success {
+    background-color: #009944;
+    color: #ffffff;
+    border-radius: 1rem;
+    padding: 1rem 0 1rem 0;
+}
+
+@import "account";
+@import "buttons";
+@import "fonts" ;
+@import "mobile";
