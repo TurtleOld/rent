@@ -11,7 +11,7 @@
     {% block head %}
         <link nonce="{{request.csp_nonce}}" rel="stylesheet" href="{% static 'bootstrap/css/bootstrap.css' %}?v={% word_hash %}">
         <script nonce="{{request.csp_nonce}}" src="{% static 'bootstrap/js/bootstrap.bundle.min.js' %}?v={% word_hash %}"></script>
-        <title>{% block title %}{% endblock %} - Hasta La Vista, Money!</title>
+        <title>{% block title %}{% endblock %} - Информация о платежках за квартиру!</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
         <meta http-equiv="X-UA-Compatible" content="ie=edge">
@@ -21,10 +21,8 @@
         <script nonce="{{request.csp_nonce}}" src="{% static 'js/jquery-3.7.0.min.js' %}?v={% word_hash %}"></script>
     {% endblock %}
 </head>
-<body class="bg-success">
-
+<body class="bg-dark">
         {% if user.is_authenticated %}
-            {% include 'header.html' %}
             {% if messages %}
                 {% for message in messages %}
                     <div class="alert container position-absolute start-50 translate-middle mt-3 text-center {% if message.tags %}{{ message.tags }}{% endif %}">
@@ -34,7 +32,6 @@
             {% endif %}
         {% endif %}
         {% if user.is_registered %}
-            {% include 'header.html' %}
             {% if messages %}
                 {% for message in messages %}
                     <div class="alert container position-absolute start-50 translate-middle mt-5 text-center {% if message.tags %}{{ message.tags }}{% endif %}">
