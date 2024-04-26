@@ -115,7 +115,7 @@ def format_rent(file):
     for item in document.tables[3].rows:
         text = [cell.text for cell in item.cells]
         if text[0] in TYPE_SERVICE:
-            service_info = ServiceInfo.objects.create(
+            ServiceInfo.objects.create(
                 rent=rent_info,
                 date=date,
                 type_service=text[0],
