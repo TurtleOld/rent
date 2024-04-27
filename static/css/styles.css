@@ -1,0 +1,421 @@
+/* line 1, ../projects/rent/static/scss/styles.scss */
+html, body {
+  width: 100% !important;
+  height: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* line 7, ../projects/rent/static/scss/styles.scss */
+.table-buttons {
+  display: flex;
+  justify-content: center;
+}
+
+/* line 10, ../projects/rent/static/scss/styles.scss */
+.table-buttons form {
+  margin-bottom: 0;
+}
+
+/* line 15, ../projects/rent/static/scss/styles.scss */
+.logo {
+  padding-top: 0 !important;
+  color: #198754 !important;
+  font-family: 'Gloria Hallelujah', sans-serif !important;
+  font-size: 3rem;
+}
+
+/* line 22, ../projects/rent/static/scss/styles.scss */
+.button-exit {
+  margin: 0 !important;
+}
+
+/* line 26, ../projects/rent/static/scss/styles.scss */
+.who-login {
+  margin-left: 3rem;
+  color: #92dc7e !important;
+  height: .2rem !important;
+}
+
+/* line 32, ../projects/rent/static/scss/styles.scss */
+.receipt {
+  position: relative !important;
+  overflow: scroll !important;
+  border: 1px solid black !important;
+  padding: 10px !important;
+  border-radius: 50% !important;
+  height: 16rem;
+}
+
+/* line 41, ../projects/rent/static/scss/styles.scss */
+.button-receipt {
+  height: 6rem !important;
+}
+
+/* line 45, ../projects/rent/static/scss/styles.scss */
+.add-receipt-form {
+  margin-bottom: 10% !important;
+}
+
+/* line 49, ../projects/rent/static/scss/styles.scss */
+.add-receipt-btn {
+  float: right !important;
+}
+
+/* line 53, ../projects/rent/static/scss/styles.scss */
+#add-new-seller-btn {
+  position: absolute !important;
+  top: 2rem !important;
+  right: -14.5rem !important;
+  padding: .3rem .6rem !important;
+}
+
+/* line 60, ../projects/rent/static/scss/styles.scss */
+.wrapper-table-income {
+  position: relative !important;
+}
+
+/* line 64, ../projects/rent/static/scss/styles.scss */
+.wrapper-table-expense {
+  position: relative !important;
+}
+
+/* line 68, ../projects/rent/static/scss/styles.scss */
+.link-application {
+  position: absolute !important;
+}
+
+/* line 72, ../projects/rent/static/scss/styles.scss */
+.return-receipts-list {
+  position: absolute !important;
+  top: 5.7rem !important;
+}
+
+/* line 77, ../projects/rent/static/scss/styles.scss */
+.return-incomes-list {
+  position: absolute !important;
+  top: 3rem !important;
+}
+
+/* line 82, ../projects/rent/static/scss/styles.scss */
+.button-add-form-income {
+  font-size: 12px !important;
+}
+
+/* line 86, ../projects/rent/static/scss/styles.scss */
+.form-remove-receipt-button {
+  position: relative !important;
+}
+
+/* line 90, ../projects/rent/static/scss/styles.scss */
+.open-modal-expense-button {
+  font-size: 13px !important;
+}
+
+/* line 94, ../projects/rent/static/scss/styles.scss */
+.open-modal-categories-income-button {
+  position: absolute !important;
+  top: .9rem !important;
+  right: -15rem !important;
+}
+
+/* line 101, ../projects/rent/static/scss/styles.scss */
+.help-text-form .form-text {
+  color: #f8f9fb !important;
+}
+
+/* line 106, ../projects/rent/static/scss/styles.scss */
+.navbar-nav {
+  margin: 0 auto !important;
+}
+
+/* line 110, ../projects/rent/static/scss/styles.scss */
+.btn-border-light {
+  border: 1px solid #f8f9fa;
+}
+
+/* line 114, ../projects/rent/static/scss/styles.scss */
+.count-receipt-list {
+  color: #1a2238;
+}
+
+/* line 116, ../projects/rent/static/scss/styles.scss */
+.count-receipt-list li {
+  color: #ffffcc;
+  background-color: #05b055;
+}
+
+/* line 121, ../projects/rent/static/scss/styles.scss */
+.error {
+  background-color: #dc3545;
+  color: #ffffff;
+  border-radius: 1rem;
+  padding: 1rem 0 1rem 0;
+}
+
+/* line 127, ../projects/rent/static/scss/styles.scss */
+.success {
+  background-color: #009944;
+  color: #ffffff;
+  border-radius: 1rem;
+  padding: 1rem 0 1rem 0;
+}
+
+/* line 1, ../projects/rent/static/scss/_account.scss */
+.account {
+  height: min-content;
+}
+
+/* line 1, ../projects/rent/static/scss/_buttons_outline.scss */
+.btn-outline-pink {
+  --bs-btn-color: #fc0fc0;
+  --bs-btn-border-color: #fc0fc0;
+  --bs-btn-hover-color: #000;
+  --bs-btn-hover-bg: #fc0fc0;
+  --bs-btn-hover-border-color: #fc0fc0;
+  --bs-btn-focus-shadow-rgb: 13,202,240;
+  --bs-btn-active-color: #000;
+  --bs-btn-active-bg: #fc0fc0;
+  --bs-btn-active-border-color: #fc0fc0;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: #fc0fc0;
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: #fc0fc0;
+  --bs-gradient: none;
+}
+
+/* line 18, ../projects/rent/static/scss/_buttons_outline.scss */
+.btn-outline-salmon {
+  --bs-btn-color: #FA8072;
+  --bs-btn-border-color: #FA8072;
+  --bs-btn-hover-color: #000;
+  --bs-btn-hover-bg: #FA8072;
+  --bs-btn-hover-border-color: #FA8072;
+  --bs-btn-focus-shadow-rgb: 13,202,240;
+  --bs-btn-active-color: #000;
+  --bs-btn-active-bg: #F08080;
+  --bs-btn-active-border-color: #F08080;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: #F08080;
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: #F08080;
+  --bs-gradient: none;
+}
+
+/* line 3, ../projects/rent/static/scss/_buttons.scss */
+.btn-pink {
+  --bs-btn-color: #000;
+  --bs-btn-bg: #ffc0cb;
+  --bs-btn-border-color: #ffc0cb;
+  --bs-btn-hover-color: #000;
+  --bs-btn-hover-bg: #ffc0cb;
+  --bs-btn-hover-border-color: #ffc0cb;
+  --bs-btn-focus-shadow-rgb: 217,164,6;
+  --bs-btn-active-color: #000;
+  --bs-btn-active-bg: #ffc0cb;
+  --bs-btn-active-border-color: #ffc0cb;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: #000;
+  --bs-btn-disabled-bg: #ffc0cb;
+  --bs-btn-disabled-border-color: #ffc0cb;
+}
+
+/* line 20, ../projects/rent/static/scss/_buttons.scss */
+.btn-outline-solid-pink {
+  --bs-btn-color: #f8f9fa;
+  --bs-btn-border-color: #7e3748;
+  --bs-btn-hover-color: #f8f9fa;
+  --bs-btn-hover-bg: #7e3748;
+  --bs-btn-hover-border-color: #7e3748;
+  --bs-btn-focus-shadow-rgb: 217,164,6;
+  --bs-btn-active-color: #f8f9fa;
+  --bs-btn-active-bg: #7e3748;
+  --bs-btn-active-border-color: #7e3748;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: #f8f9fa;
+  --bs-btn-disabled-bg: #7e3748;
+  --bs-btn-disabled-border-color: #7e3748;
+}
+
+/* line 36, ../projects/rent/static/scss/_buttons.scss */
+.btn-outline-darkturquoise {
+  --bs-btn-color: #f8f9fa;
+  --bs-btn-border-color: #00ced1;
+  --bs-btn-hover-color: #f8f9fa;
+  --bs-btn-hover-bg: #00ced1;
+  --bs-btn-hover-border-color: #00ced1;
+  --bs-btn-focus-shadow-rgb: 217,164,6;
+  --bs-btn-active-color: #f8f9fa;
+  --bs-btn-active-bg: #00ced1;
+  --bs-btn-active-border-color: #00ced1;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: #f8f9fa;
+  --bs-btn-disabled-bg: #00ced1;
+  --bs-btn-disabled-border-color: #00ced1;
+}
+
+/* line 54, ../projects/rent/static/scss/_buttons.scss */
+.btn-banana {
+  --bs-btn-color: #000;
+  --bs-btn-bg: #fae7b5;
+  --bs-btn-border-color: #fae7b5;
+  --bs-btn-hover-color: #000;
+  --bs-btn-hover-bg: #fae7b5;
+  --bs-btn-hover-border-color: #fae7b5;
+  --bs-btn-focus-shadow-rgb: 217,164,6;
+  --bs-btn-active-color: #000;
+  --bs-btn-active-bg: #fae7b5;
+  --bs-btn-active-border-color: #fae7b5;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: #000;
+  --bs-btn-disabled-bg: #fae7b5;
+  --bs-btn-disabled-border-color: #fae7b5;
+}
+
+/* line 71, ../projects/rent/static/scss/_buttons.scss */
+.btn-purple {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #800080;
+  --bs-btn-border-color: #800080;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #8B008B;
+  --bs-btn-hover-border-color: #8B008B;
+  --bs-btn-focus-shadow-rgb: 49,132,253;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #8B008B;
+  --bs-btn-active-border-color: #8B008B;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: #800080;
+  --bs-btn-disabled-border-color: #800080;
+}
+
+@font-face {
+  font-family: 'Amarante';
+  src: url("../fonts/Amarante Regular.eot");
+  src: url("../fonts/Amarante Regular.eot?#iefix") format("embedded-opentype"), url("../fonts/Amarante Regular.woff2") format("woff2"), url("../fonts/Amarante Regular.woff") format("woff"), url("../fonts/Amarante Regular.svg#Amarante Regular") format("svg");
+  font-weight: 400;
+  font-style: normal;
+  font-stretch: normal;
+  unicode-range: U+0020-00FE;
+}
+
+@font-face {
+  font-family: 'Gloria Hallelujah';
+  src: url("../fonts/Gloria Hallelujah.eot");
+  src: url("../fonts/Gloria Hallelujah.eot?#iefix") format("embedded-opentype"), url("../fonts/Gloria Hallelujah.woff2") format("woff2"), url("../fonts/Gloria Hallelujah.woff") format("woff"), url("../fonts/Gloria Hallelujah.svg#Gloria Hallelujah") format("svg");
+  font-weight: 400;
+  font-style: normal;
+  font-stretch: normal;
+  unicode-range: U+0020-2212;
+}
+
+@font-face {
+  font-family: 'SirinStencil';
+  src: url("../fonts/SirinStencil.eot");
+  src: url("../fonts/SirinStencil.eot?#iefix") format("embedded-opentype"), url("../fonts/SirinStencil.woff2") format("woff2"), url("../fonts/SirinStencil.woff") format("woff"), url("../fonts/SirinStencil.svg#SirinStencil") format("svg");
+  font-weight: 400;
+  font-style: normal;
+  font-stretch: normal;
+  unicode-range: U+0020-2074;
+}
+
+@font-face {
+  font-family: 'Kalam';
+  src: url("../fonts/Kalam.eot");
+  src: url("../fonts/Kalam.eot?#iefix") format("embedded-opentype"), url("../fonts/Kalam.woff2") format("woff2"), url("../fonts/Kalam.woff") format("woff"), url("../fonts/Kalam.ttf") format("truetype"), url("../fonts/Kalam.svg#Kalam") format("svg");
+  font-weight: 400;
+  font-style: normal;
+  font-stretch: normal;
+  unicode-range: U+0020-00FE;
+}
+
+@font-face {
+  font-family: 'Kalam';
+  src: url("../fonts/Kalam Bold.eot");
+  src: url("../fonts/Kalam Bold.eot?#iefix") format("embedded-opentype"), url("../fonts/Kalam Bold.woff2") format("woff2"), url("../fonts/Kalam Bold.woff") format("woff"), url("../fonts/Kalam Bold.ttf") format("truetype"), url("../fonts/Kalam Bold.svg#Kalam Bold") format("svg");
+  font-weight: 700;
+  font-style: normal;
+  font-stretch: normal;
+  unicode-range: U+0020-00FE;
+}
+
+@media only screen and (max-width: 767px) {
+  /* line 2, ../projects/rent/static/scss/_mobile.scss */
+  .receipt tr, h4 {
+    font-size: calc(1.250rem + -2vw);
+  }
+  /* line 5, ../projects/rent/static/scss/_mobile.scss */
+  .who-login {
+    margin-left: 0;
+    font-size: .8rem;
+  }
+  /* line 9, ../projects/rent/static/scss/_mobile.scss */
+  .remove-button {
+    right: 5%;
+  }
+  /* line 12, ../projects/rent/static/scss/_mobile.scss */
+  .logo {
+    font-size: 1.2rem;
+    margin-top: 3rem;
+  }
+  /* line 16, ../projects/rent/static/scss/_mobile.scss */
+  .wrapper-table-income th, td {
+    font-size: .7rem;
+  }
+  /* line 19, ../projects/rent/static/scss/_mobile.scss */
+  .wrapper-table-expense th, td {
+    font-size: .7rem;
+  }
+  /* line 22, ../projects/rent/static/scss/_mobile.scss */
+  .account {
+    font-size: 1rem;
+    height: 100% !important;
+  }
+  /* line 26, ../projects/rent/static/scss/_mobile.scss */
+  .text-menu-button {
+    display: none;
+  }
+  /* line 29, ../projects/rent/static/scss/_mobile.scss */
+  .btn-danger-exit {
+    border-color: #dc3545;
+    --bs-btn-color: #dc3545;
+    --bs-btn-bg: #dc3545;
+    --bs-btn-border-color: #dc3545 !important;
+    --bs-btn-hover-color: #dc3545;
+    --bs-btn-hover-bg: #bb2d3b;
+    --bs-btn-hover-border-color: #b02a37 !important;
+    --bs-btn-focus-shadow-rgb: 225,83,97;
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #b02a37;
+    --bs-btn-active-border-color: #a52834 !important;
+    --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+    --bs-btn-disabled-color: #fff;
+    --bs-btn-disabled-bg: #dc3545;
+    --bs-btn-disabled-border-color: #dc3545 !important;
+  }
+  /* line 46, ../projects/rent/static/scss/_mobile.scss */
+  .button-receipt {
+    height: auto !important;
+  }
+  /* line 50, ../projects/rent/static/scss/_mobile.scss */
+  table th {
+    font-size: .7rem;
+  }
+  /* line 53, ../projects/rent/static/scss/_mobile.scss */
+  table td {
+    font-size: .4rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  /* line 61, ../projects/rent/static/scss/_mobile.scss */
+  .remove-button {
+    right: 2%;
+  }
+  /* line 64, ../projects/rent/static/scss/_mobile.scss */
+  .logo {
+    margin-top: auto;
+  }
+}
+
+/*# sourceMappingURL=styles.css.map */
