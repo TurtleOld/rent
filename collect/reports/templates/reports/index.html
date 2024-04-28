@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% translate 'Отчёты' %}{% endblock %}
+{% block content %}
+    <div class="container">
+        <div class="row">
+            <div class="col-xl-12">
+                {% for month, monthly_changes in all_monthly_changes.items %}
+                    <h3 class="text-light">{{ month|date:"F Y" }}</h3>
+                    {% for service, changes in monthly_changes.items %}
+                        <table class="table">
+                            <thead>
+                            <tr>
+                                <th scope="col">Вид услуги</th>
+                                <th scope="col">Объём услуги</th>
+                                <th scope="col">Тариф</th>
+                                <th scope="col">Начислено по тарифу</th>
+                                <th scope="col">Перерасчёты</th>
+                                <th scope="col">Итоговая сумма по услуге</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <th scope="row" class="w-25">{{ service }}</th>
+                                <td class="{% if changes.scope_service > 0 %} text-danger {% else %} text-success {% endif %}">{{ changes.previous_scope_service }} {{ changes.units }}<br>{{ changes.scope_service }} {{ changes.units }}<br>{{ changes.current_scope_service }} {{ changes.units }}</td>
+                                <td class="{% if changes.tariff_change > 0 %} text-danger {% else %} text-success {% endif %}">{{ changes.previous_tariff }}<br>{{ changes.tariff_change }}<br>{{ changes.current_tariff }}</td>
+                                <td class="{% if changes.accrued_service > 0 %} text-danger {% else %} text-success {% endif %}">{{ changes.previous_accrued_service }}<br>{{ changes.accrued_service }}<br>{{ changes.current_accrued_service }}</td>
+                                <td class="{% if changes.recalculations > 0 %} text-danger {% else %} text-success {% endif %}">{{ changes.previous_recalculations }}<br>{{ changes.recalculations }}<br>{{ changes.current_recalculations }}</td>
+                                <td class="{% if changes.total_change > 0 %} text-danger {% else %} text-success {% endif %}">{{ changes.previous_total_change }}<br>{{ changes.total_change }}<br>{{ changes.current_total_change }}</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    {% endfor %}
+                {% endfor %}
+            </div>
+            <!-- /.col-xl-12 -->
+        </div>
+        <!-- /.row -->
+    </div>
+    <!-- /.container -->
+
+{% endblock %}

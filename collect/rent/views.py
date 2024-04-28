@@ -106,33 +106,38 @@ def format_rent(file):
     month = MONTHS[month_str]
     year = int(year_str)
     date = datetime.datetime(year, month, 1).date()
-    for paragraph in document.paragraphs:
-        if 'Кому:' in paragraph.text:
-            personal_account = (
-                paragraph.text.split('Кому:')[1].split('Куда:')[0].strip()
-            )
-    rent_info, _ = Rent.objects.get_or_create(personal_account=personal_account)
-    for item in document.tables[3].rows:
-        text = [cell.text for cell in item.cells]
-        if text[0] in TYPE_SERVICE:
-            ServiceInfo.objects.create(
-                rent=rent_info,
-                date=date,
-                type_service=text[0],
-                scope_service=Decimal(
-                    text[1].replace(',', '.').replace(' ', ''),
-                ),
-                units=text[2],
-                tariff=Decimal(text[3].replace(',', '.').replace(' ', '')),
-                accrued_tariff=Decimal(
-                    text[4].replace(',', '.').replace(' ', ''),
-                ),
-                recalculations=(
-                    Decimal(
-                        text[5].replace(',', '.').replace(' ', ''),
-                    )
-                    if len(text) > 6
-                    else 0
-                ),
-                total=Decimal(text[-1].replace(',', '.').replace(' ', '')),
-            )
+    check_date = ServiceInfo.objects.filter(date=date)
+    print(check_date)
+    if not check_date:
+        for paragraph in document.paragraphs:
+            if 'Кому:' in paragraph.text:
+                personal_account = (
+                    paragraph.text.split('Кому:')[1].split('Куда:')[0].strip()
+                )
+        rent_info, _ = Rent.objects.get_or_create(personal_account=personal_account)
+        for item in document.tables[3].rows:
+            text = [cell.text for cell in item.cells]
+            if text[0] in TYPE_SERVICE:
+                ServiceInfo.objects.create(
+                    rent=rent_info,
+                    date=date,
+                    type_service=text[0],
+                    scope_service=Decimal(
+                        text[1].replace(',', '.').replace(' ', ''),
+                    ),
+                    units=text[2],
+                    tariff=Decimal(text[3].replace(',', '.').replace(' ', '')),
+                    accrued_tariff=Decimal(
+                        text[4].replace(',', '.').replace(' ', ''),
+                    ),
+                    recalculations=(
+                        Decimal(
+                            text[5].replace(',', '.').replace(' ', ''),
+                        )
+                        if len(text) > 6
+                        else 0
+                    ),
+                    total=Decimal(text[-1].replace(',', '.').replace(' ', '')),
+                )
+    else:
+        print('Такая платёжка уже была добавлена')

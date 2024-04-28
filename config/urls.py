@@ -25,6 +25,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', IndexView.as_view(), name='index'),
     path('rent/', include('collect.rent.urls', namespace='rent')),
+    path('reports/', include('collect.reports.urls', namespace='reports')),
     path(
         'login/',
         LoginUser.as_view(redirect_authenticated_user=True),
