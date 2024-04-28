@@ -42,6 +42,7 @@ LOGOUT_REDIRECT_URL = '/login'
 
 INSTALLED_APPS = [
     'collect.rent',
+    'collect.reports',
     'collect.users',
     'crispy_forms',
     'crispy_bootstrap5',
