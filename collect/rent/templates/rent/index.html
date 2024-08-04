@@ -4,10 +4,19 @@
 {% block content %}
     <div class="container-fluid">
         <div class="row mt-5">
-            <div class="col-xl-12">
-                <a class="link-light ms-5" href="{% url 'rent:payslips' %}">Добавить платежку</a>
+            <div class="col-xl-3 d-flex justify-content-center">
+                <a class="btn btn-outline-danger link-light ms-5" href="{% url 'rent:payslips' %}">Добавить платежку</a>
             </div>
-            <!-- /.col-xl-12 -->
+            <!-- /.col-xl-3 -->
+            <div class="col-xl-9">
+                {% for account in accounts %}
+                    <a class="btn btn-outline-warning">
+                        {{ account }}
+                    </a>
+                    <!-- /.btn btn-outline-warning -->
+                {% endfor %}
+            </div>
+            <!-- /.col-xl-9 -->
         </div>
         <!-- /.row -->
     </div>
