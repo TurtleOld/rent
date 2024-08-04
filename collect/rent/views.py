@@ -1,10 +1,8 @@
 import datetime
 import locale
-import os
 import tempfile
 from decimal import Decimal
 
-from dateutil import parser
 from django.contrib.messages.views import SuccessMessageMixin
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, FormView
@@ -106,15 +104,16 @@ def format_rent(file):
     month = MONTHS[month_str]
     year = int(year_str)
     date = datetime.datetime(year, month, 1).date()
-    check_date = ServiceInfo.objects.filter(date=date)
-    print(check_date)
+
+    for paragraph in document.paragraphs:
+        if 'Кому:' in paragraph.text:
+            personal_account = (
+                paragraph.text.split('Кому:')[1].split('Куда:')[0].strip()
+            )
+
+    rent_info, _ = Rent.objects.get_or_create(personal_account=personal_account)
+    check_date = ServiceInfo.objects.filter(date=date, rent_id=rent_info.id)
     if not check_date:
-        for paragraph in document.paragraphs:
-            if 'Кому:' in paragraph.text:
-                personal_account = (
-                    paragraph.text.split('Кому:')[1].split('Куда:')[0].strip()
-                )
-        rent_info, _ = Rent.objects.get_or_create(personal_account=personal_account)
         for item in document.tables[3].rows:
             text = [cell.text for cell in item.cells]
             if text[0] in TYPE_SERVICE:
