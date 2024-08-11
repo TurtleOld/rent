@@ -10,7 +10,7 @@
             <!-- /.col-xl-3 -->
             <div class="col-xl-9">
                 {% for account in accounts %}
-                    <a class="btn btn-outline-warning">
+                    <a class="btn btn-outline-warning" href="{% url 'rent:user_payslips' account.id %}">
                         {{ account }}
                     </a>
                     <!-- /.btn btn-outline-warning -->

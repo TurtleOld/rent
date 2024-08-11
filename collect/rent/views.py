@@ -3,11 +3,11 @@ import tempfile
 
 from django.contrib.messages.views import SuccessMessageMixin
 from django.urls import reverse_lazy
-from django.views.generic import TemplateView, FormView
+from django.views.generic import TemplateView, FormView, ListView
 
 from collect.custom_mixins import CustomNoPermissionMixin
 from collect.rent.forms import UploadFileForm
-from collect.rent.models import Rent
+from collect.rent.models import Rent, ServiceInfo
 
 from collect.rent.services import format_rent, convert_pdf_to_docx
 
@@ -24,7 +24,7 @@ class RentView(CustomNoPermissionMixin, SuccessMessageMixin, TemplateView):
 
 
 class FileFieldFormView(CustomNoPermissionMixin, SuccessMessageMixin, FormView):
-    template_name = 'rent/payslips.html'
+    template_name = 'rent/download_payslips.html'
     form_class = UploadFileForm
     success_url = reverse_lazy('rent:list')
 
@@ -48,3 +48,26 @@ class FileFieldFormView(CustomNoPermissionMixin, SuccessMessageMixin, FormView):
             docx_file = convert_pdf_to_docx(tempf)
             format_rent(docx_file)
             return super().form_valid(form)
+
+
+class ListUserPaySlips(CustomNoPermissionMixin, SuccessMessageMixin, ListView):
+    template_name = 'rent/list_payslips.html'
+    model = ServiceInfo
+    no_permission_url = reverse_lazy('login')
+
+    def get_context_data(self, *, object_list=None, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        user_id = self.kwargs['id']
+        payslips = ServiceInfo.objects.filter(rent_id=user_id)
+
+        payslip_date = (
+            payslips.filter(rent_id=user_id).values('date').distinct().order_by('date')
+        )
+        group_payslips = {
+            date['date']: payslips.filter(date=date['date']) for date in payslip_date
+        }
+
+        context['payslips'] = group_payslips
+
+        return context

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="container">
+        <div class="row text-white">
+            <table class="table">
+                {% for date, payslip in payslips.items %}
+                    <thead>
+                        <tr>
+                            <th>{{ date }}</th>
+                            <th>Виды услуг</th>
+                            <th>Объём услуг</th>
+                            <th>Единица измерения</th>
+                            <th>Тариф</th>
+                            <th>Начислено по тарифу</th>
+                            <th>Перерасчёты</th>
+                            <th>Итого</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payslip_item in payslip %}
+                            <tr>
+                                <td></td>
+                                <td>{{ payslip_item.type_service }}</td>
+                                <td>{{ payslip_item.scope_service }}</td>
+                                <td>{{ payslip_item.units }}</td>
+                                <td>{{ payslip_item.tariff }}</td>
+                                <td>{{ payslip_item.accrued_tariff }}</td>
+                                <td>{{ payslip_item.recalculations }}</td>
+                                <td>{{ payslip_item.total }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="2">No data available</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                {% endfor %}
+            </table>
+            
+                
+                
+            
+        </div>
+        <!-- /.row -->
+    </div>
+    <!-- /.container -->
+{% endblock %}
