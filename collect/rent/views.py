@@ -1,3 +1,4 @@
+import os
 import tempfile
 
 
@@ -43,9 +44,11 @@ class FileFieldFormView(CustomNoPermissionMixin, SuccessMessageMixin, FormView):
 
     def form_valid(self, form):
         file = form.cleaned_data['file']
-        with tempfile.NamedTemporaryFile(mode='w+b') as tempf:
-            tempf.write(file.read())
-            docx_file = convert_pdf_to_docx(tempf)
+        with tempfile.TemporaryDirectory(dir=tempfile.gettempdir()) as tmpdir:
+            tmp_file = os.path.join(tmpdir, 'tmpfile.pdf')
+            with open(tmp_file, 'wb') as f:
+                f.write(file.read())
+            docx_file = convert_pdf_to_docx(tmp_file)
             format_rent(docx_file)
             return super().form_valid(form)
 
