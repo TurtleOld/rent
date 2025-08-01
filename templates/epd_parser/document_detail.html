@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Документ ЕПД - {{ document.account_number }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-0">
+                    <i class="bi bi-file-earmark-text"></i> Документ ЕПД
+                </h1>
+                <p class="text-muted mb-0">Лицевой счет: {{ document.account_number }}</p>
+            </div>
+            <div class="btn-group">
+                <a href="{% url 'epd_parser:edit' document.pk %}" class="btn btn-warning">
+                    <i class="bi bi-pencil"></i> Редактировать
+                </a>
+                <a href="{% url 'epd_parser:download_pdf' document.pk %}" class="btn btn-info">
+                    <i class="bi bi-download"></i> Скачать PDF
+                </a>
+                <button type="button" class="btn btn-danger" onclick="confirmDelete()">
+                    <i class="bi bi-trash"></i> Удалить
+                </button>
+            </div>
+        </div>
+
+        <!-- Document Information -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-person"></i> Личная информация
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row">
+                            <dt class="col-sm-4">ФИО:</dt>
+                            <dd class="col-sm-8">{{ document.full_name }}</dd>
+                            
+                            <dt class="col-sm-4">Адрес:</dt>
+                            <dd class="col-sm-8">{{ document.address|linebreaks }}</dd>
+                            
+                            <dt class="col-sm-4">Лицевой счет:</dt>
+                            <dd class="col-sm-8">
+                                <span class="badge bg-primary">{{ document.account_number }}</span>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-calendar"></i> Платежная информация
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row">
+                            <dt class="col-sm-4">Период:</dt>
+                            <dd class="col-sm-8">
+                                <span class="badge bg-secondary">{{ document.payment_period }}</span>
+                            </dd>
+                            
+                            <dt class="col-sm-4">Срок оплаты:</dt>
+                            <dd class="col-sm-8">
+                                {% if document.due_date %}
+                                    <span class="text-{% if document.due_date < today %}danger{% else %}success{% endif %}">
+                                        {{ document.due_date|date:"d.m.Y" }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Не указан</span>
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Дата загрузки:</dt>
+                            <dd class="col-sm-8">
+                                <small class="text-muted">{{ document.created_at|date:"d.m.Y H:i" }}</small>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-calculator"></i> Финансовая сводка
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <div class="border-end">
+                            <h4 class="text-primary">{{ document.total_without_insurance|floatformat:2 }} ₽</h4>
+                            <p class="text-muted mb-0">Без страхования</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="border-end">
+                            <h4 class="text-success">{{ document.total_with_insurance|floatformat:2 }} ₽</h4>
+                            <p class="text-muted mb-0">С учетом страхования</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="border-end">
+                            <h4 class="text-info">{{ document.insurance_amount|floatformat:2 }} ₽</h4>
+                            <p class="text-muted mb-0">Страхование</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <h4 class="text-warning">{{ service_charges|length }}</h4>
+                        <p class="text-muted mb-0">Услуг</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Service Charges Table -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-check"></i> Детализация услуг
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                {% if service_charges %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>№</th>
+                                    <th>Услуга</th>
+                                    <th class="text-center">Объем</th>
+                                    <th class="text-center">Тариф</th>
+                                    <th class="text-end">Начислено</th>
+                                    <th class="text-end">Долг</th>
+                                    <th class="text-end">Оплачено</th>
+                                    <th class="text-end">Итого</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for charge in service_charges %}
+                                <tr>
+                                    <td>{{ charge.order }}</td>
+                                    <td>
+                                        <strong>{{ charge.service_name }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if charge.volume %}
+                                            {{ charge.volume|floatformat:4 }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if charge.tariff %}
+                                            {{ charge.tariff|floatformat:4 }} ₽
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="text-primary">{{ charge.amount|floatformat:2 }} ₽</span>
+                                    </td>
+                                    <td class="text-end">
+                                        {% if charge.debt > 0 %}
+                                            <span class="text-danger">{{ charge.debt|floatformat:2 }} ₽</span>
+                                        {% else %}
+                                            <span class="text-muted">0.00 ₽</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if charge.paid > 0 %}
+                                            <span class="text-success">{{ charge.paid|floatformat:2 }} ₽</span>
+                                        {% else %}
+                                            <span class="text-muted">0.00 ₽</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="text-dark">{{ charge.total|floatformat:2 }} ₽</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-light">
+                                    <td colspan="4"><strong>ИТОГО:</strong></td>
+                                    <td class="text-end">
+                                        <strong>{{ document.total_without_insurance|floatformat:2 }} ₽</strong>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong>{{ service_charges|length|add:0 }}</strong>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong>{{ service_charges|length|add:0 }}</strong>
+                                    </td>
+                                    <td class="text-end">
+                                        <strong class="text-success">{{ document.total_with_insurance|floatformat:2 }} ₽</strong>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox display-1 text-muted"></i>
+                        <h4 class="mt-3 text-muted">Услуги не найдены</h4>
+                        <p class="text-muted">Данные об услугах не были извлечены из документа</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Back to List -->
+        <div class="mt-4">
+            <a href="{% url 'epd_parser:document_list' %}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Назад к списку
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить документ ЕПД для лицевого счета <strong>{{ document.account_number }}</strong>?</p>
+                <p class="text-danger"><small>Это действие нельзя отменить. Документ и все связанные данные будут удалены.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form method="post" action="{% url 'epd_parser:delete' document.pk %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmDelete() {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+</script>
+{% endblock %} 

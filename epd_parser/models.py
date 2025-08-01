@@ -1,0 +1,202 @@
+"""Django models for EPD (Unified Payment Document) data storage."""
+
+import logging
+from decimal import Decimal
+from typing import Any
+
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+logger = logging.getLogger(__name__)
+
+
+class EpdDocument(models.Model):
+    """Main model for storing EPD document information."""
+    
+    # Personal information
+    full_name = models.CharField(
+        max_length=255,
+        verbose_name=_('Full Name'),
+        help_text=_('Full name of the person responsible for payments'),
+    )
+    address = models.TextField(
+        verbose_name=_('Address'),
+        help_text=_('Full address of the property'),
+    )
+    account_number = models.CharField(
+        max_length=50,
+        verbose_name=_('Account Number'),
+        help_text=_('Unique account number for the property'),
+        db_index=True,
+    )
+    
+    # Document metadata
+    payment_period = models.CharField(
+        max_length=20,
+        verbose_name=_('Payment Period'),
+        help_text=_('Payment period (e.g., "01.2024")'),
+    )
+    due_date = models.DateField(
+        verbose_name=_('Due Date'),
+        help_text=_('Payment due date'),
+    )
+    
+    # Financial totals
+    total_without_insurance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Total Without Insurance'),
+        help_text=_('Total amount without insurance'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    total_with_insurance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Total With Insurance'),
+        help_text=_('Total amount including insurance'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    insurance_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Insurance Amount'),
+        help_text=_('Insurance amount'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    
+    # File information
+    pdf_file = models.FileField(
+        upload_to='epd_documents/',
+        verbose_name=_('PDF File'),
+        help_text=_('Uploaded EPD PDF file'),
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Created At'),
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=_('Updated At'),
+    )
+    
+    class Meta:
+        """Meta options for EpdDocument model."""
+        
+        verbose_name = _('EPD Document')
+        verbose_name_plural = _('EPD Documents')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['account_number']),
+            models.Index(fields=['payment_period']),
+            models.Index(fields=['due_date']),
+        ]
+    
+    def __str__(self) -> str:
+        """String representation of the model."""
+        return f"{self.full_name} - {self.account_number} ({self.payment_period})"
+    
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Override save to calculate insurance amount."""
+        if self.total_with_insurance and self.total_without_insurance:
+            self.insurance_amount = self.total_with_insurance - self.total_without_insurance
+        super().save(*args, **kwargs)
+
+
+class ServiceCharge(models.Model):
+    """Model for storing individual service charges from EPD."""
+    
+    document = models.ForeignKey(
+        EpdDocument,
+        on_delete=models.CASCADE,
+        related_name='service_charges',
+        verbose_name=_('EPD Document'),
+    )
+    
+    # Service information
+    service_name = models.CharField(
+        max_length=255,
+        verbose_name=_('Service Name'),
+        help_text=_('Name of the utility service'),
+    )
+    
+    # Volume and tariff
+    volume = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        verbose_name=_('Volume'),
+        help_text=_('Volume of service consumed'),
+        validators=[MinValueValidator(Decimal('0.0000'))],
+        null=True,
+        blank=True,
+    )
+    tariff = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        verbose_name=_('Tariff'),
+        help_text=_('Tariff rate per unit'),
+        validators=[MinValueValidator(Decimal('0.0000'))],
+        null=True,
+        blank=True,
+    )
+    
+    # Financial amounts
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Amount'),
+        help_text=_('Calculated amount for this service'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    debt = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Debt'),
+        help_text=_('Previous debt amount'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        default=Decimal('0.00'),
+    )
+    paid = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Paid'),
+        help_text=_('Amount already paid'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        default=Decimal('0.00'),
+    )
+    total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_('Total'),
+        help_text=_('Total amount to pay (amount + debt - paid)'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+    )
+    
+    # Ordering
+    order = models.PositiveIntegerField(
+        verbose_name=_('Order'),
+        help_text=_('Order of service in the document'),
+        default=0,
+    )
+    
+    class Meta:
+        """Meta options for ServiceCharge model."""
+        
+        verbose_name = _('Service Charge')
+        verbose_name_plural = _('Service Charges')
+        ordering = ['document', 'order']
+        indexes = [
+            models.Index(fields=['document', 'order']),
+            models.Index(fields=['service_name']),
+        ]
+    
+    def __str__(self) -> str:
+        """String representation of the model."""
+        return f"{self.document.account_number} - {self.service_name}"
+    
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Override save to calculate total amount."""
+        self.total = self.amount + self.debt - self.paid
+        super().save(*args, **kwargs) 

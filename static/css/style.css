@@ -1,0 +1,175 @@
+/* EPD Parser - Main Styles */
+
+:root {
+    --primary-color: #0d6efd;
+    --secondary-color: #6c757d;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+    --light-color: #f8f9fa;
+    --dark-color: #212529;
+}
+
+/* Custom upload area styles */
+.upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 0.5rem;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: #f8f9fa;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upload-area:hover {
+    border-color: var(--primary-color);
+    background-color: #e7f3ff;
+}
+
+.upload-area.dragover {
+    border-color: var(--success-color);
+    background-color: #f0f9ff;
+    transform: scale(1.02);
+}
+
+.upload-area.has-file {
+    border-color: var(--success-color);
+    background-color: #f0f9ff;
+}
+
+.upload-area.has-file .upload-content {
+    color: var(--success-color);
+}
+
+/* Document cards */
+.document-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: 1px solid #dee2e6;
+}
+
+.document-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Service charges table */
+.service-charges-table {
+    font-size: 0.9rem;
+}
+
+.service-charges-table th {
+    background-color: var(--light-color);
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.service-charges-table td {
+    vertical-align: middle;
+}
+
+/* Statistics cards */
+.stat-card {
+    background: linear-gradient(135deg, var(--primary-color), #0056b3);
+    color: white;
+    border: none;
+    border-radius: 0.75rem;
+}
+
+.stat-card .card-body {
+    padding: 1.5rem;
+}
+
+.stat-card .stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.stat-card .stat-label {
+    opacity: 0.9;
+    font-size: 0.9rem;
+}
+
+/* Progress bars */
+.progress {
+    height: 0.5rem;
+    border-radius: 0.25rem;
+}
+
+/* Custom badges */
+.badge-custom {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Search functionality */
+.search-highlight {
+    background-color: #fff3cd;
+    padding: 0.1rem 0.2rem;
+    border-radius: 0.2rem;
+}
+
+/* Loading states */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .upload-area {
+        padding: 1rem;
+        min-height: 150px;
+    }
+    
+    .stat-card .stat-number {
+        font-size: 1.5rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.8rem;
+    }
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    
+    .document-detail {
+        font-size: 12pt;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .upload-area {
+        background-color: #2d3748;
+        border-color: #4a5568;
+    }
+    
+    .upload-area:hover {
+        background-color: #1a202c;
+    }
+} 
