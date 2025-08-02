@@ -1,33 +1,34 @@
 """Tests for EPD parser functionality."""
 
-import pytest
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from epd_parser.parser import EpdParser, EpdParserError
+import pytest
+
+from epd_parser.pdf_parser import EpdPdfParser
 
 
 class TestEpdParser:
     """Test cases for EpdParser class."""
-    
+
     def test_init_with_nonexistent_file(self):
         """Test initialization with non-existent file."""
-        with pytest.raises(EpdParserError, match="PDF file not found"):
-            EpdParser(Path("nonexistent.pdf"))
-    
-    @patch('epd_parser.parser.pdfplumber.open')
+        with pytest.raises(FileNotFoundError):
+            EpdPdfParser(Path("nonexistent.pdf"))
+
+    @patch("epd_parser.pdf_parser.pdfplumber.open")
     def test_parse_empty_pdf(self, mock_pdfplumber_open):
         """Test parsing empty PDF."""
         mock_pdf = Mock()
         mock_pdf.pages = []
         mock_pdfplumber_open.return_value.__enter__.return_value = mock_pdf
-        
-        parser = EpdParser(Path("test.pdf"))
-        with pytest.raises(EpdParserError, match="PDF file is empty or corrupted"):
+
+        parser = EpdPdfParser(Path("test.pdf"))
+        with pytest.raises(ValueError, match="No text content available"):
             parser.parse()
-    
-    @patch('epd_parser.parser.pdfplumber.open')
+
+    @patch("epd_parser.pdf_parser.pdfplumber.open")
     def test_parse_valid_pdf(self, mock_pdfplumber_open):
         """Test parsing valid PDF with mock data."""
         # Mock PDF content
@@ -41,69 +42,69 @@ class TestEpdParser:
         Итого к оплате: 1500,00
         Итого с учетом страхования: 1550,00
         """
-        
+
         mock_table = [
             ["Услуга", "Объем", "Тариф", "Сумма", "Долг", "Оплачено", "Итого"],
             ["Холодная вода", "5.000", "25.50", "127.50", "0.00", "0.00", "127.50"],
             ["Горячая вода", "3.000", "150.00", "450.00", "0.00", "0.00", "450.00"],
         ]
-        
+
         mock_page.extract_tables.return_value = [mock_table]
-        
+
         mock_pdf = Mock()
         mock_pdf.pages = [mock_page]
         mock_pdfplumber_open.return_value.__enter__.return_value = mock_pdf
-        
+
         # Create a temporary file for testing
         test_file = Path("test.pdf")
         test_file.touch()
-        
+
         try:
-            parser = EpdParser(test_file)
+            parser = EpdPdfParser(test_file)
             result = parser.parse()
-            
+
             # Verify the result structure
-            assert 'personal_info' in result
-            assert 'payment_info' in result
-            assert 'service_charges' in result
-            assert 'totals' in result
-            
+            assert "personal_info" in result
+            assert "payment_info" in result
+            assert "service_charges" in result
+            assert "totals" in result
+
             # Verify personal info
-            personal_info = result['personal_info']
-            assert personal_info['full_name'] == 'Иванов Иван Иванович'
-            assert personal_info['account_number'] == '123456789'
-            
+            personal_info = result["personal_info"]
+            assert personal_info["full_name"] == "Иванов Иван Иванович"
+            assert personal_info["account_number"] == "123456789"
+
             # Verify payment info
-            payment_info = result['payment_info']
-            assert payment_info['payment_period'] == '01.2024'
-            
+            payment_info = result["payment_info"]
+            assert payment_info["payment_period"] == "01.2024"
+
             # Verify service charges
-            service_charges = result['service_charges']
+            service_charges = result["service_charges"]
             assert len(service_charges) == 2
-            
+
             # Verify totals
-            totals = result['totals']
-            assert totals['total_without_insurance'] == Decimal('1500.00')
-            assert totals['total_with_insurance'] == Decimal('1550.00')
-            
+            totals = result["totals"]
+            assert totals["total_without_insurance"] == Decimal("1500.00")
+            assert totals["total_with_insurance"] == Decimal("1550.00")
+
         finally:
             test_file.unlink(missing_ok=True)
-    
+
     def test_parse_decimal_valid(self):
         """Test decimal parsing with valid values."""
-        parser = EpdParser(Path("test.pdf"))
-        
+        parser = EpdPdfParser(Path("test.pdf"))
+
         # Test different decimal formats
-        assert parser._parse_decimal("1500,00") == Decimal('1500.00')
-        assert parser._parse_decimal("1,234.56") == Decimal('1234.56')
-        assert parser._parse_decimal("1234.56") == Decimal('1234.56')
-        assert parser._parse_decimal("0") == Decimal('0')
-    
+        assert parser._parse_decimal("1500,00") == Decimal("1500.00")
+        assert parser._parse_decimal("1,234.56") == Decimal("1234.56")
+        assert parser._parse_decimal("1234.56") == Decimal("1234.56")
+        assert parser._parse_decimal("0") == Decimal("0")
+
     def test_parse_decimal_invalid(self):
         """Test decimal parsing with invalid values."""
-        parser = EpdParser(Path("test.pdf"))
-        
+        parser = EpdPdfParser(Path("test.pdf"))
+
         # Test invalid values
         assert parser._parse_decimal("") is None
         assert parser._parse_decimal("abc") is None
-        assert parser._parse_decimal("1,234,567.89") is None  # Too many commas 
+        assert parser._parse_decimal("1,234,567.89") is None  # Too many commas

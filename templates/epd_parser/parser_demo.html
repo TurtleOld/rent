@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}EPD PDF Parser Demo{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>EPD PDF Parser Demo</h1>
+    <p class="lead">Загрузите PDF документ ЕПД для автоматического извлечения данных</p>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Загрузка PDF</h5>
+                </div>
+                <div class="card-body">
+                    <form id="pdfUploadForm" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="pdfFile" class="form-label">Выберите PDF файл</label>
+                            <input type="file" class="form-control" id="pdfFile" name="pdf_file" accept=".pdf" required>
+                            <div class="form-text">Максимальный размер файла: 10MB</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="parseBtn">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            Парсить PDF
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Результат парсинга</h5>
+                </div>
+                <div class="card-body">
+                    <div id="parsingResult">
+                        <p class="text-muted">Результат парсинга появится здесь после загрузки файла</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Извлеченные данные</h5>
+                </div>
+                <div class="card-body">
+                    <div id="extractedData">
+                        <p class="text-muted">Данные будут отображены здесь</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('pdfUploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData();
+    const fileInput = document.getElementById('pdfFile');
+    const parseBtn = document.getElementById('parseBtn');
+    const spinner = parseBtn.querySelector('.spinner-border');
+    const resultDiv = document.getElementById('parsingResult');
+    const dataDiv = document.getElementById('extractedData');
+    
+    if (!fileInput.files[0]) {
+        alert('Пожалуйста, выберите файл');
+        return;
+    }
+    
+    formData.append('pdf_file', fileInput.files[0]);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    // Show loading state
+    parseBtn.disabled = true;
+    spinner.classList.remove('d-none');
+    resultDiv.innerHTML = '<div class="alert alert-info">Парсинг PDF файла...</div>';
+    
+    fetch('{% url "epd_parser:parse_pdf_api" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success">PDF успешно обработан!</div>';
+            displayExtractedData(data.data);
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger">Ошибка: ${data.error}</div>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        resultDiv.innerHTML = '<div class="alert alert-danger">Произошла ошибка при обработке файла</div>';
+    })
+    .finally(() => {
+        // Hide loading state
+        parseBtn.disabled = false;
+        spinner.classList.add('d-none');
+    });
+});
+
+function displayExtractedData(data) {
+    const dataDiv = document.getElementById('extractedData');
+    
+    let html = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Личная информация</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>ФИО:</strong></td><td>${data.personal_info.full_name || 'Не найдено'}</td></tr>
+                    <tr><td><strong>Лицевой счет:</strong></td><td>${data.personal_info.account_number || 'Не найден'}</td></tr>
+                    <tr><td><strong>Адрес:</strong></td><td>${data.personal_info.address || 'Не найден'}</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6>Информация об оплате</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Период:</strong></td><td>${data.payment_info.payment_period || 'Не найден'}</td></tr>
+                    <tr><td><strong>Дата оплаты:</strong></td><td>${data.payment_info.due_date || 'Не найдена'}</td></tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6>Итоговые суммы</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Без страхования:</strong></td><td>${data.totals.total_without_insurance} руб.</td></tr>
+                    <tr><td><strong>Со страхованием:</strong></td><td>${data.totals.total_with_insurance} руб.</td></tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6>Услуги (${data.service_charges.length} шт.)</h6>
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Услуга</th>
+                                <th>Объем</th>
+                                <th>Тариф</th>
+                                <th>Сумма</th>
+                                <th>Задолженность</th>
+                                <th>Оплачено</th>
+                                <th>Итого</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+    `;
+    
+    data.service_charges.forEach(charge => {
+        html += `
+            <tr>
+                <td>${charge.service_name}</td>
+                <td>${charge.volume}</td>
+                <td>${charge.tariff}</td>
+                <td>${charge.amount}</td>
+                <td>${charge.debt}</td>
+                <td>${charge.paid}</td>
+                <td><strong>${charge.total}</strong></td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    dataDiv.innerHTML = html;
+}
+</script>
+{% endblock %} 

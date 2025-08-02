@@ -89,6 +89,11 @@
                             <i class="bi bi-graph-up"></i> Статистика
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'epd_parser:debug_images' %}">
+                            <i class="bi bi-image"></i> Debug Images
+                        </a>
+                    </li>
                 </ul>
                 
                 <ul class="navbar-nav">
@@ -126,7 +131,7 @@
             <div class="row">
                 <div class="col-md-6">
                     <p class="mb-0 text-muted">
-                        &copy; {% now "Y" %} EPD Parser. Парсер документов ЕПД.
+                        &copy; {% now "Y" %} EPD Parser. Система управления документами ЕПД.
                     </p>
                 </div>
                 <div class="col-md-6 text-end">

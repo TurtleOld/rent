@@ -1,1 +1,1 @@
-"""EPD (Unified Payment Document) parser Django app.""" 
+"""EPD (Unified Payment Document) parser Django app."""

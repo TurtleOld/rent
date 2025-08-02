@@ -1,1 +1,1 @@
-"""Migrations package for EPD parser app.""" 
+"""Migrations package for EPD parser app."""

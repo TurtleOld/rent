@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "rent-utility-parser"
 version = "0.1.0"
-description = "Django project to parse and store utility payment data from ЕПД PDFs"
+description = "Django project to manage and store utility payment data from ЕПД PDFs"
 authors = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
@@ -19,9 +19,9 @@ dependencies = [
     "python-decouple>=3.8",
     "django-crispy-forms>=2.1",
     "crispy-bootstrap5>=0.7",
-    "openai>=1.0.0",
-    "PyMuPDF>=1.23.0",
     "pillow>=10.0.0",
+    "pymupdf>=1.26.3",
+    "pandas>=2.3.1",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +36,9 @@ dev = [
     "factory-boy>=3.3.0",
     "coverage>=7.3.2",
 ]
+
+[project.scripts]
+manage = "django.core.management:execute_from_command_line"
 
 [tool.ruff]
 target-version = "py311"
@@ -141,3 +144,9 @@ exclude_lines = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["utility_parser", "epd_parser"] 
+
+[dependency-groups]
+dev = [
+    "mypy>=1.17.1",
+    "ruff>=0.12.7",
+]

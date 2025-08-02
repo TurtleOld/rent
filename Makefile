@@ -11,25 +11,25 @@ dev-install: ## Install development dependencies
 	uv pip install -e ".[dev]"
 
 migrate: ## Apply database migrations
-	python manage.py migrate
+	uv run manage.py migrate
 
 makemigrations: ## Create new migrations
-	python manage.py makemigrations
+	uv run manage.py makemigrations
 
 runserver: ## Start development server
-	python manage.py runserver
+	uv run manage.py runserver
 
 test: ## Run tests
-	pytest
+	uv run pytest
 
 lint: ## Run linting checks
-	ruff check .
-	mypy .
+	uv run ruff check .
+	uv run mypy .
 
 format: ## Format code
-	ruff format .
-	black .
-	isort .
+	uv run ruff format .
+	uv run black .
+	uv run isort .
 
 clean: ## Clean up temporary files
 	find . -type f -name "*.pyc" -delete
@@ -51,8 +51,29 @@ docker-down: ## Stop Docker services
 docker-logs: ## Show Docker logs
 	docker-compose logs -f
 
+shell: ## Start Django shell
+	uv run manage.py shell
+
+collectstatic: ## Collect static files
+	uv run manage.py collectstatic --noinput
+
+createsuperuser: ## Create superuser
+	uv run manage.py createsuperuser
+
+check: ## Run Django system check
+	uv run manage.py check
+
 setup: install migrate ## Initial setup
 	@echo "Setup complete! Run 'make runserver' to start the development server."
 
 dev-setup: dev-install migrate ## Development setup
-	@echo "Development setup complete! Run 'make runserver' to start the development server." 
+	@echo "Development setup complete! Run 'make runserver' to start the development server."
+
+uv-install: ## Install dependencies using uv
+	uv sync
+
+uv-dev-install: ## Install development dependencies using uv
+	uv sync --extra dev
+
+uv-run: ## Run a command with uv (usage: make uv-run cmd="your-command")
+	uv run $(cmd) 

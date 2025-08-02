@@ -1,1 +1,1 @@
-"""Utility Parser Django project.""" 
+"""Utility Parser Django project."""

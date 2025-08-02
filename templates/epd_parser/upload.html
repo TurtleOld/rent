@@ -23,6 +23,7 @@
                     {% csrf_token %}
                     
                     <!-- PDF Upload Section -->
+                    {% if not document_form %}
                     <div class="mb-4">
                         <h5>1. Выберите PDF файл</h5>
                         <div class="upload-area" id="uploadArea">
@@ -42,6 +43,10 @@
                             </div>
                         {% endif %}
                     </div>
+                    {% else %}
+                    <!-- Hidden PDF file field for document save -->
+                    <input type="hidden" name="pdf_file" value="">
+                    {% endif %}
                     
                     <!-- Document Information Section -->
                     {% if document_form %}
@@ -100,6 +105,22 @@
                         <button type="submit" class="btn btn-primary" id="submitBtn">
                             <i class="bi bi-check-circle"></i> Сохранить документ
                         </button>
+                    </div>
+                    
+                    <!-- Progress Indicator -->
+                    <div id="progressIndicator" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border spinner-border-sm me-2" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span id="progressText">Обработка PDF файла...</span>
+                            </div>
+                            <div class="progress mt-2">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%" id="progressBar">0%</div>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -186,10 +207,14 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('uploadForm');
+    const progressIndicator = document.getElementById('progressIndicator');
+    const progressText = document.getElementById('progressText');
+    const progressBar = document.getElementById('progressBar');
+    const submitBtn = document.getElementById('submitBtn');
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.querySelector('input[type="file"]');
     const uploadContent = uploadArea.querySelector('.upload-content');
-    const submitBtn = document.getElementById('submitBtn');
     
     // Drag and drop functionality
     uploadArea.addEventListener('dragover', function(e) {
@@ -251,17 +276,76 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.disabled = false;
     }
     
-    // Form submission
-    document.getElementById('uploadForm').addEventListener('submit', function(e) {
-        if (!fileInput.files.length) {
+    // Form submission with progress
+    form.addEventListener('submit', function(e) {
+        // Check if we're in document save mode (document_form exists)
+        const isDocumentSave = document.querySelector('input[name="account_number"]') !== null;
+        
+        if (!isDocumentSave && !fileInput.files.length) {
             e.preventDefault();
-            alert('Пожалуйста, выберите PDF файл.');
             return;
         }
         
-        // Show loading state
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Обработка...';
+        // Show progress indicator only for PDF upload
+        if (!isDocumentSave) {
+            progressIndicator.style.display = 'block';
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Обработка...';
+        } else {
+            // For document save, just change button text
+            submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> Сохраняю...';
+        }
+        
+        // Simulate progress updates with timeout
+        let progress = 0;
+        const maxProgress = 90;
+        const progressInterval = setInterval(function() {
+            progress += Math.random() * 15;
+            if (progress > maxProgress) progress = maxProgress;
+            
+            progressBar.style.width = progress + '%';
+            progressBar.textContent = Math.round(progress) + '%';
+            
+            if (progress < 30) {
+                progressText.textContent = 'Загрузка PDF файла...';
+            } else if (progress < 60) {
+                progressText.textContent = 'Проверка файла...';
+            } else if (progress < maxProgress) {
+                progressText.textContent = 'Подготовка данных...';
+            }
+        }, 500);
+        
+        // Stop progress after 10 seconds maximum (only for PDF upload)
+        if (!isDocumentSave) {
+            setTimeout(function() {
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+                progressText.textContent = 'Завершено!';
+                
+                // Re-enable submit button after timeout
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-upload"></i> Загрузить EPD';
+            }, 10000);
+        }
+        
+        // Clear interval when page unloads (form submits)
+        window.addEventListener('beforeunload', function() {
+            clearInterval(progressInterval);
+        });
+        
+        // Handle form errors
+        const errorMessages = document.querySelectorAll('.alert-danger');
+        if (errorMessages.length > 0) {
+            clearInterval(progressInterval);
+            progressIndicator.style.display = 'none';
+            submitBtn.disabled = false;
+            if (isDocumentSave) {
+                submitBtn.innerHTML = '<i class="bi bi-check-circle"></i> Сохранить документ';
+            } else {
+                submitBtn.innerHTML = '<i class="bi bi-upload"></i> Загрузить EPD';
+            }
+        }
     });
 });
 </script>
