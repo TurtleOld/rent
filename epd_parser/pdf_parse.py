@@ -216,15 +216,31 @@ def extract_totals(table_data: List[List[Any]]) -> Dict[str, Decimal]:
 
         row_text = row[0].strip()
 
-        if "Всего за май      2025 без учета добровольного страхования:" in row_text:
+        # Look for various patterns for totals
+        if any(
+            pattern in row_text
+            for pattern in [
+                "без учета добровольного страхования",
+                "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+            ]
+        ):
             amount = clean_amount(row[8])
             totals["total_without_insurance"] = amount
-        elif "Всего за май      2025 с учетом добровольного страхования :" in row_text:
+            logger.info(f"Found total without insurance: {amount}")
+        elif any(
+            pattern in row_text
+            for pattern in [
+                "с учетом добровольного страхования",
+                "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+            ]
+        ):
             amount = clean_amount(row[8])
             totals["total_with_insurance"] = amount
+            logger.info(f"Found total with insurance: {amount}")
         elif "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ" in row_text:
             amount = clean_amount(row[8])
             totals["insurance_amount"] = amount
+            logger.info(f"Found insurance amount: {amount}")
 
     return totals
 
@@ -297,18 +313,29 @@ def save_epd_document_with_related_data(parsed_data: Dict[str, Any]) -> EpdDocum
         # Create EPD document
         due_date_value = personal_info.get("due_date")
 
+        # Log the totals for debugging
+        logger.info(f"Totals found: {totals}")
+
+        total_without_insurance = totals.get("total_without_insurance", Decimal("0.00"))
+        total_with_insurance = totals.get("total_with_insurance", Decimal("0.00"))
+        insurance_amount = totals.get("insurance_amount", Decimal("0.00"))
+
+        logger.info(
+            f"Creating document with totals: without_insurance={total_without_insurance}, with_insurance={total_with_insurance}, insurance={insurance_amount}"
+        )
+
         document = EpdDocument.objects.create(
             full_name=personal_info.get("full_name", ""),
             address=personal_info.get("address", ""),
             account_number=personal_info.get("account_number", ""),
             payment_period=personal_info.get("payment_period", ""),
             due_date=due_date_value,  # Use extracted due date
-            total_without_insurance=totals.get(
-                "total_without_insurance", Decimal("0.00")
-            ),
-            total_with_insurance=totals.get("total_with_insurance", Decimal("0.00")),
-            insurance_amount=totals.get("insurance_amount", Decimal("0.00")),
+            total_without_insurance=total_without_insurance,
+            total_with_insurance=total_with_insurance,
+            insurance_amount=insurance_amount,
         )
+
+        logger.info(f"Created EPD document with ID: {document.pk}")
 
         # Save service charges
         order = 1
@@ -334,7 +361,11 @@ def save_epd_document_with_related_data(parsed_data: Dict[str, Any]) -> EpdDocum
                 order += 1
                 total_services += 1
 
+        logger.info(
+            f"Saved {total_services} service charges for document {document.pk}"
+        )
         return document
 
     except Exception as e:
+        logger.error(f"Error saving EPD document: {str(e)}")
         raise

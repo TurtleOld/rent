@@ -4,7 +4,6 @@ import logging
 import os
 import tempfile
 from decimal import Decimal
-from pathlib import Path
 from typing import Any, cast
 
 from django.contrib import messages
@@ -22,14 +21,11 @@ from django.views.generic import (
     TemplateView,
 )
 from django.views.generic.edit import FormView
-from django.urls import reverse_lazy
 
 from epd_parser.forms import EpdDocumentForm, PdfUploadForm
 from epd_parser.models import (
     EpdDocument,
     ServiceCharge,
-    MeterReading,
-    Recalculation,
     FlexibleServiceCharge,
 )
 from epd_parser.pdf_parse import (
@@ -84,60 +80,16 @@ class EpdDocumentCreateView(FormView):
     template_name = "epd_parser/upload.html"
     form_class = PdfUploadForm
 
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        """Get context data for the upload page."""
-        context = super().get_context_data(**kwargs)
-        return cast(dict[str, Any], context)
+    def form_valid(self, form):
+        parsed_data = form.parsed_data
+        document = save_epd_document_with_related_data(parsed_data)
+        return redirect("epd_parser:document_detail", pk=document.pk)
 
-    def get_success_url(self) -> str:
-        """Return URL to redirect to after successful upload."""
-        if hasattr(self, "object") and self.object:
-            return reverse_lazy(
-                "epd_parser:document_detail", kwargs={"pk": self.object.pk}
-            )
-        return reverse_lazy("epd_parser:document_list")
-
-    def form_valid(self, form: PdfUploadForm) -> HttpResponse:
-        """Handle valid form submission."""
-        try:
-            # Get parsed data from form
-            parsed_data = form.parsed_data
-
-            # Save document to database
-            document = save_epd_document_with_related_data(parsed_data)
-
-            # Set the object for get_success_url
-            self.object = document
-
-            success_message = _(
-                "PDF parsed and document saved successfully! Found {services_count} services."
-            ).format(
-                services_count=sum(
-                    len(services)
-                    for services in parsed_data.get("services", {}).values()
-                )
-            )
-
-            messages.success(self.request, success_message)
-
-            # Force redirect using HttpResponseRedirect
-            from django.http import HttpResponseRedirect
-
-            redirect_url = self.get_success_url()
-            return HttpResponseRedirect(redirect_url)
-
-        except Exception as e:
-            error_message = _("Error saving document to database. Please try again.")
-            messages.error(self.request, error_message)
-
-            return self.form_invalid(form)
-
-    def form_invalid(self, form: PdfUploadForm) -> HttpResponse:
-        """Handle invalid form submission."""
+    def form_invalid(self, form):
+        logger.error("form_invalid method called")
+        logger.error(f"Form is invalid. Errors: {form.errors}")
         error_message = _("Please correct the errors below.")
         messages.error(self.request, error_message)
-
-        # Regular response for form errors
         return super().form_invalid(form)
 
 
@@ -213,7 +165,7 @@ class EpdDocumentDeleteView(DeleteView):
             response = super().delete(request, *args, **kwargs)
             messages.success(request, _("EPD document successfully deleted!"))
             return response
-        except Exception as e:
+        except Exception:
             messages.error(request, _("An error occurred while deleting the document."))
             return redirect("epd_parser:document_list")
 
@@ -394,8 +346,10 @@ class ParsePdfApiView(View):
                 # Clean up temporary file
                 os.unlink(temp_file_path)
 
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)}, status=500)
+        except Exception:
+            return JsonResponse(
+                {"success": False, "error": "Internal error"}, status=500
+            )
 
 
 class StatisticsApiView(View):
@@ -519,7 +473,7 @@ class StatisticsApiView(View):
                 }
             )
 
-        except Exception as e:
+        except Exception:
             return JsonResponse(
                 {"success": False, "error": "Failed to generate statistics"}, status=500
             )

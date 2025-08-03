@@ -261,6 +261,7 @@ class PdfUploadForm(forms.Form):
             # Try to parse the PDF to validate it's a valid EPD document
             try:
                 pdf_file.seek(0)  # Reset file pointer
+                logger.info(f"Parsing PDF file: {pdf_file.name}")
                 parsed_data = parse_epd_pdf(pdf_file)
 
                 # Store parsed data for later use
@@ -268,13 +269,19 @@ class PdfUploadForm(forms.Form):
 
                 # Validate that we have required data
                 if not parsed_data.get("personal_info", {}).get("account_number"):
+                    logger.error("No account number found in parsed data")
                     raise ValidationError(
                         _(
                             "Could not extract account number from PDF. Please ensure this is a valid EPD document."
                         )
                     )
 
+                logger.info(
+                    f"Successfully parsed PDF with account number: {parsed_data.get('personal_info', {}).get('account_number')}"
+                )
+
             except Exception as e:
+                logger.error(f"Error parsing PDF: {str(e)}")
                 raise ValidationError(
                     _(
                         "Error parsing PDF file. Please ensure this is a valid EPD document."

@@ -5,7 +5,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize all components
     initSearch();
-    initFileUpload();
     initTooltips();
     initConfirmDialogs();
     initDataTables();
@@ -113,89 +112,6 @@ function updateSearchResults() {
     
     if (resultsCount) {
         resultsCount.textContent = visibleRows.length;
-    }
-}
-
-/**
- * File upload functionality
- */
-function initFileUpload() {
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.querySelector('input[type="file"]');
-    const uploadContent = uploadArea?.querySelector('.upload-content');
-    const submitBtn = document.getElementById('submitBtn');
-    
-    if (uploadArea && fileInput) {
-        // Drag and drop functionality
-        uploadArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                fileInput.files = files;
-                handleFileSelect(files[0]);
-            }
-        });
-        
-        // Click to select file
-        uploadArea.addEventListener('click', function() {
-            fileInput.click();
-        });
-        
-        // File input change
-        fileInput.addEventListener('change', function(e) {
-            if (e.target.files.length > 0) {
-                handleFileSelect(e.target.files[0]);
-            }
-        });
-    }
-}
-
-function handleFileSelect(file) {
-    const uploadArea = document.getElementById('uploadArea');
-    const uploadContent = uploadArea?.querySelector('.upload-content');
-    const submitBtn = document.getElementById('submitBtn');
-    
-    // Validate file type
-    if (file.type !== 'application/pdf') {
-        showAlert('Пожалуйста, выберите PDF файл.', 'danger');
-        return;
-    }
-    
-    // Validate file size (10MB)
-    if (file.size > 10 * 1024 * 1024) {
-        showAlert('Размер файла должен быть меньше 10MB.', 'danger');
-        return;
-    }
-    
-    // Update UI
-    if (uploadArea) {
-        uploadArea.classList.add('has-file');
-    }
-    
-    if (uploadContent) {
-        uploadContent.innerHTML = `
-            <i class="bi bi-file-earmark-pdf display-1 text-success"></i>
-            <h5 class="mt-3 text-success">${file.name}</h5>
-            <p class="text-muted">Размер: ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
-            <small class="text-muted">Нажмите для выбора другого файла</small>
-        `;
-    }
-    
-    // Enable submit button
-    if (submitBtn) {
-        submitBtn.disabled = false;
     }
 }
 
