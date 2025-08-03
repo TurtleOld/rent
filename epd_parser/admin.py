@@ -1,14 +1,12 @@
 """Django admin configuration for EPD parser application."""
 
-from decimal import Decimal
 from typing import Any
 
 from django.contrib import admin
-from django.db.models import Sum
-from django.utils.html import format_html
+from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 
-from .models import EpdDocument, ServiceCharge, MeterReading, Recalculation
+from .models import EpdDocument, MeterReading, Recalculation, ServiceCharge
 
 
 @admin.register(ServiceCharge)
@@ -199,11 +197,13 @@ class EpdDocumentAdmin(admin.ModelAdmin):
         ),
     )
 
-    def get_queryset(self, request):
+    def get_queryset(self, request: HttpRequest) -> Any:
         """Optimize queryset with related data."""
         return super().get_queryset(request).select_related()
 
-    def save_model(self, request, obj, form, change):
+    def save_model(
+        self, request: HttpRequest, obj: EpdDocument, form: Any, change: bool,
+    ) -> None:
         """Calculate insurance amount on save."""
         if obj.total_with_insurance and obj.total_without_insurance:
             obj.insurance_amount = (

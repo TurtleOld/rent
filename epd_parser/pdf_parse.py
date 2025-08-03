@@ -4,15 +4,14 @@ import re
 import tempfile
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pdfplumber
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.translation import gettext as _
 
-from .models import EpdDocument, ServiceCharge, MeterReading, Recalculation
+from .models import EpdDocument, MeterReading, Recalculation, ServiceCharge
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +146,9 @@ def determine_service_name_by_context(
             return "ОБРАЩЕНИЕ С ТКО"
         elif tariff == Decimal("4.20"):
             # Проверяем, не является ли это строкой "Всего за июль"
+            large_volume_threshold = 1000
             if (
-                volume and volume > 1000
+                volume and volume > large_volume_threshold
             ):  # Если объем очень большой, это скорее всего итоговая строка
                 return "ИТОГО"
             else:
@@ -160,11 +160,10 @@ def determine_service_name_by_context(
                 return "ВОДООТВЕДЕНИЕ ОДН"
             elif tariff == Decimal("62.22"):
                 return "ХОЛОДНОЕ В/С ОДН"
-        else:
-            if tariff == Decimal("61.19"):
-                return "ВОДООТВЕДЕНИЕ"
-            elif tariff == Decimal("62.22"):
-                return "ХОЛОДНОЕ В/С"
+        elif tariff == Decimal("61.19"):
+            return "ВОДООТВЕДЕНИЕ"
+        elif tariff == Decimal("62.22"):
+            return "ХОЛОДНОЕ В/С"
 
     elif unit == "куб.м.":
         if tariff == Decimal("62.22"):
@@ -387,7 +386,7 @@ def parse_service_line(line: str) -> dict[str, str | Decimal | None] | None:
                 }
 
                 # Очищаем название услуги от числовых данных
-                result["service_name"] = clean_service_name(result["service_name"])
+                result["service_name"] = clean_service_name(str(result["service_name"]))
 
                 return result
         except (ValueError, TypeError):
@@ -439,7 +438,7 @@ def parse_service_line(line: str) -> dict[str, str | Decimal | None] | None:
                     result["tariff"] = extracted_tariff
 
                 # Очищаем название услуги от числовых данных
-                result["service_name"] = clean_service_name(result["service_name"])
+                result["service_name"] = clean_service_name(str(result["service_name"]))
 
                 return result
         except (ValueError, TypeError):
@@ -490,7 +489,7 @@ def parse_service_line(line: str) -> dict[str, str | Decimal | None] | None:
                     result["tariff"] = extracted_tariff
 
                 # Очищаем название услуги от числовых данных
-                result["service_name"] = clean_service_name(result["service_name"])
+                result["service_name"] = clean_service_name(str(result["service_name"]))
 
                 return result
         except (ValueError, TypeError):
@@ -522,13 +521,13 @@ def parse_services(text_content: str) -> list:
     service_order = 1
 
     for line in lines:
-        line = line.strip()
-        if not line:
+        stripped_line = line.strip()
+        if not stripped_line:
             continue
 
         # Определяем начало секции услуг
         if any(
-            keyword in line.upper()
+            keyword in stripped_line.upper()
             for keyword in [
                 "РАСЧЕТ РАЗМЕРА ПЛАТЫ",
                 "Начисления за",
@@ -539,14 +538,44 @@ def parse_services(text_content: str) -> list:
             in_services_section = True
             continue
 
-        # Если мы уже в секции услуг и видим строку с названием услуги, начинаем парсинг
-        if in_services_section and is_service_name_line(line):
-            # Это начало конкретной услуги
-            pass
+        # Проверяем, содержит ли строка название услуги или является строкой с данными
+        if in_services_section:
+            if contains_service_data(stripped_line):
+                # Если у нас есть сохраненное название и данные, сохраняем предыдущую услугу
+                if current_service_name and current_service_data:
+                    current_service_data["service_name"] = current_service_name
+                    current_service_data["order"] = str(service_order)
+                    services.append(current_service_data)
+                    service_order += 1
+                    current_service_data = None
+
+                # Парсим как однострочную услугу
+                service_data = parse_universal_service_line(stripped_line)
+                if service_data:
+                    service_data["order"] = str(service_order)
+                    services.append(service_data)
+                    service_order += 1
+                else:
+                    # Если не удалось распарсить, пробуем как многострочную услугу
+                    current_service_data = parse_multiline_service(stripped_line)
+                    if not current_service_data:
+                        # Если и это не удалось, сохраняем название для следующей строки
+                        current_service_name = stripped_line
+            elif is_service_name_line(stripped_line):
+                # Сохраняем предыдущую услугу, если есть
+                if current_service_name and current_service_data:
+                    current_service_data["service_name"] = current_service_name
+                    current_service_data["order"] = str(service_order)
+                    services.append(current_service_data)
+                    service_order += 1
+                    current_service_data = None
+
+                # Сохраняем название для следующей строки
+                current_service_name = stripped_line
 
         # Определяем конец секции услуг
         if in_services_section and any(
-            keyword in line.upper()
+            keyword in stripped_line.upper()
             for keyword in [
                 "Всего за",
                 "Итого к оплате",
@@ -557,87 +586,8 @@ def parse_services(text_content: str) -> list:
         ):
             break
 
-        if not in_services_section:
-            continue
-
-        # Пропускаем заголовки таблицы
-        if any(
-            keyword in line.upper()
-            for keyword in [
-                "ОБЪЕМ",
-                "ЕД.ИЗМ",
-                "ТАРИФ",
-                "НАЧИСЛЕНО",
-                "ПЕРЕРАСЧЕТЫ",
-                "ЗАДОЛЖЕННОСТЬ",
-                "ОПЛАЧЕНО",
-                "ИТОГО",
-                "№",
-                "УСЛУГА",
-            ]
-        ):
-            continue
-
-        # Пропускаем строки "Всего за июль" (с добровольным страхованием и без)
-        if any(
-            keyword in line.upper()
-            for keyword in [
-                "ВСЕГО ЗА ИЮЛЬ",
-                "ВСЕГО ЗА",
-                "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
-                "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
-            ]
-        ):
-            continue
-
-        # Проверяем, содержит ли строка название услуги или является строкой с данными
-        if is_service_name_line(line) or (
-            in_services_section and contains_service_data(line)
-        ):
-            # Если у нас есть сохраненное название и данные, сохраняем предыдущую услугу
-            if current_service_name and current_service_data:
-                current_service_data["service_name"] = current_service_name
-                current_service_data["order"] = service_order
-                services.append(current_service_data)
-                service_order += 1
-                current_service_data = None
-
-            # Проверяем, содержит ли строка с названием также данные
-            if contains_service_data(line):
-                # Парсим как однострочную услугу
-                service_data = parse_universal_service_line(line)
-                if service_data:
-                    service_data["order"] = str(service_order)
-                    services.append(service_data)
-                    service_order += 1
-                else:
-                    # Если не удалось распарсить, сохраняем название для следующей строки
-                    current_service_name = line
-            else:
-                # Сохраняем название для следующей строки
-                current_service_name = line
-
-            # Проверяем, является ли это строкой с данными услуги
-        elif is_service_data_line(line):
-            if current_service_name:
-                # Объединяем название с данными
-                full_line = f"{current_service_name} {line}"
-                service_data = parse_universal_service_line(full_line)
-                if service_data:
-                    service_data["order"] = str(service_order)
-                    services.append(service_data)
-                    service_order += 1
-                current_service_name = ""
-            else:
-                # Пытаемся распарсить как отдельную строку данных
-                service_data = parse_universal_service_line(line)
-                if service_data:
-                    service_data["order"] = str(service_order)
-                    services.append(service_data)
-                    service_order += 1
-
     # Сохраняем последнюю услугу, если она есть
-    if current_service_name and current_service_data:
+    if current_service_name and current_service_data is not None:
         current_service_data["service_name"] = current_service_name
         current_service_data["order"] = str(service_order)
         services.append(current_service_data)
@@ -891,14 +841,14 @@ def parse_universal_service_line(line: str) -> dict[str, str | Decimal | None] |
             amount = safe_decimal(d["amount"])
 
             # Определяем название услуги по контексту
-            service_name = None
+            service_name_1: str | None = None
             if volume and unit and tariff:
-                service_name = determine_service_name_by_context(
+                service_name_1 = determine_service_name_by_context(
                     volume, unit, tariff, amount or Decimal("0")
                 )
 
             result = {
-                "service_name": service_name,  # Будет добавлено в parse_services
+                "service_name": service_name_1,  # Будет добавлено в parse_services
                 "volume": volume,
                 "unit": unit,
                 "tariff": tariff,
@@ -925,14 +875,14 @@ def parse_universal_service_line(line: str) -> dict[str, str | Decimal | None] |
             amount = safe_decimal(d["amount"])
 
             # Определяем название услуги по контексту
-            service_name = None
+            service_name_8: str | None = None
             if volume and unit and tariff:
-                service_name = determine_service_name_by_context(
+                service_name_8 = determine_service_name_by_context(
                     volume, unit, tariff, amount or Decimal("0")
                 )
 
             result = {
-                "service_name": service_name,
+                "service_name": service_name_8,
                 "volume": volume,
                 "unit": unit,
                 "tariff": tariff,
@@ -959,14 +909,14 @@ def parse_universal_service_line(line: str) -> dict[str, str | Decimal | None] |
             amount = safe_decimal(d["amount"])
 
             # Определяем название услуги по контексту
-            service_name = None
+            service_name_9: str | None = None
             if volume and unit and tariff:
-                service_name = determine_service_name_by_context(
+                service_name_9 = determine_service_name_by_context(
                     volume, unit, tariff, amount or Decimal("0")
                 )
 
             result = {
-                "service_name": service_name,
+                "service_name": service_name_9,
                 "volume": volume,
                 "unit": unit,
                 "tariff": tariff,
@@ -993,14 +943,14 @@ def parse_universal_service_line(line: str) -> dict[str, str | Decimal | None] |
             amount = safe_decimal(d["amount"])
 
             # Определяем название услуги по контексту
-            service_name = None
+            service_name_6: str | None = None
             if volume and unit and tariff:
-                service_name = determine_service_name_by_context(
+                service_name_6 = determine_service_name_by_context(
                     volume, unit, tariff, amount or Decimal("0")
                 )
 
             result = {
-                "service_name": service_name,
+                "service_name": service_name_6,
                 "volume": volume,
                 "unit": unit,
                 "tariff": tariff,
@@ -1027,14 +977,14 @@ def parse_universal_service_line(line: str) -> dict[str, str | Decimal | None] |
             amount = safe_decimal(d["amount"])
 
             # Определяем название услуги по контексту
-            service_name = None
+            service_name_7: str | None = None
             if volume and unit and tariff:
-                service_name = determine_service_name_by_context(
+                service_name_7 = determine_service_name_by_context(
                     volume, unit, tariff, amount or Decimal("0")
                 )
 
             result = {
-                "service_name": service_name,
+                "service_name": service_name_7,
                 "volume": volume,
                 "unit": unit,
                 "tariff": tariff,
@@ -1503,7 +1453,7 @@ def parse_epd_data(text_content: str) -> dict[str, Any]:
     return data
 
 
-def parse_epd_pdf(pdf_file) -> dict[str, Any]:
+def parse_epd_pdf(pdf_file: Any) -> dict[str, Any]:
     """
     Parse EPD PDF file and return structured data ready for Django models.
 

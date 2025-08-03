@@ -9,16 +9,16 @@ app_name = "epd_parser"
 urlpatterns = [
     # Document management
     path("", views.EpdDocumentListView.as_view(), name="document_list"),
-    path("upload/", views.upload_epd, name="upload"),
+    path("upload/", views.EpdDocumentCreateView.as_view(), name="upload"),
     path("<int:pk>/", views.EpdDocumentDetailView.as_view(), name="document_detail"),
-    path("<int:pk>/edit/", views.edit_epd, name="edit"),
-    path("<int:pk>/delete/", views.delete_epd, name="delete"),
+    path("<int:pk>/edit/", views.EpdDocumentUpdateView.as_view(), name="edit"),
+    path("<int:pk>/delete/", views.EpdDocumentDeleteView.as_view(), name="delete"),
     # Search and statistics
-    path("search/", views.search_epd, name="search"),
-    path("statistics/", views.statistics, name="statistics"),
-    path("debug-images/", views.debug_images, name="debug_images"),
+    path("search/", views.EpdDocumentSearchView.as_view(), name="search"),
+    path("statistics/", views.EpdStatisticsView.as_view(), name="statistics"),
+    path("debug-images/", views.DebugImagesView.as_view(), name="debug_images"),
     # API endpoints
-    path("api/parse-pdf/", views.parse_pdf_api, name="parse_pdf_api"),
+    path("api/parse-pdf/", views.ParsePdfApiView.as_view(), name="parse_pdf_api"),
     # Demo page
-    path("demo/", views.parser_demo, name="parser_demo"),
+    path("demo/", views.ParserDemoView.as_view(), name="parser_demo"),
 ]

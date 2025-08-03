@@ -4,11 +4,14 @@ Django settings for utility_parser project.
 
 from pathlib import Path
 
-
-from decouple import config
+from decouple import config  # type: ignore
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Create logs directory if it doesn't exist
+LOGS_DIR = BASE_DIR / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config("SECRET_KEY", default="django-insecure-change-me-in-production")
@@ -22,8 +25,6 @@ ALLOWED_HOSTS: list[str] = config(
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
-# Manual data entry configuration
-# No external API dependencies required
 
 # Application definition
 INSTALLED_APPS = [
@@ -69,21 +70,35 @@ TEMPLATES = [
 WSGI_APPLICATION = "utility_parser.wsgi.application"
 
 # Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME", default="utility_parser"),
-        "USER": config("DB_USER", default="postgres"),
-        "PASSWORD": config("DB_PASSWORD", default="postgres"),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
+# Check if PostgreSQL connection is available
+DB_HOST = config("DB_HOST", default="")
+DB_PORT = config("DB_PORT", default="")
+DB_NAME = config("DB_NAME", default="")
+DB_USER = config("DB_USER", default="")
+DB_PASSWORD = config("DB_PASSWORD", default="")
+
+# Use PostgreSQL if all connection details are provided, otherwise fallback to SQLite
+if all([DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD]):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": DB_NAME,
+            "USER": DB_USER,
+            "PASSWORD": DB_PASSWORD,
+            "HOST": DB_HOST,
+            "PORT": DB_PORT,
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 # Password validation
-# https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -101,7 +116,6 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Internationalization
-# https://docs.djangoproject.com/en/5.0/topics/i18n/
 
 LANGUAGE_CODE = "ru-ru"
 
@@ -112,7 +126,6 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -123,7 +136,6 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -137,7 +149,7 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_SECONDS = 31536000
-    SECURE_REDIRECT_EXEMPT = []
+    SECURE_REDIRECT_EXEMPT: list[str] = []
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
@@ -166,7 +178,7 @@ LOGGING = {
         "file": {
             "level": "INFO",
             "class": "logging.FileHandler",
-            "filename": BASE_DIR / "logs" / "django.log",
+            "filename": LOGS_DIR / "django.log",
             "formatter": "verbose",
             "encoding": "utf-8",
         },

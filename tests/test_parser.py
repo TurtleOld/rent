@@ -4,21 +4,21 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import pytest
+import pytest  # type: ignore
 
-from epd_parser.pdf_parser import EpdPdfParser
+from epd_parser.pdf_parser import EpdPdfParser  # type: ignore
 
 
 class TestEpdParser:
     """Test cases for EpdParser class."""
 
-    def test_init_with_nonexistent_file(self):
+    def test_init_with_nonexistent_file(self) -> None:
         """Test initialization with non-existent file."""
         with pytest.raises(FileNotFoundError):
             EpdPdfParser(Path("nonexistent.pdf"))
 
     @patch("epd_parser.pdf_parser.pdfplumber.open")
-    def test_parse_empty_pdf(self, mock_pdfplumber_open):
+    def test_parse_empty_pdf(self, mock_pdfplumber_open: Mock) -> None:
         """Test parsing empty PDF."""
         mock_pdf = Mock()
         mock_pdf.pages = []
@@ -29,7 +29,7 @@ class TestEpdParser:
             parser.parse()
 
     @patch("epd_parser.pdf_parser.pdfplumber.open")
-    def test_parse_valid_pdf(self, mock_pdfplumber_open):
+    def test_parse_valid_pdf(self, mock_pdfplumber_open: Mock) -> None:
         """Test parsing valid PDF with mock data."""
         # Mock PDF content
         mock_page = Mock()
@@ -91,7 +91,7 @@ class TestEpdParser:
         finally:
             test_file.unlink(missing_ok=True)
 
-    def test_parse_decimal_valid(self):
+    def test_parse_decimal_valid(self) -> None:
         """Test decimal parsing with valid values."""
         parser = EpdPdfParser(Path("test.pdf"))
 
@@ -101,7 +101,7 @@ class TestEpdParser:
         assert parser._parse_decimal("1234.56") == Decimal("1234.56")
         assert parser._parse_decimal("0") == Decimal("0")
 
-    def test_parse_decimal_invalid(self):
+    def test_parse_decimal_invalid(self) -> None:
         """Test decimal parsing with invalid values."""
         parser = EpdPdfParser(Path("test.pdf"))
 

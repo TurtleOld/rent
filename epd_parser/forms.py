@@ -1,20 +1,13 @@
 """Django forms for EPD parser application."""
 
 import logging
-import os
 import re
-import tempfile
-from datetime import datetime
-from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 from django import forms
 from django.core.exceptions import ValidationError
 from django.http import QueryDict
 from django.utils.translation import gettext_lazy as _
-
-from .models import EpdDocument
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +100,15 @@ class EpdDocumentForm(forms.Form):
 
     def _prefill_with_parsed_data(self) -> None:
         """Pre-fill form fields with parsed data."""
-        personal_info = self.parsed_data.get("personal_info", {})
-        payment_info = self.parsed_data.get("payment_info", {})
-        totals = self.parsed_data.get("totals", {})
+        personal_info: dict[str, Any] = (
+            self.parsed_data.get("personal_info", {}) if self.parsed_data else {}
+        )
+        payment_info: dict[str, Any] = (
+            self.parsed_data.get("payment_info", {}) if self.parsed_data else {}
+        )
+        totals: dict[str, Any] = (
+            self.parsed_data.get("totals", {}) if self.parsed_data else {}
+        )
 
         # Create initial data dictionary
         initial_data = {}
@@ -134,7 +133,8 @@ class EpdDocumentForm(forms.Form):
         else:
             # Try to extract from text content
             period_match = re.search(
-                r"([а-яё]+)\s+([0-9]{4})", self.parsed_data.get("text_content", "")
+                r"([а-яё]+)\s+([0-9]{4})",
+                self.parsed_data.get("text_content", "") if self.parsed_data else "",
             )
             if period_match:
                 month, year = period_match.groups()
@@ -210,7 +210,7 @@ class EpdDocumentForm(forms.Form):
                 _("Total with insurance cannot be less than total without insurance.")
             )
 
-        return cleaned_data
+        return cleaned_data  # type: ignore
 
     def is_valid(self) -> bool:
         """Override is_valid to use initial data when POST data is missing."""
@@ -223,7 +223,7 @@ class EpdDocumentForm(forms.Form):
             # Add CSRF token if present
             if self.data and "csrfmiddlewaretoken" in self.data:
                 initial_data["csrfmiddlewaretoken"] = self.data["csrfmiddlewaretoken"]
-            # Replace self.data with initial data
-            self.data = initial_data  # type: ignore
+            # Use _data attribute to bypass the property
+            self._data = initial_data
 
-        return super().is_valid()
+        return super().is_valid()  # type: ignore

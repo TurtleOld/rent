@@ -1,37 +1,36 @@
 .PHONY: help install dev-install migrate makemigrations runserver test lint format clean docker-build docker-up docker-down
 
-help: ## Show this help message
+help:
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install production dependencies
+install:
 	uv pip install -e .
 
-dev-install: ## Install development dependencies
+dev-install:
 	uv pip install -e ".[dev]"
 
-migrate: ## Apply database migrations
+migrate:
 	uv run manage.py migrate
 
-makemigrations: ## Create new migrations
+makemigrations:
 	uv run manage.py makemigrations
 
-runserver: ## Start development server
+runserver:
 	uv run manage.py runserver
 
-test: ## Run tests
+test:
 	uv run pytest
 
-lint: ## Run linting checks
-	uv run ruff check .
+lint:
+	uv run ruff check . $(if $(FIX),--fix)
 	uv run mypy .
 
-format: ## Format code
+format:
 	uv run ruff format .
-	uv run black .
 	uv run isort .
 
-clean: ## Clean up temporary files
+clean:
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "__pycache__" -delete
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
@@ -39,41 +38,41 @@ clean: ## Clean up temporary files
 	rm -rf .mypy_cache
 	rm -rf .ruff_cache
 
-docker-build: ## Build Docker image
+docker-build:
 	docker-compose build
 
-docker-up: ## Start Docker services
+docker-up:
 	docker-compose up -d
 
-docker-down: ## Stop Docker services
+docker-down:
 	docker-compose down
 
-docker-logs: ## Show Docker logs
+docker-logs:
 	docker-compose logs -f
 
-shell: ## Start Django shell
+shell:
 	uv run manage.py shell
 
-collectstatic: ## Collect static files
+collectstatic:
 	uv run manage.py collectstatic --noinput
 
-createsuperuser: ## Create superuser
+createsuperuser:
 	uv run manage.py createsuperuser
 
-check: ## Run Django system check
+check:
 	uv run manage.py check
 
-setup: install migrate ## Initial setup
+setup: install migrate
 	@echo "Setup complete! Run 'make runserver' to start the development server."
 
-dev-setup: dev-install migrate ## Development setup
+dev-setup: dev-install migrate
 	@echo "Development setup complete! Run 'make runserver' to start the development server."
 
-uv-install: ## Install dependencies using uv
+uv-install:
 	uv sync
 
-uv-dev-install: ## Install development dependencies using uv
+uv-dev-install:
 	uv sync --extra dev
 
-uv-run: ## Run a command with uv (usage: make uv-run cmd="your-command")
+uv-run:
 	uv run $(cmd) 

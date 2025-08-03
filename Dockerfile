@@ -19,14 +19,17 @@ RUN apt-get update && apt-get install -y \
 # Install uv
 RUN pip install uv
 
-# Copy pyproject.toml and lock file
-COPY pyproject.toml ./
+# Copy pyproject.toml, README.md and lock file
+COPY pyproject.toml README.md ./
 
 # Install Python dependencies using uv
 RUN uv pip install --system .
 
 # Copy project
 COPY . .
+
+# Create logs directory
+RUN mkdir -p /app/logs
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
