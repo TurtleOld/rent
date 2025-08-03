@@ -1,0 +1,30 @@
+.upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.upload-area:hover {
+    border-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.upload-area.dragover {
+    border-color: #007bff;
+    background-color: #e3f2fd;
+}
+
+.upload-area.has-file {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.file-input-hidden {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+} 

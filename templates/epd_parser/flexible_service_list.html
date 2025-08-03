@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Гибкие услуги - EPD Parser{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">Гибкие услуги</h1>
+            
+            <!-- Статистика -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">{{ total_services }}</h5>
+                            <p class="card-text">Всего услуг</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">{{ total_amount|floatformat:2 }} ₽</h5>
+                            <p class="card-text">Общая сумма</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Структура данных:</h6>
+                            <div class="row">
+                                <div class="col-6">
+                                    <small>С объемом: {{ structure_stats.with_volume }}</small><br>
+                                    <small>С тарифом: {{ structure_stats.with_tariff }}</small><br>
+                                    <small>С перерасчетом: {{ structure_stats.with_recalculation }}</small>
+                                </div>
+                                <div class="col-6">
+                                    <small>С долгом: {{ structure_stats.with_debt }}</small><br>
+                                    <small>С оплатой: {{ structure_stats.with_paid }}</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Таблица услуг -->
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Документ</th>
+                            <th>Услуга</th>
+                            <th>Структура</th>
+                            <th>Объем</th>
+                            <th>Тариф</th>
+                            <th>Начислено</th>
+                            <th>Перерасчет</th>
+                            <th>Долг</th>
+                            <th>Оплачено</th>
+                            <th>Итого</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for service in services %}
+                        <tr>
+                            <td>
+                                <small>
+                                    {{ service.document.account_number }}<br>
+                                    <span class="text-muted">{{ service.document.payment_period }}</span>
+                                </small>
+                            </td>
+                            <td>
+                                <strong>{{ service.service_name }}</strong>
+                                {% if service.unit %}
+                                    <br><small class="text-muted">{{ service.unit }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ service.structure_info }}</span>
+                            </td>
+                            <td>
+                                {% if service.has_volume %}
+                                    {{ service.volume|floatformat:4 }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if service.has_tariff %}
+                                    {{ service.tariff|floatformat:4 }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ service.amount|floatformat:2 }}</td>
+                            <td>
+                                {% if service.has_recalculation %}
+                                    {{ service.recalculation|floatformat:2 }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if service.has_debt %}
+                                    {{ service.debt|floatformat:2 }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if service.has_paid %}
+                                    {{ service.paid|floatformat:2 }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ service.total|floatformat:2 }}</strong>
+                            </td>
+                            <td>
+                                <a href="{% url 'epd_parser:flexible_service_detail' service.pk %}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    Детали
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="11" class="text-center text-muted">
+                                Нет данных об услугах
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Пагинация -->
+            {% if is_paginated %}
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1">&laquo; Первая</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Предыдущая</a>
+                        </li>
+                    {% endif %}
+
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}">Следующая</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Последняя &raquo;</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

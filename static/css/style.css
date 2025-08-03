@@ -19,7 +19,7 @@
     text-align: center;
     cursor: pointer;
     transition: all 0.3s ease;
-    background-color: #f8f9fa;
+    background-color: #f8f9fa !important;
     min-height: 200px;
     display: flex;
     align-items: center;
@@ -28,18 +28,18 @@
 
 .upload-area:hover {
     border-color: var(--primary-color);
-    background-color: #e7f3ff;
+    background-color: #e7f3ff !important;
 }
 
 .upload-area.dragover {
     border-color: var(--success-color);
-    background-color: #f0f9ff;
+    background-color: #f0f9ff !important;
     transform: scale(1.02);
 }
 
 .upload-area.has-file {
     border-color: var(--success-color);
-    background-color: #f0f9ff;
+    background-color: #f0f9ff !important;
 }
 
 .upload-area.has-file .upload-content {
@@ -162,8 +162,8 @@
     }
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
+/* Dark mode support - disabled for upload area to keep light theme */
+/* @media (prefers-color-scheme: dark) {
     .upload-area {
         background-color: #2d3748;
         border-color: #4a5568;
@@ -171,5 +171,120 @@
     
     .upload-area:hover {
         background-color: #1a202c;
+    }
+} */
+
+/* Statistics page specific styles */
+.stat-card-success {
+    background: linear-gradient(135deg, #198754, #146c43) !important;
+}
+
+.stat-card-info {
+    background: linear-gradient(135deg, #0dcaf0, #0aa2c0) !important;
+}
+
+.stat-card-warning {
+    background: linear-gradient(135deg, #ffc107, #e0a800) !important;
+}
+
+/* Progress bar styles */
+.progress-custom {
+    height: 20px;
+}
+
+/* Table sorting styles */
+.table-sortable th[data-sort] {
+    cursor: pointer;
+}
+
+/* Form display styles */
+.form-inline {
+    display: inline;
+}
+
+/* Alert container styles */
+.alert-container {
+    position: fixed;
+    top: 0;
+    right: 0;
+    padding: 1rem;
+    z-index: 1050;
+}
+
+/* File input styles */
+.file-input-hidden {
+    display: none;
+}
+
+/* Progress indicator styles */
+.progress-indicator {
+    display: none;
+}
+
+/* Chart container styles */
+.card-body canvas {
+    max-height: 300px;
+}
+
+/* Print styles */
+@media print {
+    .btn-group, .btn, button {
+        display: none !important;
+    }
+    .card {
+        border: 1px solid #000 !important;
+        break-inside: avoid;
+    }
+    .table {
+        font-size: 12px;
+    }
+    canvas {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .d-flex.gap-2 {
+        flex-direction: column;
+        gap: 0.5rem !important;
+    }
+    .btn-group {
+        width: 100%;
+    }
+    .btn-group .btn {
+        flex: 1;
+    }
+} 
+
+/* Button styles */
+.btn-reset {
+    background-color: var(--warning-color);
+    border-color: var(--warning-color);
+    color: var(--dark-color);
+}
+
+.btn-reset:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+    color: var(--dark-color);
+}
+
+.btn-group-custom {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+@media (max-width: 768px) {
+    .btn-group-custom {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .btn-group-custom .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
     }
 } 

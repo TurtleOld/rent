@@ -9,6 +9,8 @@ from django.core.exceptions import ValidationError
 from django.http import QueryDict
 from django.utils.translation import gettext_lazy as _
 
+from .pdf_parse import parse_epd_pdf
+
 logger = logging.getLogger(__name__)
 
 
@@ -227,3 +229,56 @@ class EpdDocumentForm(forms.Form):
             self._data = initial_data
 
         return super().is_valid()  # type: ignore
+
+
+class PdfUploadForm(forms.Form):
+    """Form for uploading PDF files."""
+
+    pdf_file = forms.FileField(
+        label=_("PDF File"),
+        help_text=_("Select a PDF file to upload and parse"),
+        widget=forms.FileInput(
+            attrs={
+                "class": "form-control",
+                "accept": ".pdf",
+            }
+        ),
+    )
+
+    def clean_pdf_file(self):
+        """Validate PDF file."""
+        pdf_file = self.cleaned_data.get("pdf_file")
+
+        if pdf_file:
+            # Check file extension
+            if not pdf_file.name.lower().endswith(".pdf"):
+                raise ValidationError(_("Only PDF files are allowed."))
+
+            # Check file size (10MB limit)
+            if pdf_file.size > 10 * 1024 * 1024:
+                raise ValidationError(_("File size must be less than 10MB."))
+
+            # Try to parse the PDF to validate it's a valid EPD document
+            try:
+                pdf_file.seek(0)  # Reset file pointer
+                parsed_data = parse_epd_pdf(pdf_file)
+
+                # Store parsed data for later use
+                self.parsed_data = parsed_data
+
+                # Validate that we have required data
+                if not parsed_data.get("personal_info", {}).get("account_number"):
+                    raise ValidationError(
+                        _(
+                            "Could not extract account number from PDF. Please ensure this is a valid EPD document."
+                        )
+                    )
+
+            except Exception as e:
+                raise ValidationError(
+                    _(
+                        "Error parsing PDF file. Please ensure this is a valid EPD document."
+                    )
+                )
+
+        return pdf_file

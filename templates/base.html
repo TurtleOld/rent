@@ -15,6 +15,7 @@
     <!-- Custom CSS -->
     {% load static %}
     <link href="{% static 'css/style.css' %}" rel="stylesheet">
+    <link href="{% static 'css/upload.css' %}" rel="stylesheet">
     
     <style>
         .navbar-brand {
@@ -77,6 +78,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'epd_parser:upload' %}">
                             <i class="bi bi-upload"></i> Загрузить
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'epd_parser:flexible_service_list' %}">
+                            <i class="bi bi-gear-wide-connected"></i> Гибкие услуги
                         </a>
                     </li>
                     <li class="nav-item">
@@ -143,6 +149,7 @@
     
     <!-- Custom JavaScript -->
     <script src="{% static 'js/app.js' %}"></script>
+    <script src="{% static 'js/upload.js' %}"></script>
     
     {% block extra_js %}{% endblock %}
 </body>

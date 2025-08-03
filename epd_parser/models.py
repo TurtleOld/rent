@@ -1,14 +1,11 @@
 """Django models for EPD (Unified Payment Document) data storage."""
 
-import logging
 from decimal import Decimal
 from typing import Any
 
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-
-logger = logging.getLogger(__name__)
 
 
 class EpdDocument(models.Model):
@@ -40,6 +37,8 @@ class EpdDocument(models.Model):
     due_date = models.DateField(
         verbose_name=_("Due Date"),
         help_text=_("Payment due date"),
+        null=True,
+        blank=True,
     )
 
     # Financial totals
@@ -371,3 +370,177 @@ class Recalculation(models.Model):
             )["order__max"]
             self.order = (last_order or 0) + 1
         super().save(*args, **kwargs)
+
+
+class FlexibleServiceCharge(models.Model):
+    """Гибкая модель для хранения данных об услугах с учетом отсутствующих колонок."""
+
+    document = models.ForeignKey(
+        EpdDocument,
+        on_delete=models.CASCADE,
+        related_name="flexible_service_charges",
+        verbose_name=_("EPD Document"),
+    )
+
+    # Основная информация об услуге
+    service_name = models.CharField(
+        max_length=255,
+        verbose_name=_("Service Name"),
+        help_text=_("Name of the utility service"),
+    )
+
+    # Структура данных (какие колонки присутствуют)
+    has_volume = models.BooleanField(
+        default=False,
+        verbose_name=_("Has Volume"),
+        help_text=_("Whether volume data is present"),
+    )
+    has_tariff = models.BooleanField(
+        default=False,
+        verbose_name=_("Has Tariff"),
+        help_text=_("Whether tariff data is present"),
+    )
+    has_recalculation = models.BooleanField(
+        default=False,
+        verbose_name=_("Has Recalculation"),
+        help_text=_("Whether recalculation data is present"),
+    )
+    has_debt = models.BooleanField(
+        default=False,
+        verbose_name=_("Has Debt"),
+        help_text=_("Whether debt data is present"),
+    )
+    has_paid = models.BooleanField(
+        default=False,
+        verbose_name=_("Has Paid"),
+        help_text=_("Whether paid data is present"),
+    )
+
+    # Данные услуги (могут быть null)
+    volume = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        verbose_name=_("Volume"),
+        help_text=_("Volume of service consumed"),
+        validators=[MinValueValidator(Decimal("0.0000"))],
+        null=True,
+        blank=True,
+    )
+    unit = models.CharField(
+        max_length=20,
+        verbose_name=_("Unit"),
+        help_text=_("Unit of measurement (кв.м., куб.м., кВт*ч, etc.)"),
+        blank=True,
+    )
+    tariff = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        verbose_name=_("Tariff"),
+        help_text=_("Tariff rate per unit"),
+        validators=[MinValueValidator(Decimal("0.0000"))],
+        null=True,
+        blank=True,
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_("Amount"),
+        help_text=_("Calculated amount for this service"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    recalculation = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_("Recalculation"),
+        help_text=_("Recalculation amount"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+    debt = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_("Debt"),
+        help_text=_("Previous debt amount"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+    paid = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_("Paid"),
+        help_text=_("Amount already paid"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        default=Decimal("0.00"),
+    )
+    total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name=_("Total"),
+        help_text=_("Total amount to pay"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+
+    # Порядок и метаданные
+    order = models.PositiveIntegerField(
+        verbose_name=_("Order"),
+        help_text=_("Order of service in the document"),
+        default=0,
+    )
+
+    # Исходные данные для отладки
+    original_line = models.TextField(
+        verbose_name=_("Original Line"),
+        help_text=_("Original text line from PDF"),
+        blank=True,
+    )
+
+    class Meta:
+        """Meta options for FlexibleServiceCharge model."""
+
+        verbose_name = _("Flexible Service Charge")
+        verbose_name_plural = _("Flexible Service Charges")
+        ordering = ["document", "order"]
+        indexes = [
+            models.Index(fields=["document", "order"]),
+            models.Index(fields=["service_name"]),
+            models.Index(fields=["has_volume"]),
+            models.Index(fields=["has_tariff"]),
+        ]
+
+    def __str__(self) -> str:
+        """String representation of the model."""
+        return f"{self.document.account_number} - {self.service_name}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Override save to update structure flags and calculate total."""
+        # Обновляем флаги структуры
+        self.has_volume = self.volume is not None
+        self.has_tariff = self.tariff is not None
+        self.has_recalculation = (
+            self.recalculation is not None and self.recalculation > 0
+        )
+        self.has_debt = self.debt is not None and self.debt > 0
+        self.has_paid = self.paid is not None and self.paid > 0
+
+        # Вычисляем total если он не задан
+        if self.total is None and self.amount is not None:
+            self.total = self.amount + self.recalculation + self.debt - self.paid
+
+        super().save(*args, **kwargs)
+
+    @property
+    def structure_info(self) -> str:
+        """Возвращает информацию о структуре данных услуги."""
+        parts = []
+        if self.has_volume:
+            parts.append("volume")
+        if self.has_tariff:
+            parts.append("tariff")
+        if self.has_recalculation:
+            parts.append("recalculation")
+        if self.has_debt:
+            parts.append("debt")
+        if self.has_paid:
+            parts.append("paid")
+
+        return f"[{', '.join(parts)}]" if parts else "[basic]"

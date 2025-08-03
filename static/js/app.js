@@ -213,16 +213,10 @@ function initTooltips() {
  * Confirmation dialogs
  */
 function initConfirmDialogs() {
-    const deleteButtons = document.querySelectorAll('.btn-delete');
-    
-    deleteButtons.forEach(button => {
-        button.addEventListener('click', function(e) {
-            const message = this.dataset.confirm || 'Вы уверены, что хотите удалить этот элемент?';
-            if (!confirm(message)) {
-                e.preventDefault();
-            }
-        });
-    });
+    // This function is now handled by the custom modal in document_list.html
+    // The native confirm() has been removed to prevent double confirmation dialogs
+    // No event listeners are added to prevent conflicts with custom modals
+    return;
 }
 
 /**

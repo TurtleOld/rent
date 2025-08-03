@@ -2,7 +2,9 @@
 Django settings for utility_parser project.
 """
 
+import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from decouple import config  # type: ignore
 
@@ -69,34 +71,82 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "utility_parser.wsgi.application"
 
-# Database
 
-# Check if PostgreSQL connection is available
-DB_HOST = config("DB_HOST", default="")
-DB_PORT = config("DB_PORT", default="")
-DB_NAME = config("DB_NAME", default="")
-DB_USER = config("DB_USER", default="")
-DB_PASSWORD = config("DB_PASSWORD", default="")
+# Database configuration
+def get_database_config():
+    """
+    Get database configuration from environment variables.
+    Supports PostgreSQL via DATABASE_URL or individual environment variables,
+    falls back to SQLite if neither is configured.
+    """
+    database_url = config("DATABASE_URL", default=None)
 
-# Use PostgreSQL if all connection details are provided, otherwise fallback to SQLite
-if all([DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD]):
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": DB_NAME,
-            "USER": DB_USER,
-            "PASSWORD": DB_PASSWORD,
-            "HOST": DB_HOST,
-            "PORT": DB_PORT,
+    if database_url:
+        # Use DATABASE_URL if provided
+        parsed_url = urlparse(database_url)
+
+        # Check if it's a PostgreSQL URL (including SSL variants)
+        if parsed_url.scheme not in ("postgresql", "postgres", "postgresql+ssl"):
+            raise ValueError(
+                f"Unsupported database scheme: {parsed_url.scheme}. "
+                "Only 'postgresql', 'postgres', and 'postgresql+ssl' are supported."
+            )
+
+        # Extract database name from path, removing leading slash
+        database_name = parsed_url.path.lstrip("/")
+        if not database_name:
+            raise ValueError("Database name is required in DATABASE_URL")
+
+        # Determine SSL mode based on scheme
+        ssl_mode = "require" if parsed_url.scheme == "postgresql+ssl" else "disable"
+
+        return {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": database_name,
+                "USER": parsed_url.username,
+                "PASSWORD": parsed_url.password,
+                "HOST": parsed_url.hostname,
+                "PORT": parsed_url.port or "5432",
+                "OPTIONS": {
+                    "sslmode": ssl_mode,
+                },
+            }
         }
-    }
-else:
-    DATABASES = {
+
+    # Check for individual PostgreSQL environment variables
+    db_name = config("DB_NAME", default=None)
+    db_user = config("DB_USER", default=None)
+    db_password = config("DB_PASSWORD", default=None)
+    db_host = config("DB_HOST", default=None)
+    db_port = config("DB_PORT", default="5432")
+
+    if all([db_name, db_user, db_password, db_host]):
+        # Use individual PostgreSQL environment variables
+        return {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": db_name,
+                "USER": db_user,
+                "PASSWORD": db_password,
+                "HOST": db_host,
+                "PORT": db_port,
+                "OPTIONS": {
+                    "sslmode": "disable",
+                },
+            }
+        }
+
+    # Fallback to SQLite
+    return {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+
+
+DATABASES = get_database_config()
 
 # Password validation
 

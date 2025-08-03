@@ -10,10 +10,20 @@
             <h1 class="h3 mb-0">
                 <i class="bi bi-graph-up"></i> Статистика документов ЕПД
             </h1>
-            <div class="btn-group">
-                <a href="?days=7" class="btn btn-outline-primary {% if days == 7 %}active{% endif %}">7 дней</a>
-                <a href="?days=30" class="btn btn-outline-primary {% if days == 30 %}active{% endif %}">30 дней</a>
-                <a href="?days=90" class="btn btn-outline-primary {% if days == 90 %}active{% endif %}">90 дней</a>
+            <div class="d-flex gap-2">
+                <div class="btn-group">
+                    <a href="?days=7" class="btn btn-outline-primary {% if days == 7 %}active{% endif %}">7 дней</a>
+                    <a href="?days=30" class="btn btn-outline-primary {% if days == 30 %}active{% endif %}">30 дней</a>
+                    <a href="?days=90" class="btn btn-outline-primary {% if days == 90 %}active{% endif %}">90 дней</a>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-success" onclick="exportToCSV()">
+                        <i class="bi bi-download"></i> Экспорт CSV
+                    </button>
+                    <button type="button" class="btn btn-outline-info" onclick="printStatistics()">
+                        <i class="bi bi-printer"></i> Печать
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -29,7 +39,7 @@
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="card stat-card text-center" style="background: linear-gradient(135deg, #198754, #146c43);">
+                <div class="card stat-card text-center stat-card-success">
                     <div class="card-body">
                         <i class="bi bi-calendar-check display-4"></i>
                         <div class="stat-number">{{ stats.recent_documents }}</div>
@@ -38,16 +48,16 @@
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="card stat-card text-center" style="background: linear-gradient(135deg, #0dcaf0, #0aa2c0);">
+                <div class="card stat-card text-center stat-card-info">
                     <div class="card-body">
-                        <i class="bi bi-currency-dollar display-4"></i>
+                        <i class="bi bi-cash-coin display-4"></i>
                         <div class="stat-number">{{ stats.total_amount|floatformat:0 }} ₽</div>
                         <div class="stat-label">Общая сумма</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="card stat-card text-center" style="background: linear-gradient(135deg, #ffc107, #e0a800);">
+                <div class="card stat-card text-center stat-card-warning">
                     <div class="card-body">
                         <i class="bi bi-people display-4"></i>
                         <div class="stat-number">{{ stats.unique_accounts }}</div>
@@ -81,6 +91,23 @@
                                 </div>
                             </div>
                         </div>
+                        <hr>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h6 class="text-warning">{{ stats.total_insurance|floatformat:2 }} ₽</h6>
+                                    <p class="text-muted small">Общая сумма страхования</p>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h6 class="{% if stats.growth_rate > 0 %}text-success{% elif stats.growth_rate < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                        {% if stats.growth_rate > 0 %}+{% endif %}{{ stats.growth_rate|floatformat:1 }}%
+                                    </h6>
+                                    <p class="text-muted small">Рост загрузки</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -101,8 +128,23 @@
                             </div>
                             <div class="col-6">
                                 <div class="text-center">
-                                    <h4 class="text-primary">{{ stats.avg_amount|floatformat:0 }}</h4>
-                                    <p class="text-muted">Средняя сумма</p>
+                                    <h4 class="text-primary">{{ stats.avg_service_amount|floatformat:2 }} ₽</h4>
+                                    <p class="text-muted">Средняя сумма услуги</p>
+                                </div>
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h6 class="text-danger">{{ stats.total_debt|floatformat:2 }} ₽</h6>
+                                    <p class="text-muted small">Общая задолженность</p>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h6 class="text-success">{{ stats.total_paid|floatformat:2 }} ₽</h6>
+                                    <p class="text-muted small">Общая оплата</p>
                                 </div>
                             </div>
                         </div>
@@ -111,23 +153,56 @@
             </div>
         </div>
         
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-pie-chart"></i> Распределение по услугам
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="servicesChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-graph-up"></i> Динамика загрузки документов
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="timelineChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Top Services -->
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     <i class="bi bi-trophy"></i> Топ услуг по суммам
                 </h5>
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-primary active" data-sort="amount">По сумме</button>
+                    <button type="button" class="btn btn-outline-primary" data-sort="count">По количеству</button>
+                </div>
             </div>
             <div class="card-body p-0">
                 {% if top_services %}
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                        <table class="table table-hover mb-0" id="servicesTable">
                             <thead>
                                 <tr>
                                     <th>Услуга</th>
                                     <th class="text-center">Количество</th>
                                     <th class="text-end">Общая сумма</th>
                                     <th class="text-end">Средняя сумма</th>
+                                    <th class="text-center">Доля от общей суммы</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -143,7 +218,15 @@
                                         <strong class="text-success">{{ service.total_amount|floatformat:2 }} ₽</strong>
                                     </td>
                                     <td class="text-end">
-                                        <span class="text-muted">{{ service.total_amount|div:service.count|floatformat:2 }} ₽</span>
+                                        <span class="text-muted">{{ service.avg_amount|floatformat:2 }} ₽</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <progress class="w-100 progress-custom" 
+                                                  value="{{ service.percentage|default:0 }}" 
+                                                  max="100" 
+                                                  aria-label="Процент от общей суммы: {{ service.percentage|default:0|floatformat:1 }}%">
+                                            {{ service.percentage|default:0|floatformat:1 }}%
+                                        </progress>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -168,4 +251,169 @@
         </div>
     </div>
 </div>
+
+<!-- JavaScript for Charts and Interactivity -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Services Chart
+    const servicesCtx = document.getElementById('servicesChart');
+    if (servicesCtx) {
+        const servicesData = {
+            labels: [{% for service in top_services %}'{{ service.service_name|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
+            datasets: [{
+                data: [{% for service in top_services %}{{ service.total_amount }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                    '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+                ],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        };
+
+        new Chart(servicesCtx, {
+            type: 'doughnut',
+            data: servicesData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value.toLocaleString('ru-RU')} ₽ (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Timeline Chart
+    const timelineCtx = document.getElementById('timelineChart');
+    if (timelineCtx) {
+        const timelineData = {
+            labels: ['{{ stats.recent_documents }} документов за {{ days }} дней'],
+            datasets: [{
+                label: 'Документы',
+                data: [{{ stats.recent_documents }}],
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 2,
+                borderRadius: 5
+            }]
+        };
+
+        new Chart(timelineCtx, {
+            type: 'bar',
+            data: timelineData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    // Table Sorting
+    const sortButtons = document.querySelectorAll('[data-sort]');
+    const servicesTable = document.getElementById('servicesTable');
+    
+    if (servicesTable && sortButtons.length > 0) {
+        sortButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const sortType = this.getAttribute('data-sort');
+                
+                // Update active button
+                sortButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Sort table rows
+                const tbody = servicesTable.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                
+                rows.sort((a, b) => {
+                    let aValue, bValue;
+                    
+                    if (sortType === 'amount') {
+                        aValue = parseFloat(a.cells[2].textContent.replace(/[^\d.-]/g, ''));
+                        bValue = parseFloat(b.cells[2].textContent.replace(/[^\d.-]/g, ''));
+                    } else {
+                        aValue = parseInt(a.cells[1].textContent);
+                        bValue = parseInt(b.cells[1].textContent);
+                    }
+                    
+                    return bValue - aValue;
+                });
+                
+                // Reorder rows
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
+    }
+
+    // Export to CSV function
+    window.exportToCSV = function() {
+        const table = document.getElementById('servicesTable');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tr'));
+        let csv = 'Услуга,Количество,Общая сумма,Средняя сумма,Доля от общей суммы\n';
+
+        rows.forEach(row => {
+            const cells = Array.from(row.querySelectorAll('td'));
+            if (cells.length > 0) {
+                const rowData = cells.map(cell => {
+                    // Remove HTML tags and get clean text
+                    let text = cell.textContent.trim();
+                    // Remove currency symbols and extra spaces
+                    text = text.replace(/₽/g, '').replace(/\s+/g, ' ').trim();
+                    // Escape quotes
+                    return `"${text}"`;
+                });
+                csv += rowData.join(',') + '\n';
+            }
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `statistics_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // Print function
+    window.printStatistics = function() {
+        window.print();
+    };
+    });
+</script>
 {% endblock %} 
