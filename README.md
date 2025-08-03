@@ -17,7 +17,7 @@
 
 ## 🛠 Технологии
 
-- **Backend**: Django 5.0, Python 3.11+
+- **Backend**: Django 5.2.4, Python 3.13+
 - **Database**: PostgreSQL 15 (с fallback на SQLite)
 - **PDF Handling**: PDF file upload and validation
 - **Package Manager**: uv
@@ -27,7 +27,7 @@
 
 ## 📋 Требования
 
-- Python 3.11+
+- Python 3.13+
 - Docker и Docker Compose (опционально)
 - PostgreSQL 15 (опционально, по умолчанию используется SQLite)
 

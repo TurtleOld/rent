@@ -16,7 +16,6 @@ urlpatterns = [
     # Search and statistics
     path("search/", views.EpdDocumentSearchView.as_view(), name="search"),
     path("statistics/", views.EpdStatisticsView.as_view(), name="statistics"),
-    path("debug-images/", views.DebugImagesView.as_view(), name="debug_images"),
     # API endpoints
     path("api/parse-pdf/", views.ParsePdfApiView.as_view(), name="parse_pdf_api"),
     # Demo page

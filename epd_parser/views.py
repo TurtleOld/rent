@@ -437,46 +437,6 @@ class EpdStatisticsView(TemplateView):
         return cast(dict[str, Any], context)
 
 
-class DebugImagesView(TemplateView):
-    """View for viewing debug images from PDF processing."""
-
-    template_name = "epd_parser/debug_images.html"
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        """Add debug images data to context."""
-        context = super().get_context_data(**kwargs)
-
-        # Get list of debug images
-        debug_images: list[dict[str, Any]] = []
-        tmp_dir = Path("/tmp")
-
-        # Look for both PNG and JPG debug images
-        for img_file in tmp_dir.glob("epd_debug_page_*.png"):
-            debug_images.append(
-                {
-                    "filename": img_file.name,
-                    "path": str(img_file),
-                    "size": img_file.stat().st_size,
-                    "type": "PNG (High Quality)",
-                }
-            )
-        for img_file in tmp_dir.glob("epd_web_debug_page_*.jpg"):
-            debug_images.append(
-                {
-                    "filename": img_file.name,
-                    "path": str(img_file),
-                    "size": img_file.stat().st_size,
-                    "type": "JPG (Web Quality)",
-                }
-            )
-
-        # Sort by filename
-        debug_images.sort(key=lambda x: str(x["filename"]))
-
-        context["debug_images"] = debug_images
-        return cast(dict[str, Any], context)
-
-
 class ParserDemoView(TemplateView):
     """View for parser demo page."""
 
