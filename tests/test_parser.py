@@ -80,7 +80,8 @@ class TestEpdParser:
 
             # Verify service charges
             service_charges = result["service_charges"]
-            assert len(service_charges) == 2
+            expected_service_count = 2
+            assert len(service_charges) == expected_service_count
 
             # Verify totals
             totals = result["totals"]

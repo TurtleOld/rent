@@ -3,13 +3,16 @@ import os
 import re
 import tempfile
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pdfplumber
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils.translation import gettext as _
+
+from .models import EpdDocument, ServiceCharge, MeterReading, Recalculation
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +75,26 @@ def clean_service_name(service_name: str) -> str:
     - "ВОДООТВЕДЕНИЕ ОДН 0.00 куб. м. 40.06" -> "ВОДООТВЕДЕНИЕ ОДН"
     - "ХОЛОДНОЕ В/С ОДН 0.00 куб. м. 33.31" -> "ХОЛОДНОЕ В/С ОДН"
     - "ВОДООТВЕДЕНИЕ_ 12.00 куб. м. 40.06" -> "ВОДООТВЕДЕНИЕ"
+    - "56.50 кв.м." -> "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ" (определяется по контексту)
     """
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не название услуги
+    if any(keyword in service_name.upper() for keyword in exclude_keywords):
+        return ""
+
+    # Сначала проверяем, является ли строка только числовыми данными
+    if re.match(r"^[\d.]+\s+[^\d\s]+\.?$", service_name.strip()):
+        # Это только volume + unit, нужно определить название по контексту
+        # Пока возвращаем как есть, название будет определено позже
+        return service_name.strip()
+
     # Паттерны для удаления числовых данных из названия
     patterns = [
         # Паттерн: [название] [число] [ед.изм.] [число]
@@ -83,14 +105,89 @@ def clean_service_name(service_name: str) -> str:
         r"^(.+?)\s+[\d.]+\s+[^\d]+\s+[\d.]+$",
         # Специальный паттерн для "куб. м." с пробелами
         r"^(.+?)\s+[\d.]+\s+куб\.\s*м\.\s+[\d.]+$",
+        # Паттерн: [название] [число] [ед.изм.]
+        r"^(.+?)\s+[\d.]+\s+[^\d\s]+\.?$",
+        # Паттерн: [название] [число] [ед.изм.] (с пробелами в единицах)
+        r"^(.+?)\s+[\d.]+\s+[^\d]+$",
     ]
 
     for pattern in patterns:
         match = re.match(pattern, service_name)
         if match:
-            return match.group(1).strip()
+            cleaned_name = match.group(1).strip()
+            # Проверяем, что очищенное название не пустое и содержит буквы
+            if cleaned_name and re.search(r"[А-ЯЁ]", cleaned_name):
+                return cleaned_name
 
-    return service_name
+    return service_name.strip()
+
+
+def determine_service_name_by_context(
+    volume: Decimal, unit: str, tariff: Decimal, amount: Decimal
+) -> str:
+    """
+    Определяет название услуги по контексту (volume, unit, tariff, amount).
+
+    Args:
+        volume: Объем услуги
+        unit: Единица измерения
+        tariff: Тариф
+        amount: Сумма начисления
+
+    Returns:
+        Название услуги
+    """
+    # Определяем услугу по комбинации параметров
+    if unit == "кв.м.":
+        if tariff == Decimal("22.00"):
+            return "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ"
+        elif tariff == Decimal("38.61"):
+            return "СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ"
+        elif tariff == Decimal("11.334"):
+            return "ОБРАЩЕНИЕ С ТКО"
+        elif tariff == Decimal("4.20"):
+            # Проверяем, не является ли это строкой "Всего за июль"
+            if (
+                volume and volume > 1000
+            ):  # Если объем очень большой, это скорее всего итоговая строка
+                return "ИТОГО"
+            else:
+                return "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ"
+
+    elif unit == "куб. м.":
+        if "ОДН" in str(volume):  # Если в volume есть упоминание ОДН
+            if tariff == Decimal("61.19"):
+                return "ВОДООТВЕДЕНИЕ ОДН"
+            elif tariff == Decimal("62.22"):
+                return "ХОЛОДНОЕ В/С ОДН"
+        else:
+            if tariff == Decimal("61.19"):
+                return "ВОДООТВЕДЕНИЕ"
+            elif tariff == Decimal("62.22"):
+                return "ХОЛОДНОЕ В/С"
+
+    elif unit == "куб.м.":
+        if tariff == Decimal("62.22"):
+            return "ГОРЯЧАЯ ВОДА (НОСИТЕЛЬ) ОДН"
+        elif tariff == Decimal("2774.75"):
+            return "ГОРЯЧЕЕ В/С (ЭНЕРГИЯ)"
+
+    elif unit == "Гкал":
+        if tariff == Decimal("2774.75"):
+            return "ОТОПЛЕНИЕ"
+
+    elif unit == "кВт*ч":
+        if tariff == Decimal("6.19"):
+            return "ЭЛЕКТРОСНАБЖЕНИЕ ОДН"
+
+    elif unit == "абонент":
+        if tariff == Decimal("50.00"):
+            return "ЗАПИРАЮЩЕЕ УСТРОЙСТВО"
+        elif tariff == Decimal("118.83"):
+            return "ТО ВКГО"
+
+    # Если не удалось определить, возвращаем общее название
+    return f"УСЛУГА ({unit})"
 
 
 def extract_volume_unit_from_name(
@@ -104,6 +201,18 @@ def extract_volume_unit_from_name(
     - "ХОЛОДНОЕ В/С ОДН 0.00 куб. м. 33.31" -> volume=0.00, unit=куб. м.
     - "ВОДООТВЕДЕНИЕ_ 12.00 куб. м. 40.06" -> volume=12.00, unit=куб. м.
     """
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не название услуги
+    if any(keyword in service_name.upper() for keyword in exclude_keywords):
+        return None
+
     # Паттерн для извлечения volume и unit из названия
     patterns = [
         # Паттерн: [название] [число] [ед.изм.] [число] (tariff)
@@ -133,12 +242,14 @@ def extract_volume_unit_from_name(
         match = re.match(pattern, service_name)
         if match:
             try:
-                if len(match.groups()) == 4:
+                groups_with_tariff = 4
+                groups_without_tariff = 3
+                if len(match.groups()) == groups_with_tariff:
                     # Паттерн: название + volume + unit + tariff
                     volume = Decimal(match.group(2))
                     unit = match.group(3).strip()
                     return {"volume": volume, "unit": unit}
-                elif len(match.groups()) == 3:
+                elif len(match.groups()) == groups_without_tariff:
                     # Паттерн: название + volume + unit
                     volume = Decimal(match.group(2))
                     unit = match.group(3).strip()
@@ -157,6 +268,18 @@ def extract_tariff_from_name(service_name: str) -> Decimal | None:
     - "ВОДООТВЕДЕНИЕ ОДН 0.00 куб. м. 40.06" -> 40.06
     - "ХОЛОДНОЕ В/С ОДН 0.00 куб. м. 33.31" -> 33.31
     """
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не название услуги
+    if any(keyword in service_name.upper() for keyword in exclude_keywords):
+        return None
+
     # Паттерн для извлечения tariff из названия
     patterns = [
         # Паттерн: [название] [число] [ед.изм.] [число] (tariff - последнее число)
@@ -191,11 +314,21 @@ def parse_service_line(line: str) -> dict[str, str | Decimal | None] | None:
     Универсальный парсер строки услуги с учетом структуры таблицы.
     Поддерживает форматы: [название] [объем] [ед.изм.] [тариф] [начислено] [перерасчет] [долг] [оплачено] [итого]
     """
-    import re
-    from decimal import Decimal, InvalidOperation
 
     # Удаляем лишние пробелы
     line = " ".join(line.split())
+
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не услуга
+    if any(keyword in line.upper() for keyword in exclude_keywords):
+        return None
 
     # Функция для нормализации чисел (убираем пробелы, заменяем запятые на точки)
     def normalize_number(num_str: str) -> str:
@@ -300,7 +433,7 @@ def parse_service_line(line: str) -> dict[str, str | Decimal | None] | None:
                     "total": total,
                 }
 
-                # Попробуем извлечь tariff из названия
+                # Попробуем извлечь тариф из названия
                 extracted_tariff = extract_tariff_from_name(d["service_name"].strip())
                 if extracted_tariff:
                     result["tariff"] = extracted_tariff
@@ -369,6 +502,7 @@ def parse_service_line(line: str) -> dict[str, str | Decimal | None] | None:
 def parse_services(text_content: str) -> list:
     """
     Parse services from EPD document table with support for multi-line service names.
+    Универсальный парсер, который работает с разными форматами таблиц.
 
     Args:
         text_content: Extracted text from PDF
@@ -377,156 +511,594 @@ def parse_services(text_content: str) -> list:
         List of dictionaries with service data
     """
     services = []
-
-    # Split text into lines for easier processing
     lines = text_content.split("\n")
 
-    # Find the services table section
+    # Состояние парсера
     in_services_section = False
     current_service_name = ""
     current_service_data = None
 
+    # Счетчик для отслеживания порядка услуг
+    service_order = 1
+
     for line in lines:
-        # Look for the start of services table
-        if "РАСЧЕТ РАЗМЕРА ПЛАТЫ" in line or "Начисления за" in line:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Определяем начало секции услуг
+        if any(
+            keyword in line.upper()
+            for keyword in [
+                "РАСЧЕТ РАЗМЕРА ПЛАТЫ",
+                "Начисления за",
+                "ВИДЫ УСЛУГ",
+                "УСЛУГА",
+            ]
+        ):
             in_services_section = True
             continue
 
-        # Stop when we reach the end of services
-        if in_services_section and ("Всего за" in line or "Итого к оплате" in line):
+        # Если мы уже в секции услуг и видим строку с названием услуги, начинаем парсинг
+        if in_services_section and is_service_name_line(line):
+            # Это начало конкретной услуги
+            pass
+
+        # Определяем конец секции услуг
+        if in_services_section and any(
+            keyword in line.upper()
+            for keyword in [
+                "Всего за",
+                "Итого к оплате",
+                "ИТОГО:",
+                "Сведения о перерасчетах",
+                "СПРАВОЧНАЯ ИНФОРМАЦИЯ",
+            ]
+        ):
             break
 
-        if in_services_section and line.strip():
-            # Проверяем, является ли это строкой с данными услуги
-            if is_service_data_line(line):
-                # Проверяем, содержит ли строка volume/unit/tariff и числа
-                if re.search(r"[\d.]+ [^\d\s]+\.? [\d.]+", line):
-                    # Это строка с volume/unit/tariff и данными
-                    if current_service_name:
-                        # Объединяем название с данными
-                        full_line = f"{current_service_name} {line.strip()}"
-                        service_data = parse_service_line(full_line)
-                        if service_data:
-                            services.append(service_data)
-                        current_service_name = ""
-                        current_service_data = None
-                    else:
-                        # Парсим как однострочную услугу
-                        service_data = parse_service_line(line)
-                        if service_data:
-                            services.append(service_data)
+        if not in_services_section:
+            continue
+
+        # Пропускаем заголовки таблицы
+        if any(
+            keyword in line.upper()
+            for keyword in [
+                "ОБЪЕМ",
+                "ЕД.ИЗМ",
+                "ТАРИФ",
+                "НАЧИСЛЕНО",
+                "ПЕРЕРАСЧЕТЫ",
+                "ЗАДОЛЖЕННОСТЬ",
+                "ОПЛАЧЕНО",
+                "ИТОГО",
+                "№",
+                "УСЛУГА",
+            ]
+        ):
+            continue
+
+        # Пропускаем строки "Всего за июль" (с добровольным страхованием и без)
+        if any(
+            keyword in line.upper()
+            for keyword in [
+                "ВСЕГО ЗА ИЮЛЬ",
+                "ВСЕГО ЗА",
+                "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+                "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+            ]
+        ):
+            continue
+
+        # Проверяем, содержит ли строка название услуги или является строкой с данными
+        if is_service_name_line(line) or (
+            in_services_section and contains_service_data(line)
+        ):
+            # Если у нас есть сохраненное название и данные, сохраняем предыдущую услугу
+            if current_service_name and current_service_data:
+                current_service_data["service_name"] = current_service_name
+                current_service_data["order"] = service_order
+                services.append(current_service_data)
+                service_order += 1
+                current_service_data = None
+
+            # Проверяем, содержит ли строка с названием также данные
+            if contains_service_data(line):
+                # Парсим как однострочную услугу
+                service_data = parse_universal_service_line(line)
+                if service_data:
+                    service_data["order"] = str(service_order)
+                    services.append(service_data)
+                    service_order += 1
                 else:
-                    # Это строка с только числами - многострочная услуга
-                    if current_service_name:
-                        service_data = parse_multiline_service(line)
-                        if service_data:
-                            service_data["service_name"] = current_service_name
-
-                            # Попробуем извлечь volume, unit и tariff из названия услуги
-                            volume_unit = extract_volume_unit_from_name(
-                                current_service_name
-                            )
-                            if volume_unit:
-                                service_data["volume"] = volume_unit["volume"]
-                                service_data["unit"] = volume_unit["unit"]
-
-                            extracted_tariff = extract_tariff_from_name(
-                                current_service_name
-                            )
-                            if extracted_tariff:
-                                service_data["tariff"] = extracted_tariff
-
-                            services.append(service_data)
-                        current_service_name = ""
-                        current_service_data = None
-                    else:
-                        # Если нет сохраненного названия, пропускаем строку
-                        continue
+                    # Если не удалось распарсить, сохраняем название для следующей строки
+                    current_service_name = line
             else:
-                # Это строка с названием услуги
-                if is_service_name_line(line):
-                    # Проверяем, содержит ли название услуги данные
-                    if contains_service_data(line):
-                        # Парсим как однострочную услугу с данными в названии
-                        service_data = parse_service_line(line)
-                        if service_data:
-                            services.append(service_data)
-                        else:
-                            # Если не удалось распарсить, но строка содержит данные,
-                            # попробуем извлечь volume, unit и tariff из названия
-                            volume_unit = extract_volume_unit_from_name(line)
-                            if volume_unit:
-                                # Попробуем также извлечь tariff
-                                tariff = extract_tariff_from_name(line)
-                                # Извлекаем числовые данные из строки
-                                numbers = re.findall(r"[\d\s,]+[.,]\d{2}", line)
-                                if len(numbers) >= 5:
-                                    # Создаем базовую структуру услуги с данными
-                                    service_data = {
-                                        "service_name": clean_service_name(
-                                            line.strip()
-                                        ),
-                                        "volume": volume_unit["volume"],
-                                        "unit": volume_unit["unit"],
-                                        "tariff": tariff,
-                                        "amount": Decimal(
-                                            numbers[0]
-                                            .replace(" ", "")
-                                            .replace(",", ".")
-                                        ),
-                                        "recalculation": Decimal(
-                                            numbers[1]
-                                            .replace(" ", "")
-                                            .replace(",", ".")
-                                        ),
-                                        "debt": Decimal(
-                                            numbers[2]
-                                            .replace(" ", "")
-                                            .replace(",", ".")
-                                        ),
-                                        "paid": Decimal(
-                                            numbers[3]
-                                            .replace(" ", "")
-                                            .replace(",", ".")
-                                        ),
-                                        "total": Decimal(
-                                            numbers[4]
-                                            .replace(" ", "")
-                                            .replace(",", ".")
-                                        ),
-                                    }
-                                    services.append(service_data)
-                                else:
-                                    # Создаем базовую структуру услуги без числовых данных
-                                    service_data = {
-                                        "service_name": clean_service_name(
-                                            line.strip()
-                                        ),
-                                        "volume": volume_unit["volume"],
-                                        "unit": volume_unit["unit"],
-                                        "tariff": tariff,
-                                        "amount": None,
-                                        "recalculation": None,
-                                        "debt": None,
-                                        "paid": None,
-                                        "total": None,
-                                    }
-                                    services.append(service_data)
-                            else:
-                                # Сохраняем название для следующей строки
-                                current_service_name = line.strip()
-                    else:
-                        current_service_name = line.strip()
-                # Пропускаем заголовки и пустые строки
-                elif not should_skip_line(line):
-                    continue
+                # Сохраняем название для следующей строки
+                current_service_name = line
+
+            # Проверяем, является ли это строкой с данными услуги
+        elif is_service_data_line(line):
+            if current_service_name:
+                # Объединяем название с данными
+                full_line = f"{current_service_name} {line}"
+                service_data = parse_universal_service_line(full_line)
+                if service_data:
+                    service_data["order"] = str(service_order)
+                    services.append(service_data)
+                    service_order += 1
+                current_service_name = ""
+            else:
+                # Пытаемся распарсить как отдельную строку данных
+                service_data = parse_universal_service_line(line)
+                if service_data:
+                    service_data["order"] = str(service_order)
+                    services.append(service_data)
+                    service_order += 1
+
+    # Сохраняем последнюю услугу, если она есть
+    if current_service_name and current_service_data:
+        current_service_data["service_name"] = current_service_name
+        current_service_data["order"] = str(service_order)
+        services.append(current_service_data)
+
     return services
+
+
+def parse_universal_service_line(line: str) -> dict[str, str | Decimal | None] | None:
+    """
+    Универсальный парсер строки услуги, который обрабатывает все возможные форматы.
+
+    Поддерживаемые форматы:
+    1. [название] [объем] [ед.изм.] [тариф] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    2. [название] [объем] [ед.изм.] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    3. [название] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    4. [объем] [ед.изм.] [тариф] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    """
+
+    # Удаляем лишние пробелы
+    line = " ".join(line.split())
+
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не услуга
+    if any(keyword in line.upper() for keyword in exclude_keywords):
+        return None
+
+    def normalize_number(num_str: str) -> str:
+        return num_str.replace(" ", "").replace(",", ".")
+
+    def safe_decimal(value: str) -> Decimal | None:
+        try:
+            normalized = normalize_number(value)
+            # Убираем лишние пробелы и проверяем на пустую строку
+            normalized = normalized.strip()
+            if not normalized:
+                return None
+            return Decimal(normalized)
+        except (ValueError, InvalidOperation):
+            return None
+
+    # Паттерн 1: Полный формат с названием и всеми данными
+    # [название] [объем] [ед.изм.] [тариф] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    pattern1 = (
+        r"^(?P<service_name>.+?)\s+"
+        r"(?P<volume>[\d.]+)\s+"
+        r"(?P<unit>[^\d\s]+\.?)\s+"
+        r"(?P<tariff>[\d.]+)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    match = re.match(pattern1, line)
+    if match:
+        try:
+            d = match.groupdict()
+            volume = safe_decimal(d["volume"])
+            unit = d["unit"].strip()
+            tariff = safe_decimal(d["tariff"])
+            amount = safe_decimal(d["amount"])
+
+            # Определяем название услуги
+            service_name = clean_service_name(d["service_name"].strip())
+            # Если название содержит только числовые данные, определяем по контексту
+            if re.match(r"^[\d.]+\s+[^\d\s]+\.?$", service_name):
+                if volume and unit and tariff:
+                    service_name = determine_service_name_by_context(
+                        volume, unit, tariff, amount or Decimal("0")
+                    )
+
+            result = {
+                "service_name": service_name,
+                "volume": volume,
+                "unit": unit,
+                "tariff": tariff,
+                "amount": amount,
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            # Проверяем, что все обязательные поля заполнены
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Паттерн 2: Формат без тарифа
+    # [название] [объем] [ед.изм.] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    pattern2 = (
+        r"^(?P<service_name>.+?)\s+"
+        r"(?P<volume>[\d.]+)\s+"
+        r"(?P<unit>[^\d\s]+\.?)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    match = re.match(pattern2, line)
+    if match:
+        try:
+            d = match.groupdict()
+            result = {
+                "service_name": clean_service_name(d["service_name"].strip()),
+                "volume": safe_decimal(d["volume"]),
+                "unit": d["unit"].strip(),
+                "tariff": None,
+                "amount": safe_decimal(d["amount"]),
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            # Попробуем извлечь тариф из названия
+            extracted_tariff = extract_tariff_from_name(d["service_name"].strip())
+            if extracted_tariff:
+                result["tariff"] = extracted_tariff
+
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Паттерн 3: Только суммы без объема и тарифа (но НЕ для строк, начинающихся с volume + unit)
+    # [название] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    pattern3 = (
+        r"^(?P<service_name>(?![\d.]+\s+[^\d\s]+\.?\s+)[^0-9].+?)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    match = re.match(pattern3, line)
+    if match:
+        try:
+            d = match.groupdict()
+            result = {
+                "service_name": clean_service_name(d["service_name"].strip()),
+                "volume": None,
+                "unit": None,
+                "tariff": None,
+                "amount": safe_decimal(d["amount"]),
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            # Попробуем извлечь volume, unit и tariff из названия
+            volume_unit = extract_volume_unit_from_name(d["service_name"].strip())
+            if volume_unit:
+                result["volume"] = volume_unit["volume"]
+                result["unit"] = volume_unit["unit"]
+
+            extracted_tariff = extract_tariff_from_name(d["service_name"].strip())
+            if extracted_tariff:
+                result["tariff"] = extracted_tariff
+
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Паттерн 4: Только данные без названия (для многострочных услуг)
+    # [объем] [ед.изм.] [тариф] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    pattern4 = (
+        r"^(?P<volume>[\d.]+)\s+"
+        r"(?P<unit>[^\d\s]+\.?)\s+"
+        r"(?P<tariff>[\d.]+)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    # Паттерн 4a: Строки типа "56.50 кв.м. 22.00 1 243,00 0,00 1 017,00 1 017,00 1 243,00"
+    # [объем] [ед.изм.] [тариф] [начислено] [перерасчет] [долг] [оплачено] [итого]
+    pattern4a = (
+        r"^(?P<volume>[\d.]+)\s+"
+        r"(?P<unit>[^\d\s]+\.?)\s+"
+        r"(?P<tariff>[\d.]+)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    # Паттерн 4b: Строки типа "56.50 кв.м. 22.00 1 243,00 0,00 1 017,00 1 017,00 1 243,00"
+    # где первое число - это volume, второе - tariff, а не начислено
+    pattern4b = (
+        r"^(?P<volume>[\d.]+)\s+"
+        r"(?P<unit>[^\d\s]+\.?)\s+"
+        r"(?P<tariff>[\d.]+)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    # Паттерн 4c: Строки типа "56.50 кв.м. 22.00 1 243,00 0,00 1 017,00 1 017,00 1 243,00"
+    # где volume и unit находятся в начале, а tariff - это второе число
+    pattern4c = (
+        r"^(?P<volume>[\d.]+)\s+"
+        r"(?P<unit>[^\d\s]+\.?)\s+"
+        r"(?P<tariff>[\d.]+)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    # Паттерн 4d: Специальный паттерн для строк типа "56.50 кв.м. 22.00 1 243,00 0,00 1 017,00 1 017,00 1 243,00"
+    # где первые два числа - это volume и tariff, а остальные - данные
+    pattern4d = (
+        r"^(?P<volume>[\d.]+)\s+"
+        r"(?P<unit>[^\d\s]+\.?)\s+"
+        r"(?P<tariff>[\d.]+)\s+"
+        r"(?P<amount>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<recalculation>-?[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<debt>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<paid>[\d\s,]+[.,]\d{2})\s+"
+        r"(?P<total>[\d\s,]+[.,]\d{2})$"
+    )
+
+    match = re.match(pattern4, line)
+    if match:
+        try:
+            d = match.groupdict()
+            volume = safe_decimal(d["volume"])
+            unit = d["unit"].strip()
+            tariff = safe_decimal(d["tariff"])
+            amount = safe_decimal(d["amount"])
+
+            # Определяем название услуги по контексту
+            service_name = None
+            if volume and unit and tariff:
+                service_name = determine_service_name_by_context(
+                    volume, unit, tariff, amount or Decimal("0")
+                )
+
+            result = {
+                "service_name": service_name,  # Будет добавлено в parse_services
+                "volume": volume,
+                "unit": unit,
+                "tariff": tariff,
+                "amount": amount,
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Проверяем паттерн 4a
+    match = re.match(pattern4a, line)
+    if match:
+        try:
+            d = match.groupdict()
+            volume = safe_decimal(d["volume"])
+            unit = d["unit"].strip()
+            tariff = safe_decimal(d["tariff"])
+            amount = safe_decimal(d["amount"])
+
+            # Определяем название услуги по контексту
+            service_name = None
+            if volume and unit and tariff:
+                service_name = determine_service_name_by_context(
+                    volume, unit, tariff, amount or Decimal("0")
+                )
+
+            result = {
+                "service_name": service_name,
+                "volume": volume,
+                "unit": unit,
+                "tariff": tariff,
+                "amount": amount,
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Проверяем паттерн 4b (для строк с volume + unit + tariff + данные)
+    match = re.match(pattern4b, line)
+    if match:
+        try:
+            d = match.groupdict()
+            volume = safe_decimal(d["volume"])
+            unit = d["unit"].strip()
+            tariff = safe_decimal(d["tariff"])
+            amount = safe_decimal(d["amount"])
+
+            # Определяем название услуги по контексту
+            service_name = None
+            if volume and unit and tariff:
+                service_name = determine_service_name_by_context(
+                    volume, unit, tariff, amount or Decimal("0")
+                )
+
+            result = {
+                "service_name": service_name,
+                "volume": volume,
+                "unit": unit,
+                "tariff": tariff,
+                "amount": amount,
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Проверяем паттерн 4c (для строк с volume + unit + tariff + данные)
+    match = re.match(pattern4c, line)
+    if match:
+        try:
+            d = match.groupdict()
+            volume = safe_decimal(d["volume"])
+            unit = d["unit"].strip()
+            tariff = safe_decimal(d["tariff"])
+            amount = safe_decimal(d["amount"])
+
+            # Определяем название услуги по контексту
+            service_name = None
+            if volume and unit and tariff:
+                service_name = determine_service_name_by_context(
+                    volume, unit, tariff, amount or Decimal("0")
+                )
+
+            result = {
+                "service_name": service_name,
+                "volume": volume,
+                "unit": unit,
+                "tariff": tariff,
+                "amount": amount,
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Проверяем паттерн 4d (специальный паттерн для строк с volume + unit + tariff + данные)
+    match = re.match(pattern4d, line)
+    if match:
+        try:
+            d = match.groupdict()
+            volume = safe_decimal(d["volume"])
+            unit = d["unit"].strip()
+            tariff = safe_decimal(d["tariff"])
+            amount = safe_decimal(d["amount"])
+
+            # Определяем название услуги по контексту
+            service_name = None
+            if volume and unit and tariff:
+                service_name = determine_service_name_by_context(
+                    volume, unit, tariff, amount or Decimal("0")
+                )
+
+            result = {
+                "service_name": service_name,
+                "volume": volume,
+                "unit": unit,
+                "tariff": tariff,
+                "amount": amount,
+                "recalculation": safe_decimal(d["recalculation"]),
+                "debt": safe_decimal(d["debt"]),
+                "paid": safe_decimal(d["paid"]),
+                "total": safe_decimal(d["total"]),
+            }
+
+            if all(v is not None for v in [result["amount"], result["total"]]):
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # Паттерн 5: Только числа (5 чисел подряд)
+    # [начислено] [перерасчет] [долг] [оплачено] [итого]
+    pattern5 = (
+        r"^([\d\s,]+[.,]\d{2})\s+"
+        r"(-?[\d\s,]+[.,]\d{2})\s+"
+        r"([\d\s,]+[.,]\d{2})\s+"
+        r"([\d\s,]+[.,]\d{2})\s+"
+        r"([\d\s,]+[.,]\d{2})$"
+    )
+
+    match = re.match(pattern5, line)
+    if match:
+        try:
+            numbers = [safe_decimal(match.group(i)) for i in range(1, 6)]
+            if all(num is not None for num in numbers):
+                result = {
+                    "service_name": None,  # Будет добавлено в parse_services
+                    "volume": None,
+                    "unit": None,
+                    "tariff": None,
+                    "amount": numbers[0],
+                    "recalculation": numbers[1],
+                    "debt": numbers[2],
+                    "paid": numbers[3],
+                    "total": numbers[4],
+                }
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    return None
 
 
 def is_service_data_line(line: str) -> bool:
     """
     Проверяет, является ли строка данными услуги (содержит числа в конце).
     """
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не данные услуги
+    if any(keyword in line.upper() for keyword in exclude_keywords):
+        return False
+
     # Ищем числа в формате: цифры + пробелы + запятая/точка + 2 цифры в конце строки
     has_numbers_at_end = bool(re.search(r"[\d\s,]+[.,]\d{2}\s*$", line))
 
@@ -545,6 +1117,20 @@ def is_service_data_line(line: str) -> bool:
         "ДОБРОВОЛЬНОЕ",
         "ЭЛЕКТРИЧЕСТВО",
         "ЭЛЕКТРОСНАБЖЕНИЕ",
+        "ВЗНОС",
+        "КАПИТАЛЬНЫЙ",
+        "ЖИЛОГО",
+        "ПОМЕЩЕНИЯ",
+        "ОДН",
+        "В/С",
+        "ТКО",
+        "ВКГО",
+        "ЗАПИРАЮЩЕЕ",
+        "УСТРОЙСТВО",
+        "ЭНЕРГИЯ",
+        "НОСИТЕЛЬ",
+        "ВОДА",
+        "ВОДОСНАБЖЕНИЕ",
     ]
 
     has_service_keywords = any(keyword in line.upper() for keyword in service_keywords)
@@ -560,6 +1146,18 @@ def is_service_name_line(line: str) -> bool:
     """
     Проверяет, является ли строка названием услуги.
     """
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не название услуги
+    if any(keyword in line.upper() for keyword in exclude_keywords):
+        return False
+
     service_keywords = [
         "РЕМОНТ",
         "СОДЕРЖАНИЕ",
@@ -574,6 +1172,20 @@ def is_service_name_line(line: str) -> bool:
         "ДОБРОВОЛЬНОЕ",
         "ЭЛЕКТРИЧЕСТВО",
         "ЭЛЕКТРОСНАБЖЕНИЕ",
+        "ВЗНОС",
+        "КАПИТАЛЬНЫЙ",
+        "ЖИЛОГО",
+        "ПОМЕЩЕНИЯ",
+        "ОДН",
+        "В/С",
+        "ТКО",
+        "ВКГО",
+        "ЗАПИРАЮЩЕЕ",
+        "УСТРОЙСТВО",
+        "ЭНЕРГИЯ",
+        "НОСИТЕЛЬ",
+        "ВОДА",
+        "ВОДОСНАБЖЕНИЕ",
     ]
 
     # Проверяем наличие ключевых слов
@@ -599,6 +1211,9 @@ def should_skip_line(line: str) -> bool:
         "Задолженность",
         "Оплачено",
         "ИТОГО",
+        "Всего за",
+        "Без учета добровольного",
+        "С учетом добровольного",
     ]
     skip_sections = [
         "Начисления за жилищные услуги",
@@ -618,6 +1233,18 @@ def contains_service_data(line: str) -> bool:
     """
     Проверяет, содержит ли строка данные услуги (числа с копейками).
     """
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не данные услуги
+    if any(keyword in line.upper() for keyword in exclude_keywords):
+        return False
+
     # Ищем числа в формате: цифры + пробелы + запятая/точка + 2 цифры
     return bool(re.search(r"[\d\s,]+[.,]\d{2}", line))
 
@@ -627,11 +1254,21 @@ def parse_multiline_service(line: str) -> dict[str, str | Decimal | None] | None
     Специальный парсер для многострочных услуг типа:
     "68.90 кв.м. 22.00 1 515,80 0,00 1 240,20 1 240,20 1 515,80"
     """
-    import re
-    from decimal import Decimal, InvalidOperation
 
     # Удаляем лишние пробелы
     line = " ".join(line.split())
+
+    # Исключаем строки "Всего за июль" и подобные
+    exclude_keywords = [
+        "ВСЕГО ЗА ИЮЛЬ",
+        "ВСЕГО ЗА",
+        "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+        "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
+    ]
+
+    # Если строка содержит исключающие ключевые слова, то это не услуга
+    if any(keyword in line.upper() for keyword in exclude_keywords):
+        return None
 
     # Функция для нормализации чисел (убираем пробелы, заменяем запятые на точки)
     def normalize_number(num_str: str) -> str:
@@ -866,7 +1503,7 @@ def parse_epd_data(text_content: str) -> dict[str, Any]:
     return data
 
 
-def parse_epd_pdf(pdf_file) -> Dict[str, Any]:
+def parse_epd_pdf(pdf_file) -> dict[str, Any]:
     """
     Parse EPD PDF file and return structured data ready for Django models.
 
@@ -967,7 +1604,7 @@ def parse_epd_pdf(pdf_file) -> Dict[str, Any]:
         logger.error(f"Error parsing EPD PDF: {e}")
         raise ValidationError(
             _("Failed to parse PDF file: {error}").format(error=str(e))
-        )
+        ) from e
     finally:
         # Clean up temporary file
         if temp_file_path and os.path.exists(temp_file_path):
@@ -979,19 +1616,17 @@ def parse_epd_pdf(pdf_file) -> Dict[str, Any]:
 
 
 def create_epd_document_from_parsed_data(
-    parsed_data: Dict[str, Any], pdf_file=None
+    parsed_data: dict[str, Any],
 ) -> Any:  # Using Any instead of "EpdDocument" to avoid circular imports
     """
     Create EpdDocument instance from parsed data.
 
     Args:
         parsed_data: Dictionary with parsed EPD data
-        pdf_file: Optional Django UploadedFile for saving
 
     Returns:
         EpdDocument instance (not saved to database)
     """
-    from .models import EpdDocument, ServiceCharge, MeterReading, Recalculation
 
     logger.info("Creating EpdDocument from parsed data")
 
@@ -1008,9 +1643,6 @@ def create_epd_document_from_parsed_data(
         total_with_insurance=parsed_data["total_with_insurance"],
     )
 
-    if pdf_file:
-        document.pdf_file = pdf_file
-
     # Note: Don't save here - let the calling code handle saving
     # This allows for transaction management and validation
 
@@ -1018,23 +1650,19 @@ def create_epd_document_from_parsed_data(
 
 
 def save_epd_document_with_related_data(
-    parsed_data: Dict[str, Any],
-    pdf_file=None,
-    form_data: Optional[Dict[str, Any]] = None,
+    parsed_data: dict[str, Any],
+    form_data: dict[str, Any] | None = None,
 ) -> Any:  # Using Any instead of "EpdDocument" to avoid circular imports
     """
     Save EpdDocument and all related data to database.
 
     Args:
         parsed_data: Dictionary with parsed EPD data
-        pdf_file: Optional Django UploadedFile for saving
         form_data: Optional form data to override parsed data
 
     Returns:
         Saved EpdDocument instance
     """
-    from django.db import transaction
-    from .models import EpdDocument, ServiceCharge, MeterReading, Recalculation
 
     logger.info("Saving EPD document with related data to database")
 
@@ -1043,22 +1671,71 @@ def save_epd_document_with_related_data(
         data_to_use = form_data if form_data is not None else parsed_data
 
         # Create and save main document
-        document = create_epd_document_from_parsed_data(data_to_use, pdf_file)
+        document = create_epd_document_from_parsed_data(data_to_use)
         document.save()
 
         # Save service charges
-        for i, service_data in enumerate(parsed_data.get("services", [])):
+        for service_data in parsed_data.get("services", []):
+            # Обрабатываем None значения, заменяя их на 0.00
+            volume = service_data.get("volume")
+            if volume is None:
+                volume = Decimal("0.00")
+
+            tariff = service_data.get("tariff")
+            if tariff is None:
+                tariff = Decimal("0.00")
+
+            amount = service_data.get("amount")
+            if amount is None:
+                amount = Decimal("0.00")
+
+            recalculation = service_data.get("recalculation")
+            if recalculation is None:
+                recalculation = Decimal("0.00")
+
+            debt = service_data.get("debt")
+            if debt is None:
+                debt = Decimal("0.00")
+
+            paid = service_data.get("paid")
+            if paid is None:
+                paid = Decimal("0.00")
+
+            total = service_data.get("total")
+            if total is None:
+                total = Decimal("0.00")
+
+            # Используем порядок из парсера или создаем новый
+            order = service_data.get("order")
+            if order is None:
+                order = len(parsed_data.get("services", [])) + 1
+            else:
+                try:
+                    order = int(order)
+                except (ValueError, TypeError):
+                    order = len(parsed_data.get("services", [])) + 1
+
+            # Ограничиваем длину единиц измерений
+            max_unit_length = 20
+            unit = service_data.get("unit", "")
+            if len(unit) > max_unit_length:
+                logger.warning(
+                    f"Unit '{unit}' truncated to 20 characters for service '{service_data['service_name']}'"
+                )
+                unit = unit[:20]
+
             service_charge = ServiceCharge(
                 document=document,
                 service_name=service_data["service_name"],
-                volume=service_data.get("volume"),
-                tariff=service_data.get("tariff"),
-                amount=service_data["amount"],
-                recalculation=service_data.get("recalculation", Decimal("0.00")),
-                debt=service_data.get("debt", Decimal("0.00")),
-                paid=service_data.get("paid", Decimal("0.00")),
-                total=service_data["total"],
-                order=i + 1,
+                volume=volume,
+                unit=unit,
+                tariff=tariff,
+                amount=amount,
+                recalculation=recalculation,
+                debt=debt,
+                paid=paid,
+                total=total,
+                order=order,
             )
             # Сохраняем без пересчета total, так как значение уже правильное из парсера
             service_charge.save(recalculate_total=False)

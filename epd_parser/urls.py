@@ -13,7 +13,6 @@ urlpatterns = [
     path("<int:pk>/", views.EpdDocumentDetailView.as_view(), name="document_detail"),
     path("<int:pk>/edit/", views.edit_epd, name="edit"),
     path("<int:pk>/delete/", views.delete_epd, name="delete"),
-    path("<int:pk>/download/", views.download_pdf, name="download_pdf"),
     # Search and statistics
     path("search/", views.search_epd, name="search"),
     path("statistics/", views.statistics, name="statistics"),

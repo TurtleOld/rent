@@ -18,9 +18,6 @@
                 <a href="{% url 'epd_parser:edit' document.pk %}" class="btn btn-warning">
                     <i class="bi bi-pencil"></i> Редактировать
                 </a>
-                <a href="{% url 'epd_parser:download_pdf' document.pk %}" class="btn btn-info">
-                    <i class="bi bi-download"></i> Скачать PDF
-                </a>
                 <button type="button" class="btn btn-danger" onclick="confirmDelete()">
                     <i class="bi bi-trash"></i> Удалить
                 </button>
@@ -139,6 +136,7 @@
                                     <th>№</th>
                                     <th>Услуга</th>
                                     <th class="text-center">Объем</th>
+                                    <th class="text-center">Ед.изм.</th>
                                     <th class="text-center">Тариф</th>
                                     <th class="text-end">Начислено</th>
                                     <th class="text-end">Долг</th>
@@ -157,6 +155,13 @@
                                         {% if charge.volume %}
                                             {{ charge.volume|floatformat:4 }}
                                         {% else %}
+                                            <span>0,00</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if charge.unit %}
+                                            <span class="badge bg-light text-dark">{{ charge.unit }}</span>
+                                        {% else %}
                                             <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
@@ -164,7 +169,7 @@
                                         {% if charge.tariff %}
                                             {{ charge.tariff|floatformat:4 }} ₽
                                         {% else %}
-                                            <span class="text-muted">-</span>
+                                            <span>0,00</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
@@ -174,14 +179,14 @@
                                         {% if charge.debt > 0 %}
                                             <span class="text-danger">{{ charge.debt|floatformat:2 }} ₽</span>
                                         {% else %}
-                                            <span class="text-muted">0.00 ₽</span>
+                                            <span>0,00</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
                                         {% if charge.paid > 0 %}
                                             <span class="text-success">{{ charge.paid|floatformat:2 }} ₽</span>
                                         {% else %}
-                                            <span class="text-muted">0.00 ₽</span>
+                                            <span>0,00</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
@@ -190,23 +195,6 @@
                                 </tr>
                                 {% endfor %}
                             </tbody>
-                            <tfoot>
-                                <tr class="table-light">
-                                    <td colspan="4"><strong>ИТОГО:</strong></td>
-                                    <td class="text-end">
-                                        <strong>{{ document.total_without_insurance|floatformat:2 }} ₽</strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <strong>{{ service_charges|length|add:0 }}</strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <strong>{{ service_charges|length|add:0 }}</strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <strong class="text-success">{{ document.total_with_insurance|floatformat:2 }} ₽</strong>
-                                    </td>
-                                </tr>
-                            </tfoot>
                         </table>
                     </div>
                 {% else %}

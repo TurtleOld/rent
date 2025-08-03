@@ -66,13 +66,6 @@ class EpdDocument(models.Model):
         default=Decimal("0.00"),
     )
 
-    # File information
-    pdf_file = models.FileField(
-        upload_to="epd_documents/",
-        verbose_name=_("PDF File"),
-        help_text=_("Uploaded EPD PDF file"),
-    )
-
     # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -139,6 +132,12 @@ class ServiceCharge(models.Model):
         help_text=_("Volume of service consumed"),
         validators=[MinValueValidator(Decimal("0.0000"))],
         null=True,
+        blank=True,
+    )
+    unit = models.CharField(
+        max_length=20,
+        verbose_name=_("Unit"),
+        help_text=_("Unit of measurement (кв.м., куб.м., кВт*ч, etc.)"),
         blank=True,
     )
     tariff = models.DecimalField(

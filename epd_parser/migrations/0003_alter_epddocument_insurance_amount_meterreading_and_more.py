@@ -7,7 +7,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("epd_parser", "0002_alter_servicecharge_tariff_and_more"),
     ]

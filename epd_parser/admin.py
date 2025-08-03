@@ -149,7 +149,6 @@ class EpdDocumentAdmin(admin.ModelAdmin):
         "total_with_insurance",
         "insurance_amount",
         "created_at",
-        "pdf_file_link",
     ]
     list_filter = [
         "payment_period",
@@ -192,12 +191,6 @@ class EpdDocumentAdmin(admin.ModelAdmin):
             },
         ),
         (
-            _("File Information"),
-            {
-                "fields": ["pdf_file"],
-            },
-        ),
-        (
             _("Timestamps"),
             {
                 "fields": ["created_at", "updated_at"],
@@ -205,17 +198,6 @@ class EpdDocumentAdmin(admin.ModelAdmin):
             },
         ),
     )
-
-    def pdf_file_link(self, obj):
-        """Display PDF file as a link."""
-        if obj.pdf_file:
-            return format_html(
-                '<a href="{}" target="_blank">View PDF</a>',
-                obj.pdf_file.url,
-            )
-        return _("No file")
-
-    pdf_file_link.short_description = _("PDF File")
 
     def get_queryset(self, request):
         """Optimize queryset with related data."""

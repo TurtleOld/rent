@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("epd_parser", "0003_alter_epddocument_insurance_amount_meterreading_and_more"),
     ]

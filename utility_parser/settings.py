@@ -2,9 +2,8 @@
 Django settings for utility_parser project.
 """
 
-import os
 from pathlib import Path
-from typing import List
+
 
 from decouple import config
 
@@ -17,7 +16,7 @@ SECRET_KEY = config("SECRET_KEY", default="django-insecure-change-me-in-producti
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS: List[str] = config(
+ALLOWED_HOSTS: list[str] = config(
     "ALLOWED_HOSTS",
     default="localhost,127.0.0.1",
     cast=lambda v: [s.strip() for s in v.split(",")],
