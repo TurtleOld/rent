@@ -17,10 +17,10 @@ services:
     restart: unless-stopped
 
   web:
-    image: ghcr.io/${GITHUB_REPOSITORY:-your-username/rent}:${IMAGE_TAG:-latest}
-    command: python manage.py runserver 0.0.0.0:8000
+    image: ghcr.io/turtleold/rent:main
     volumes:
       - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
     ports:
       - "8000:8000"
     environment:

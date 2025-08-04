@@ -18,6 +18,7 @@
 ## 🛠 Технологии
 
 - **Backend**: Django 5.2.4, Python 3.13+
+- **WSGI Server**: Granian (высокопроизводительный сервер на Rust)
 - **Database**: PostgreSQL 15 (с fallback на SQLite)
 - **PDF Handling**: PDF file upload and validation
 - **Package Manager**: uv
@@ -63,7 +64,25 @@ docker compose exec web python manage.py collectstatic --noinput
 - **База данных**: localhost:5432
 
 
-## Production развертывание
+## 🚀 Production развертывание
+
+### Использование Makefile (рекомендуется)
+
+```bash
+# Сбор production образа
+make prod-build
+
+# Запуск production версии
+make prod-up
+
+# Просмотр логов
+make prod-logs
+
+# Остановка production версии
+make prod-down
+```
+
+### Ручное развертывание
 
 #### 1. Настройка переменных окружения
 
@@ -71,17 +90,30 @@ docker compose exec web python manage.py collectstatic --noinput
 # Скопируйте файл с переменными
 cp env.prod.example .env.prod
 
-# Отредактируйте .env.prod (замените your-username на ваш username)
-GITHUB_REPOSITORY=your-username/rent
-IMAGE_TAG=latest  # или конкретный тег, например: v1.0.0
-SECRET_KEY=your-super-secret-key
+# Отредактируйте .env.prod
+SECRET_KEY=your-super-secret-key-change-in-production
+DEBUG=False
+ALLOWED_HOSTS=your-domain.com,localhost,127.0.0.1
 ```
 
 #### 2. Запуск production версии
 
 ```bash
-docker-compose -f docker-compose.prod.yml --env-file .env.prod up
+# Сбор и запуск
+docker-compose -f docker-compose.prod.yml up -d --build
+
+# Или с переменными окружения
+docker-compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
+
+### Особенности Production версии
+
+- **Granian WSGI сервер**: Высокопроизводительный ASGI/WSGI сервер на Rust
+- **Автоматические миграции**: Применяются при запуске контейнера
+- **Статические файлы**: Автоматически собираются при запуске
+- **PostgreSQL**: Настроена для production использования
+- **Health checks**: Проверка готовности базы данных
+- **Restart policy**: Автоматический перезапуск при сбоях
 
 ### Примеры использования
 

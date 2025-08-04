@@ -1,4 +1,4 @@
-.PHONY: help install dev-install migrate makemigrations runserver test lint format clean docker-build docker-up docker-down
+.PHONY: help install dev-install migrate makemigrations runserver test lint format clean docker-build docker-up docker-down prod-build prod-up prod-down prod-logs
 
 help:
 	@echo "Available commands:"
@@ -49,6 +49,18 @@ docker-down:
 
 docker-logs:
 	docker-compose logs -f
+
+prod-build:
+	docker-compose -f docker-compose.prod.yml build
+
+prod-up:
+	docker-compose -f docker-compose.prod.yml up -d
+
+prod-down:
+	docker-compose -f docker-compose.prod.yml down
+
+prod-logs:
+	docker-compose -f docker-compose.prod.yml logs -f
 
 shell:
 	uv run manage.py shell

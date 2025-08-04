@@ -28,10 +28,15 @@ COPY . .
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
+
+# Make start script executable
+COPY start_prod.sh /app/start_prod.sh
+RUN chmod +x /app/start_prod.sh
+
 USER app
 
 # Expose port
 EXPOSE 8000
 
 # Run the application
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"] 
+CMD ["/app/start_prod.sh"] 
