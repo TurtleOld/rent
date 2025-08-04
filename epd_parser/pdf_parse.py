@@ -63,12 +63,64 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
             if address and "address" not in personal_info:
                 personal_info["address"] = address
 
-        # Look for payment period
-        if "май" in line.lower() and re.search(r"\d{4}", line):
-            year_match = re.search(r"\d{4}", line)
-            if year_match:
-                period = f"май {year_match.group()}"
-                personal_info["payment_period"] = period
+        # Look for payment period - all months
+        months = [
+            "январь",
+            "февраль",
+            "март",
+            "апрель",
+            "май",
+            "июнь",
+            "июль",
+            "август",
+            "сентябрь",
+            "октябрь",
+            "ноябрь",
+            "декабрь",
+        ]
+
+        for month in months:
+            if month in line.lower() and re.search(r"\d{4}", line):
+                year_match = re.search(r"\d{4}", line)
+                if year_match:
+                    period = f"{month} {year_match.group()}"
+                    personal_info["payment_period"] = period
+                    break
+
+        # Also check for abbreviated month names
+        if "payment_period" not in personal_info:
+            month_abbreviations = [
+                "янв",
+                "фев",
+                "мар",
+                "апр",
+                "мая",
+                "июн",
+                "июл",
+                "авг",
+                "сен",
+                "окт",
+                "ноя",
+                "дек",
+            ]
+
+            for i, abbr in enumerate(month_abbreviations):
+                if abbr in line.lower() and re.search(r"\d{4}", line):
+                    year_match = re.search(r"\d{4}", line)
+                    if year_match:
+                        period = f"{months[i]} {year_match.group()}"
+                        personal_info["payment_period"] = period
+                        break
+
+        # Also check for numeric month format (MM.YYYY)
+        if "payment_period" not in personal_info:
+            numeric_month_match = re.search(r"(\d{1,2})\.(\d{4})", line)
+            if numeric_month_match:
+                month_num = int(numeric_month_match.group(1))
+                year = numeric_month_match.group(2)
+                if 1 <= month_num <= 12:
+                    period = f"{months[month_num - 1]} {year}"
+                    personal_info["payment_period"] = period
 
         # Look for due date patterns
         # Pattern 1: "Оплатить до: DD.MM.YYYY"

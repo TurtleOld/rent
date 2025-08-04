@@ -30,6 +30,15 @@
                             <small class="text-muted">Максимальный размер: 10MB</small>
                         </div>
                         
+                        <!-- Progress indicator (hidden by default) -->
+                        <div id="uploadProgress" class="mt-3" style="display: none;">
+                            <div class="progress mb-2">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="progressText">Подготовка к загрузке...</small>
+                        </div>
+                        
                         <!-- Form Errors -->
                         {% if form.errors %}
                         <div class="alert alert-danger mt-3">
@@ -45,11 +54,17 @@
                     
                     <!-- Submit Buttons -->
                     <div class="d-flex justify-content-between">
-                        <a href="{% url 'epd_parser:document_list' %}" class="btn btn-secondary">
+                        <a href="{% url 'epd_parser:document_list' %}" class="btn btn-secondary" id="backBtn">
                             <i class="bi bi-arrow-left"></i> Назад к списку
                         </a>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-upload"></i> Загрузить и сохранить
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <span class="btn-content">
+                                <i class="bi bi-upload"></i> Загрузить и сохранить
+                            </span>
+                            <span class="btn-loading" style="display: none;">
+                                <span class="loading-spinner"></span>
+                                <span class="loading-text">Обработка документа...</span>
+                            </span>
                         </button>
                     </div>
                 </form>
