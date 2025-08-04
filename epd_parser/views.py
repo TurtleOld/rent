@@ -245,6 +245,11 @@ class EpdStatisticsView(TemplateView):
                 (recent_documents.count() - previous_documents) / previous_documents
             ) * 100
 
+        # Calculate unique services count (instead of total service charges)
+        unique_services_count = (
+            ServiceCharge.objects.values("service_name").distinct().count()
+        )
+
         stats = {
             "total_documents": EpdDocument.objects.count(),
             "recent_documents": recent_documents.count(),
@@ -260,7 +265,7 @@ class EpdStatisticsView(TemplateView):
                 avg=Avg("total_with_insurance")
             )["avg"]
             or Decimal("0.00"),
-            "total_service_charges": ServiceCharge.objects.count(),
+            "total_service_charges": unique_services_count,  # Changed to unique services
             "avg_service_amount": ServiceCharge.objects.aggregate(avg=Avg("total"))[
                 "avg"
             ]
@@ -274,10 +279,13 @@ class EpdStatisticsView(TemplateView):
             "growth_rate": growth_rate,
         }
 
-        # Get top services
+        # Get top services with unique count (by documents, not by individual charges)
         top_services = (
             ServiceCharge.objects.values("service_name")
-            .annotate(count=Count("id"), total_amount=Sum("total"))
+            .annotate(
+                count=Count("document", distinct=True),  # Count unique documents
+                total_amount=Sum("total"),
+            )
             .order_by("-total_amount")[:10]
         )
 
@@ -299,15 +307,147 @@ class EpdStatisticsView(TemplateView):
             else:
                 service["percentage"] = Decimal("0.00")
 
+        # Get services distribution by personal accounts
+        services_by_accounts = (
+            ServiceCharge.objects.values("service_name")
+            .annotate(
+                accounts_count=Count("document__account_number", distinct=True),
+                total_amount=Sum("total"),
+            )
+            .order_by("-total_amount")[:10]
+        )
+
+        # Calculate percentages for services by accounts
+        total_accounts_amount = sum(
+            service["total_amount"] for service in services_by_accounts
+        )
+        for service in services_by_accounts:
+            if total_accounts_amount > 0:
+                service["percentage"] = (
+                    service["total_amount"] / total_accounts_amount
+                ) * 100
+            else:
+                service["percentage"] = Decimal("0.00")
+
+        # Get timeline data for better chart
+        timeline_data = self._get_timeline_data(days)
+
+        # Get data for individual account charts
+        account_charts_data = self._get_account_charts_data()
+
         context.update(
             {
                 "stats": stats,
                 "top_services": top_services,
+                "services_by_accounts": services_by_accounts,
+                "timeline_data": timeline_data,
+                "account_charts_data": account_charts_data,
                 "days": days,
             }
         )
 
         return cast(dict[str, Any], context)
+
+    def _get_timeline_data(self, days: int) -> dict[str, Any]:
+        """Get timeline data for charts."""
+        from django.db.models.functions import TruncDate
+
+        # Get daily document counts for the last N days
+        end_date = timezone.now()
+        start_date = end_date - timezone.timedelta(days=days)
+
+        daily_counts = (
+            EpdDocument.objects.filter(created_at__gte=start_date)
+            .annotate(date=TruncDate("created_at"))
+            .values("date")
+            .annotate(count=Count("id"))
+            .order_by("date")
+        )
+
+        # Get daily amounts
+        daily_amounts = (
+            EpdDocument.objects.filter(created_at__gte=start_date)
+            .annotate(date=TruncDate("created_at"))
+            .values("date")
+            .annotate(total=Sum("total_with_insurance"))
+            .order_by("date")
+        )
+
+        # Create complete timeline with all dates
+        dates = []
+        counts = []
+        amounts = []
+
+        current_date = start_date.date()
+        while current_date <= end_date.date():
+            dates.append(current_date.strftime("%d.%m"))
+
+            # Find count for this date
+            count_data = next(
+                (item for item in daily_counts if item["date"] == current_date), None
+            )
+            counts.append(count_data["count"] if count_data else 0)
+
+            # Find amount for this date
+            amount_data = next(
+                (item for item in daily_amounts if item["date"] == current_date), None
+            )
+            amounts.append(float(amount_data["total"]) if amount_data else 0.0)
+
+            current_date += timezone.timedelta(days=1)
+
+        return {"dates": dates, "counts": counts, "amounts": amounts}
+
+    def _get_account_charts_data(self) -> list[dict[str, Any]]:
+        """Get data for individual account charts."""
+        # Get all unique account numbers
+        unique_accounts = (
+            EpdDocument.objects.values("account_number", "full_name")
+            .distinct()
+            .order_by("account_number")
+        )
+
+        account_charts = []
+        for account in unique_accounts:
+            account_number = account["account_number"]
+            full_name = account["full_name"]
+
+            # Get services for this specific account
+            account_services = (
+                ServiceCharge.objects.filter(document__account_number=account_number)
+                .values("service_name")
+                .annotate(
+                    total_amount=Sum("total"),
+                    count=Count("id"),
+                )
+                .order_by("-total_amount")
+            )
+
+            if account_services:
+                # Calculate total amount for percentage calculation
+                total_amount = sum(
+                    service["total_amount"] for service in account_services
+                )
+
+                # Calculate percentages
+                for service in account_services:
+                    if total_amount > 0:
+                        service["percentage"] = (
+                            service["total_amount"] / total_amount
+                        ) * 100
+                    else:
+                        service["percentage"] = Decimal("0.00")
+
+                account_charts.append(
+                    {
+                        "account_number": account_number,
+                        "full_name": full_name,
+                        "services": list(account_services),
+                        "total_amount": total_amount,
+                    }
+                )
+
+        return account_charts
 
 
 class ParsePdfApiView(View):
@@ -476,6 +616,3 @@ class StatisticsApiView(View):
             return JsonResponse(
                 {"success": False, "error": "Failed to generate statistics"}, status=500
             )
-
-
-

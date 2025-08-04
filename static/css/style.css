@@ -99,6 +99,30 @@
 .progress {
     height: 0.5rem;
     border-radius: 0.25rem;
+    background-color: #e9ecef;
+    }
+    
+    .progress-custom {
+        height: 0.75rem;
+        border-radius: 0.375rem;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+    }
+    
+    .progress-custom::-webkit-progress-bar {
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+    }
+    
+    .progress-custom::-webkit-progress-value {
+        background: linear-gradient(90deg, var(--primary-color), #0056b3);
+        border-radius: 0.375rem;
+        transition: width 0.3s ease;
+    }
+    
+    .progress-custom::-moz-progress-bar {
+        background: linear-gradient(90deg, var(--primary-color), #0056b3);
+        border-radius: 0.375rem;
 }
 
 /* Custom badges */
@@ -339,3 +363,59 @@
         margin-bottom: 0.5rem;
     }
 } 
+/* Statistics table improvements */
+.statistics-table .badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.statistics-table .progress-container {
+    min-width: 120px;
+}
+
+/* Chart improvements */
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+/* Individual account chart cards */
+.account-chart-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: 1px solid #dee2e6;
+}
+
+.account-chart-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.account-chart-card .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+}
+
+.account-chart-card .card-header h6 {
+    margin-bottom: 0.25rem;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.account-chart-card .card-body {
+    padding: 1rem;
+}
+
+.account-chart-card canvas {
+    max-height: 200px;
+}
+
+@media (max-width: 768px) {
+    .chart-container {
+        height: 250px;
+    }
+
+    .account-chart-card {
+        margin-bottom: 1rem;
+    }
+}

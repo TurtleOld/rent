@@ -123,7 +123,7 @@
                             <div class="col-6">
                                 <div class="text-center">
                                     <h4 class="text-warning">{{ stats.total_service_charges }}</h4>
-                                    <p class="text-muted">Всего услуг</p>
+                                    <p class="text-muted">Уникальных услуг</p>
                                 </div>
                             </div>
                             <div class="col-6">
@@ -181,6 +181,42 @@
             </div>
         </div>
 
+        <!-- Individual Account Charts -->
+        {% if account_charts_data %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-people"></i> Распределение услуг по счетам
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for account in account_charts_data %}
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100 account-chart-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-person-circle"></i> 
+                                    Счёт {{ account.account_number }}
+                                </h6>
+                                <small class="text-muted">{{ account.full_name }}</small>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="accountChart{{ account.account_number }}" width="300" height="200"></canvas>
+                                <div class="mt-2 text-center">
+                                    <small class="text-muted">
+                                        Общая сумма: {{ account.total_amount|floatformat:2 }} ₽
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Top Services -->
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -199,7 +235,7 @@
                             <thead>
                                 <tr>
                                     <th>Услуга</th>
-                                    <th class="text-center">Количество</th>
+                                    <th class="text-center">Количество счетов</th>
                                     <th class="text-end">Общая сумма</th>
                                     <th class="text-end">Средняя сумма</th>
                                     <th class="text-center">Доля от общей суммы</th>
@@ -221,12 +257,7 @@
                                         <span class="text-muted">{{ service.avg_amount|floatformat:2 }} ₽</span>
                                     </td>
                                     <td class="text-center">
-                                        <progress class="w-100 progress-custom" 
-                                                  value="{{ service.percentage|default:0 }}" 
-                                                  max="100" 
-                                                  aria-label="Процент от общей суммы: {{ service.percentage|default:0|floatformat:1 }}%">
-                                            {{ service.percentage|default:0|floatformat:1 }}%
-                                        </progress>
+                                        <span class="badge bg-primary">{{ service.percentage|default:0|floatformat:1 }}%</span>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -282,7 +313,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         position: 'bottom',
                         labels: {
                             padding: 20,
-                            usePointStyle: true
+                            usePointStyle: true,
+                            font: {
+                                size: 11
+                            }
                         }
                     },
                     tooltip: {
@@ -301,18 +335,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Timeline Chart
+    // Timeline Chart - Improved with actual timeline data
     const timelineCtx = document.getElementById('timelineChart');
     if (timelineCtx) {
         const timelineData = {
-            labels: ['{{ stats.recent_documents }} документов за {{ days }} дней'],
+            labels: [{% for date in timeline_data.dates %}'{{ date }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
             datasets: [{
-                label: 'Документы',
-                data: [{{ stats.recent_documents }}],
+                label: 'Количество документов',
+                data: [{% for count in timeline_data.counts %}{{ count }}{% if not forloop.last %}, {% endif %}{% endfor %}],
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
                 borderColor: 'rgba(54, 162, 235, 1)',
                 borderWidth: 2,
-                borderRadius: 5
+                borderRadius: 5,
+                yAxisID: 'y'
+            }, {
+                label: 'Сумма (₽)',
+                data: [{% for amount in timeline_data.amounts %}{{ amount }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 2,
+                borderRadius: 5,
+                yAxisID: 'y1',
+                type: 'line'
             }]
         };
 
@@ -322,22 +366,115 @@ document.addEventListener('DOMContentLoaded', function() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
                 scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Дата'
+                        }
+                    },
                     y: {
-                        beginAtZero: true,
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Количество документов'
+                        },
                         ticks: {
                             stepSize: 1
                         }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Сумма (₽)'
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
                     }
                 },
                 plugins: {
                     legend: {
-                        display: false
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'Сумма (₽)') {
+                                    return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ru-RU')} ₽`;
+                                }
+                                return `${context.dataset.label}: ${context.parsed.y}`;
+                            }
+                        }
                     }
                 }
             }
         });
     }
+
+
+
+    // Individual Account Charts
+    {% for account in account_charts_data %}
+    const accountChart{{ account.account_number }}Ctx = document.getElementById('accountChart{{ account.account_number }}');
+    if (accountChart{{ account.account_number }}Ctx) {
+        const accountData{{ account.account_number }} = {
+            labels: [{% for service in account.services %}'{{ service.service_name|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
+            datasets: [{
+                data: [{% for service in account.services %}{{ service.total_amount }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                    '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+                ],
+                borderWidth: 1,
+                borderColor: '#fff'
+            }]
+        };
+
+        new Chart(accountChart{{ account.account_number }}Ctx, {
+            type: 'doughnut',
+            data: accountData{{ account.account_number }},
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 10,
+                            usePointStyle: true,
+                            font: {
+                                size: 9
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${value.toLocaleString('ru-RU')} ₽ (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    {% endfor %}
 
     // Table Sorting
     const sortButtons = document.querySelectorAll('[data-sort]');
@@ -382,7 +519,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!table) return;
 
         const rows = Array.from(table.querySelectorAll('tr'));
-        let csv = 'Услуга,Количество,Общая сумма,Средняя сумма,Доля от общей суммы\n';
+        let csv = 'Услуга,Количество счетов,Общая сумма,Средняя сумма,Доля от общей суммы\n';
 
         rows.forEach(row => {
             const cells = Array.from(row.querySelectorAll('td'));
@@ -414,6 +551,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.printStatistics = function() {
         window.print();
     };
-    });
+});
 </script>
 {% endblock %} 
