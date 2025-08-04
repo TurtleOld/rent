@@ -16,17 +16,6 @@ urlpatterns = [
     # Search and statistics
     path("search/", views.EpdDocumentSearchView.as_view(), name="search"),
     path("statistics/", views.EpdStatisticsView.as_view(), name="statistics"),
-    # Flexible services
-    path(
-        "flexible-services/",
-        views.FlexibleServiceChargeListView.as_view(),
-        name="flexible_service_list",
-    ),
-    path(
-        "flexible-services/<int:pk>/",
-        views.FlexibleServiceChargeDetailView.as_view(),
-        name="flexible_service_detail",
-    ),
     # API endpoints
     path("api/parse-pdf/", views.ParsePdfApiView.as_view(), name="parse_pdf_api"),
     path("api/statistics/", views.StatisticsApiView.as_view(), name="statistics_api"),

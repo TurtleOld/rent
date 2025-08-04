@@ -230,9 +230,11 @@ def parse_services_data(table_data: List[List[Any]]) -> Dict[str, Any]:
 
         # Check if it's a total row
         if (
-            "Всего за май" in service_name
+            "Всего за" in service_name
             or "Итого к оплате" in service_name
             or "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ" in service_name
+            or "без учета добровольного страхования" in service_name.lower()
+            or "с учетом добровольного страхования" in service_name.lower()
         ):
             continue
 

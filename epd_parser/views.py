@@ -26,7 +26,6 @@ from epd_parser.forms import EpdDocumentForm, PdfUploadForm
 from epd_parser.models import (
     EpdDocument,
     ServiceCharge,
-    FlexibleServiceCharge,
 )
 from epd_parser.pdf_parse import (
     parse_epd_pdf,
@@ -479,54 +478,4 @@ class StatisticsApiView(View):
             )
 
 
-class FlexibleServiceChargeListView(ListView):
-    """View for listing flexible service charges."""
 
-    model = FlexibleServiceCharge
-    template_name = "epd_parser/flexible_service_list.html"
-    context_object_name = "services"
-    paginate_by = 50
-
-    def get_queryset(self) -> Any:
-        return FlexibleServiceCharge.objects.select_related("document").order_by(
-            "-document__created_at", "order"
-        )
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        context["total_services"] = FlexibleServiceCharge.objects.count()
-        context["total_amount"] = FlexibleServiceCharge.objects.aggregate(
-            total=Sum("total")
-        )["total"] or Decimal("0.00")
-
-        # Статистика по структурам
-        context["structure_stats"] = {
-            "with_volume": FlexibleServiceCharge.objects.filter(
-                has_volume=True
-            ).count(),
-            "with_tariff": FlexibleServiceCharge.objects.filter(
-                has_tariff=True
-            ).count(),
-            "with_recalculation": FlexibleServiceCharge.objects.filter(
-                has_recalculation=True
-            ).count(),
-            "with_debt": FlexibleServiceCharge.objects.filter(has_debt=True).count(),
-            "with_paid": FlexibleServiceCharge.objects.filter(has_paid=True).count(),
-        }
-
-        return cast(dict[str, Any], context)
-
-
-class FlexibleServiceChargeDetailView(DetailView):
-    """View for displaying flexible service charge details."""
-
-    model = FlexibleServiceCharge
-    template_name = "epd_parser/flexible_service_detail.html"
-    context_object_name = "service"
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        service = cast(FlexibleServiceCharge, self.get_object())
-        context["document"] = service.document
-        context["structure_info"] = service.structure_info
-        return cast(dict[str, Any], context)
