@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}Профиль - {{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h3 class="card-title mb-0">
+                        <i class="fas fa-user me-2"></i>Профиль пользователя
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 text-center">
+                            {% if user.profile.avatar %}
+                                <img src="{{ user.profile.avatar.url }}" alt="Аватар" 
+                                     class="img-fluid rounded-circle mb-3" style="max-width: 150px;">
+                            {% else %}
+                                <div class="bg-secondary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
+                                     style="width: 150px; height: 150px;">
+                                    <i class="fas fa-user fa-3x text-white"></i>
+                                </div>
+                            {% endif %}
+                            <div class="mt-3">
+                                <a href="{% url 'users:profile_edit' %}" class="btn btn-primary">
+                                    <i class="fas fa-edit me-2"></i>Редактировать профиль
+                                </a>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="row">
+                                <div class="col-sm-6">
+                                    <h5 class="text-muted">Основная информация</h5>
+                                    <dl class="row">
+                                        <dt class="col-sm-4">Имя пользователя:</dt>
+                                        <dd class="col-sm-8">{{ user.username }}</dd>
+                                        
+                                        <dt class="col-sm-4">Имя:</dt>
+                                        <dd class="col-sm-8">{{ user.first_name|default:"Не указано" }}</dd>
+                                        
+                                        <dt class="col-sm-4">Фамилия:</dt>
+                                        <dd class="col-sm-8">{{ user.last_name|default:"Не указано" }}</dd>
+                                        
+                                        <dt class="col-sm-4">Email:</dt>
+                                        <dd class="col-sm-8">{{ user.email|default:"Не указано" }}</dd>
+                                    </dl>
+                                </div>
+                                <div class="col-sm-6">
+                                    <h5 class="text-muted">Дополнительная информация</h5>
+                                    <dl class="row">
+                                        <dt class="col-sm-4">Телефон:</dt>
+                                        <dd class="col-sm-8">{{ user.profile.phone|default:"Не указано" }}</dd>
+                                        
+                                        <dt class="col-sm-4">Дата рождения:</dt>
+                                        <dd class="col-sm-8">{{ user.profile.birth_date|date:"d.m.Y"|default:"Не указано" }}</dd>
+                                        
+                                        <dt class="col-sm-4">Дата регистрации:</dt>
+                                        <dd class="col-sm-8">{{ user.date_joined|date:"d.m.Y H:i" }}</dd>
+                                        
+                                        <dt class="col-sm-4">Последний вход:</dt>
+                                        <dd class="col-sm-8">{{ user.last_login|date:"d.m.Y H:i"|default:"Никогда" }}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                            
+                            {% if user.profile.address %}
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <h5 class="text-muted">Адрес</h5>
+                                    <p class="text-muted">{{ user.profile.address }}</p>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer text-center">
+                    <a href="{% url 'epd_parser:home' %}" class="btn btn-secondary">
+                        <i class="fas fa-home me-2"></i>На главную
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -7,8 +7,10 @@ from . import views
 app_name = "epd_parser"
 
 urlpatterns = [
+    # Home page
+    path("", views.HomeView.as_view(), name="home"),
     # Document management
-    path("", views.EpdDocumentListView.as_view(), name="document_list"),
+    path("documents/", views.EpdDocumentListView.as_view(), name="document_list"),
     path("upload/", views.EpdDocumentCreateView.as_view(), name="upload"),
     path("<int:pk>/", views.EpdDocumentDetailView.as_view(), name="document_detail"),
     path("<int:pk>/edit/", views.EpdDocumentUpdateView.as_view(), name="edit"),

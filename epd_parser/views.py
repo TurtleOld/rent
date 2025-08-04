@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import models
 from django.db.models import Avg, Count, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -35,7 +36,34 @@ from epd_parser.pdf_parse import (
 logger = logging.getLogger(__name__)
 
 
-class EpdDocumentListView(ListView):
+class HomeView(TemplateView):
+    """View for the home page - shows different content for authenticated and anonymous users."""
+
+    template_name = "epd_parser/home.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+
+        if self.request.user.is_authenticated:
+            # Для авторизованных пользователей показываем статистику
+            context["total_documents"] = EpdDocument.objects.count()
+            context["total_amount"] = EpdDocument.objects.aggregate(
+                total=Sum("total_with_insurance")
+            )["total"] or Decimal("0.00")
+            context["recent_documents"] = EpdDocument.objects.filter(
+                created_at__gte=timezone.now() - timezone.timedelta(days=7)
+            ).count()
+            context["unique_accounts"] = (
+                EpdDocument.objects.values("account_number").distinct().count()
+            )
+        else:
+            # Для неавторизованных пользователей показываем информацию о системе
+            context["is_anonymous"] = True
+
+        return context
+
+
+class EpdDocumentListView(LoginRequiredMixin, ListView):
     """View for listing EPD documents."""
 
     model = EpdDocument
@@ -57,7 +85,7 @@ class EpdDocumentListView(ListView):
         return cast(dict[str, Any], context)
 
 
-class EpdDocumentDetailView(DetailView):
+class EpdDocumentDetailView(LoginRequiredMixin, DetailView):
     """View for displaying EPD document details."""
 
     model = EpdDocument
@@ -73,7 +101,7 @@ class EpdDocumentDetailView(DetailView):
         return cast(dict[str, Any], context)
 
 
-class EpdDocumentCreateView(FormView):
+class EpdDocumentCreateView(LoginRequiredMixin, FormView):
     """View for creating EPD documents with PDF upload and parsing."""
 
     template_name = "epd_parser/upload.html"
@@ -92,7 +120,7 @@ class EpdDocumentCreateView(FormView):
         return super().form_invalid(form)
 
 
-class EpdDocumentUpdateView(FormView):
+class EpdDocumentUpdateView(LoginRequiredMixin, FormView):
     """View for updating EPD document data."""
 
     template_name = "epd_parser/edit.html"
@@ -150,7 +178,7 @@ class EpdDocumentUpdateView(FormView):
         return super().form_invalid(form)
 
 
-class EpdDocumentDeleteView(DeleteView):
+class EpdDocumentDeleteView(LoginRequiredMixin, DeleteView):
     """View for deleting EPD documents."""
 
     model = EpdDocument
@@ -169,7 +197,7 @@ class EpdDocumentDeleteView(DeleteView):
             return redirect("epd_parser:document_list")
 
 
-class EpdDocumentSearchView(ListView):
+class EpdDocumentSearchView(LoginRequiredMixin, ListView):
     """View for searching EPD documents."""
 
     model = EpdDocument
@@ -204,7 +232,7 @@ class EpdDocumentSearchView(ListView):
         return cast(dict[str, Any], context)
 
 
-class EpdStatisticsView(TemplateView):
+class EpdStatisticsView(LoginRequiredMixin, TemplateView):
     """View for displaying EPD statistics."""
 
     template_name = "epd_parser/statistics.html"
@@ -450,7 +478,7 @@ class EpdStatisticsView(TemplateView):
         return account_charts
 
 
-class ParsePdfApiView(View):
+class ParsePdfApiView(LoginRequiredMixin, View):
     """API view for parsing PDF files."""
 
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
@@ -491,7 +519,7 @@ class ParsePdfApiView(View):
             )
 
 
-class StatisticsApiView(View):
+class StatisticsApiView(LoginRequiredMixin, View):
     """API view for exporting statistics data."""
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:

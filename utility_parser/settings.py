@@ -19,7 +19,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 SECRET_KEY = config("SECRET_KEY", default="django-insecure-change-me-in-production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config("DEBUG", default=False, cast=bool)
+DEBUG = config("DEBUG", default=True)
 
 ALLOWED_HOSTS: list[str] = config(
     "ALLOWED_HOSTS",
@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "crispy_forms",
     "crispy_bootstrap5",
     "epd_parser",
+    "users",
 ]
 
 MIDDLEWARE = [
@@ -192,6 +193,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Crispy Forms
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
+
+# Authentication settings
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
+LOGIN_URL = "/users/login/"
 
 # Security settings
 if not DEBUG:

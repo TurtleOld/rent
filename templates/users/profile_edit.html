@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Редактирование профиля{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h3 class="card-title mb-0">
+                        <i class="fas fa-edit me-2"></i>Редактирование профиля
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data" novalidate>
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5 class="text-muted mb-3">Основная информация</h5>
+                                <div class="mb-3">
+                                    {{ form.first_name|crispy }}
+                                </div>
+                                <div class="mb-3">
+                                    {{ form.last_name|crispy }}
+                                </div>
+                                <div class="mb-3">
+                                    {{ form.email|crispy }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h5 class="text-muted mb-3">Дополнительная информация</h5>
+                                <div class="mb-3">
+                                    {{ form.phone|crispy }}
+                                </div>
+                                <div class="mb-3">
+                                    {{ form.birth_date|crispy }}
+                                </div>
+                                <div class="mb-3">
+                                    {{ form.avatar|crispy }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <h5 class="text-muted mb-3">Адрес</h5>
+                                <div class="mb-3">
+                                    {{ form.address|crispy }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'users:profile' %}" class="btn btn-secondary me-md-2">
+                                <i class="fas fa-times me-2"></i>Отмена
+                            </a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-save me-2"></i>Сохранить изменения
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

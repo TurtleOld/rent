@@ -8,6 +8,7 @@ from django.urls import include, path
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("epd_parser.urls")),
+    path("users/", include("users.urls")),
 ]
 
 if settings.DEBUG:
