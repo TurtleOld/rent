@@ -40,7 +40,7 @@ git clone https://github.com/TurtleOld/rent.git
 cd rent
 ```
 
-### 2. Запуск с Docker Compose
+### 2. Запуск с Docker Compose (Development)
 
 ```bash
 # Создание и запуск контейнеров
@@ -61,6 +61,43 @@ docker compose exec web python manage.py collectstatic --noinput
 - **Веб-интерфейс**: http://localhost:8000
 - **Админка**: http://localhost:8000/admin
 - **База данных**: localhost:5432
+
+
+## Production развертывание
+
+#### 1. Настройка переменных окружения
+
+```bash
+# Скопируйте файл с переменными
+cp env.prod.example .env.prod
+
+# Отредактируйте .env.prod (замените your-username на ваш username)
+GITHUB_REPOSITORY=your-username/rent
+IMAGE_TAG=latest  # или конкретный тег, например: v1.0.0
+SECRET_KEY=your-super-secret-key
+```
+
+#### 2. Запуск production версии
+
+```bash
+docker-compose -f docker-compose.prod.yml --env-file .env.prod up
+```
+
+### Примеры использования
+
+#### Запуск конкретной версии
+```bash
+export IMAGE_TAG=v1.0.0
+docker-compose -f docker-compose.prod.yml --env-file .env.prod up
+```
+
+#### Запуск с кастомными настройками
+```bash
+export GITHUB_REPOSITORY=mycompany/rent
+export IMAGE_TAG=main
+export SECRET_KEY=my-super-secret-key
+docker-compose -f docker-compose.prod.yml --env-file .env.prod up
+```
 
 ## 🔧 Установка без Docker
 
