@@ -12,16 +12,16 @@ class EpdDocument(models.Model):
     """Main model for storing EPD document information."""
 
     # Personal information
-    full_name = models.CharField(
+    full_name: models.CharField = models.CharField(
         max_length=255,
         verbose_name=_("Full Name"),
         help_text=_("Full name of the person responsible for payments"),
     )
-    address = models.TextField(
+    address: models.TextField = models.TextField(
         verbose_name=_("Address"),
         help_text=_("Full address of the property"),
     )
-    account_number = models.CharField(
+    account_number: models.CharField = models.CharField(
         max_length=50,
         verbose_name=_("Account Number"),
         help_text=_("Unique account number for the property"),
@@ -29,12 +29,12 @@ class EpdDocument(models.Model):
     )
 
     # Document metadata
-    payment_period = models.CharField(
+    payment_period: models.CharField = models.CharField(
         max_length=20,
         verbose_name=_("Payment Period"),
         help_text=_('Payment period (e.g., "01.2024")'),
     )
-    due_date = models.DateField(
+    due_date: models.DateField = models.DateField(
         verbose_name=_("Due Date"),
         help_text=_("Payment due date"),
         null=True,
@@ -42,21 +42,21 @@ class EpdDocument(models.Model):
     )
 
     # Financial totals
-    total_without_insurance = models.DecimalField(
+    total_without_insurance: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Total Without Insurance"),
         help_text=_("Total amount without insurance"),
         validators=[MinValueValidator(Decimal("0.00"))],
     )
-    total_with_insurance = models.DecimalField(
+    total_with_insurance: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Total With Insurance"),
         help_text=_("Total amount including insurance"),
         validators=[MinValueValidator(Decimal("0.00"))],
     )
-    insurance_amount = models.DecimalField(
+    insurance_amount: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Insurance Amount"),
@@ -66,11 +66,11 @@ class EpdDocument(models.Model):
     )
 
     # Timestamps
-    created_at = models.DateTimeField(
+    created_at: models.DateTimeField = models.DateTimeField(
         auto_now_add=True,
         verbose_name=_("Created At"),
     )
-    updated_at = models.DateTimeField(
+    updated_at: models.DateTimeField = models.DateTimeField(
         auto_now=True,
         verbose_name=_("Updated At"),
     )
@@ -109,7 +109,7 @@ class EpdDocument(models.Model):
 class ServiceCharge(models.Model):
     """Model for storing individual service charges from EPD."""
 
-    document = models.ForeignKey(
+    document: models.ForeignKey[EpdDocument, EpdDocument] = models.ForeignKey(
         EpdDocument,
         on_delete=models.CASCADE,
         related_name="service_charges",
@@ -117,14 +117,14 @@ class ServiceCharge(models.Model):
     )
 
     # Service information
-    service_name = models.CharField(
+    service_name: models.CharField = models.CharField(
         max_length=255,
         verbose_name=_("Service Name"),
         help_text=_("Name of the utility service"),
     )
 
     # Volume and tariff
-    volume = models.DecimalField(
+    volume: models.DecimalField = models.DecimalField(
         max_digits=15,
         decimal_places=4,
         verbose_name=_("Volume"),

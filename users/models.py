@@ -7,17 +7,17 @@ from django.db import models
 class Profile(models.Model):
     """Модель профиля пользователя"""
 
-    user = models.OneToOneField(
+    user: models.OneToOneField[User, User] = models.OneToOneField(
         User, on_delete=models.CASCADE, verbose_name="Пользователь"
     )
-    phone = models.CharField(max_length=20, blank=True, verbose_name="Телефон")
-    address = models.TextField(blank=True, verbose_name="Адрес")
-    birth_date = models.DateField(null=True, blank=True, verbose_name="Дата рождения")
-    avatar = models.ImageField(
+    phone: models.CharField = models.CharField(max_length=20, blank=True, verbose_name="Телефон")
+    address: models.TextField = models.TextField(blank=True, verbose_name="Адрес")
+    birth_date: models.DateField = models.DateField(null=True, blank=True, verbose_name="Дата рождения")
+    avatar: models.ImageField = models.ImageField(
         upload_to="avatars/", null=True, blank=True, verbose_name="Аватар"
     )
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+    created_at: models.DateTimeField = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at: models.DateTimeField = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
 
     class Meta:
         verbose_name = "Профиль"
@@ -31,9 +31,9 @@ class Profile(models.Model):
 def get_or_create_profile(user: User) -> Profile:
     """Получить или создать профиль для пользователя"""
     try:
-        return cast(Profile, user.profile)
+        return user.profile
     except Profile.DoesNotExist:
-        return cast(Profile, Profile.objects.create(user=user))
+        return Profile.objects.create(user=user)
 
 
 # Добавляем метод к модели User

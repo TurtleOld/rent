@@ -5,7 +5,7 @@ Django settings for utility_parser project.
 from pathlib import Path
 from urllib.parse import urlparse
 
-from decouple import config  # type: ignore
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -73,7 +73,7 @@ WSGI_APPLICATION = "utility_parser.wsgi.application"
 
 
 # Database configuration
-def get_database_config():
+def get_database_config() -> dict[str, dict[str, str | int | dict[str, str]]]:
     """
     Get database configuration from environment variables.
     Supports PostgreSQL via DATABASE_URL or individual environment variables,
