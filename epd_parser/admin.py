@@ -202,7 +202,11 @@ class EpdDocumentAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related()
 
     def save_model(
-        self, request: HttpRequest, obj: EpdDocument, form: Any, change: bool,
+        self,
+        request: HttpRequest,
+        obj: EpdDocument,
+        form: Any,
+        change: bool,
     ) -> None:
         """Calculate insurance amount on save."""
         if obj.total_with_insurance and obj.total_without_insurance:

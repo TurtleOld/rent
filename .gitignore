@@ -234,7 +234,7 @@ dmypy.json
 .ruff_cache/
 
 # uv
-.uv/ 
+.uv/
 
 .cursor/
 

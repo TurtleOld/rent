@@ -10,4 +10,4 @@ python manage.py collectstatic --noinput
 
 # Запускаем Granian
 echo "Starting Granian server..."
-granian --interface wsgi --host 0.0.0.0 --port 8000 utility_parser.wsgi:application 
+granian --interface wsgi --host 0.0.0.0 --port 8000 utility_parser.wsgi:application

@@ -15,23 +15,12 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views import View
-from django.views.generic import (
-    DeleteView,
-    DetailView,
-    ListView,
-    TemplateView,
-)
+from django.views.generic import DeleteView, DetailView, ListView, TemplateView
 from django.views.generic.edit import FormView
 
 from epd_parser.forms import EpdDocumentForm, PdfUploadForm
-from epd_parser.models import (
-    EpdDocument,
-    ServiceCharge,
-)
-from epd_parser.pdf_parse import (
-    parse_epd_pdf,
-    save_epd_document_with_related_data,
-)
+from epd_parser.models import EpdDocument, ServiceCharge
+from epd_parser.pdf_parse import parse_epd_pdf, save_epd_document_with_related_data
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +49,7 @@ class HomeView(TemplateView):
             # Для неавторизованных пользователей показываем информацию о системе
             context["is_anonymous"] = True
 
-        return context
+        return cast(dict[str, Any], context)
 
 
 class EpdDocumentListView(LoginRequiredMixin, ListView):
@@ -107,12 +96,12 @@ class EpdDocumentCreateView(LoginRequiredMixin, FormView):
     template_name = "epd_parser/upload.html"
     form_class = PdfUploadForm
 
-    def form_valid(self, form):
+    def form_valid(self, form: PdfUploadForm) -> HttpResponse:
         parsed_data = form.parsed_data
         document = save_epd_document_with_related_data(parsed_data)
         return redirect("epd_parser:document_detail", pk=document.pk)
 
-    def form_invalid(self, form):
+    def form_invalid(self, form: PdfUploadForm) -> HttpResponse:
         logger.error("form_invalid method called")
         logger.error(f"Form is invalid. Errors: {form.errors}")
         error_message = _("Please correct the errors below.")

@@ -39,4 +39,4 @@ USER app
 EXPOSE 8000
 
 # Run the application
-CMD ["/app/start_prod.sh"] 
+CMD ["/app/start_prod.sh"]

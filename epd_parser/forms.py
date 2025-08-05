@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -212,7 +212,7 @@ class EpdDocumentForm(forms.Form):
                 _("Total with insurance cannot be less than total without insurance.")
             )
 
-        return cleaned_data  # type: ignore
+        return cast(dict[str, Any], cleaned_data)
 
     def is_valid(self) -> bool:
         """Override is_valid to use initial data when POST data is missing."""
@@ -245,7 +245,7 @@ class PdfUploadForm(forms.Form):
         ),
     )
 
-    def clean_pdf_file(self):
+    def clean_pdf_file(self) -> Any:
         """Validate PDF file."""
         pdf_file = self.cleaned_data.get("pdf_file")
 
@@ -281,11 +281,11 @@ class PdfUploadForm(forms.Form):
                 )
 
             except Exception as e:
-                logger.error(f"Error parsing PDF: {str(e)}")
+                logger.error(f"Error parsing PDF: {e!s}")
                 raise ValidationError(
                     _(
                         "Error parsing PDF file. Please ensure this is a valid EPD document."
                     )
-                )
+                ) from e
 
         return pdf_file

@@ -14,7 +14,7 @@
                 <i class="bi bi-plus-circle"></i> Загрузить документ
             </a>
         </div>
-        
+
         <!-- Statistics Cards -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -53,7 +53,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Documents Table -->
         <div class="card">
             <div class="card-header">
@@ -129,16 +129,16 @@
                                     </td>
                                     <td>
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <a href="{% url 'epd_parser:document_detail' document.pk %}" 
+                                            <a href="{% url 'epd_parser:document_detail' document.pk %}"
                                                class="btn btn-outline-primary" title="Просмотр">
                                                 <i class="bi bi-eye"></i>
                                             </a>
-                                            <a href="{% url 'epd_parser:edit' document.pk %}" 
+                                            <a href="{% url 'epd_parser:edit' document.pk %}"
                                                class="btn btn-outline-warning" title="Редактировать">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
 
-                                                                                         <button type="button" class="btn btn-outline-danger btn-delete" 
+                                                                                         <button type="button" class="btn btn-outline-danger btn-delete"
                                                      onclick="confirmDelete({{ document.pk }})" title="Удалить">
                                                  <i class="bi bi-trash"></i>
                                              </button>
@@ -161,7 +161,7 @@
                 {% endif %}
             </div>
         </div>
-        
+
         <!-- Pagination -->
         {% if is_paginated %}
         <nav aria-label="Навигация по страницам" class="mt-4">
@@ -178,7 +178,7 @@
                         </a>
                     </li>
                 {% endif %}
-                
+
                 {% for num in page_obj.paginator.page_range %}
                     {% if page_obj.number == num %}
                         <li class="page-item active">
@@ -190,7 +190,7 @@
                         </li>
                     {% endif %}
                 {% endfor %}
-                
+
                 {% if page_obj.has_next %}
                     <li class="page-item">
                         <a class="page-link" href="?page={{ page_obj.next_page_number }}">
@@ -246,16 +246,16 @@ function confirmDelete(documentId) {
     const form = document.getElementById('deleteForm');
     const deleteBtn = document.getElementById('deleteConfirmBtn');
     const spinner = deleteBtn.querySelector('.spinner-border');
-    
+
     form.action = `/${documentId}/delete/`;
-    
+
     // Show loading state when form is submitted
     form.addEventListener('submit', function() {
         deleteBtn.disabled = true;
         spinner.classList.remove('d-none');
         deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Удаление...';
     });
-    
+
     modal.show();
 }
 
@@ -266,7 +266,7 @@ function performClientSideSearch() {
         const query = searchInput.value.toLowerCase();
         const rows = document.querySelectorAll('.document-row');
         let visibleCount = 0;
-        
+
         rows.forEach(row => {
             const text = row.textContent.toLowerCase();
             if (text.includes(query)) {
@@ -276,7 +276,7 @@ function performClientSideSearch() {
                 row.style.display = 'none';
             }
         });
-        
+
         // Update results count
         const resultsCount = document.getElementById('resultsCount');
         if (resultsCount) {
@@ -289,7 +289,7 @@ function performClientSideSearch() {
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
-    
+
     if (searchInput) {
         // Real-time search
         let searchTimeout;
@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 performClientSideSearch();
             }, 300);
         });
-        
+
         // Search button click
         if (searchBtn) {
             searchBtn.addEventListener('click', function() {
@@ -309,7 +309,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
-        
+
         // Enter key search
         searchInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
@@ -321,4 +321,4 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-{% endblock %} 
+{% endblock %}

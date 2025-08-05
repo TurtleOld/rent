@@ -1,14 +1,16 @@
 """PDF parsing module for EPD documents."""
 
 import logging
+import os
 import re
+from datetime import date
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any, cast
 
-from pdf2docx import Converter
 import pdfplumber
+from pdf2docx import Converter
 
-from .models import EpdDocument, ServiceCharge, MeterReading, Recalculation
+from .models import EpdDocument, ServiceCharge
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +33,23 @@ def clean_amount(amount_str: Any) -> Decimal:
     return Decimal("0.00")
 
 
-def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
+def extract_personal_info_from_text(text_content: str) -> dict[str, Any | date]:
     """Extract personal information from text content."""
-    personal_info = {}
+    personal_info: dict[str, Any | date] = {}
+
+    # Constants
+    months_in_year = 12
 
     # Split text into lines
     lines = text_content.split("\n")
 
-    for i, line in enumerate(lines):
-        line = line.strip()
+    for line in lines:
+        current_line = line.strip()
 
         # Look for account number pattern (8 digits or 8 digits with spaces and dashes)
         account_match = re.search(
             r"(\d{8})|(\d{1}\s+\d{1}\s+\d{1}\s+\d{1}\s+\d{1}\s+\d{1}\s+\d{1}\s+\d{1})",
-            line,
+            current_line,
         )
         if account_match and "account_number" not in personal_info:
             # Clean up the account number (remove spaces and dashes)
@@ -52,14 +57,14 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
             personal_info["account_number"] = account_num
 
         # Look for full name after "ФИО:"
-        if line.startswith("ФИО:"):
-            name = line.replace("ФИО:", "").strip()
+        if current_line.startswith("ФИО:"):
+            name = current_line.replace("ФИО:", "").strip()
             if name and "full_name" not in personal_info:
                 personal_info["full_name"] = name
 
         # Look for address after "Адрес:"
-        if line.startswith("Адрес:"):
-            address = line.replace("Адрес:", "").strip()
+        if current_line.startswith("Адрес:"):
+            address = current_line.replace("Адрес:", "").strip()
             if address and "address" not in personal_info:
                 personal_info["address"] = address
 
@@ -80,8 +85,8 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
         ]
 
         for month in months:
-            if month in line.lower() and re.search(r"\d{4}", line):
-                year_match = re.search(r"\d{4}", line)
+            if month in current_line.lower() and re.search(r"\d{4}", current_line):
+                year_match = re.search(r"\d{4}", current_line)
                 if year_match:
                     period = f"{month} {year_match.group()}"
                     personal_info["payment_period"] = period
@@ -104,27 +109,29 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
                 "дек",
             ]
 
-            for i, abbr in enumerate(month_abbreviations):
-                if abbr in line.lower() and re.search(r"\d{4}", line):
-                    year_match = re.search(r"\d{4}", line)
+            for j, abbr in enumerate(month_abbreviations):
+                if abbr in current_line.lower() and re.search(r"\d{4}", current_line):
+                    year_match = re.search(r"\d{4}", current_line)
                     if year_match:
-                        period = f"{months[i]} {year_match.group()}"
+                        period = f"{months[j]} {year_match.group()}"
                         personal_info["payment_period"] = period
                         break
 
         # Also check for numeric month format (MM.YYYY)
         if "payment_period" not in personal_info:
-            numeric_month_match = re.search(r"(\d{1,2})\.(\d{4})", line)
+            numeric_month_match = re.search(r"(\d{1,2})\.(\d{4})", current_line)
             if numeric_month_match:
                 month_num = int(numeric_month_match.group(1))
                 year = numeric_month_match.group(2)
-                if 1 <= month_num <= 12:
+                if 1 <= month_num <= months_in_year:
                     period = f"{months[month_num - 1]} {year}"
                     personal_info["payment_period"] = period
 
         # Look for due date patterns
         # Pattern 1: "Оплатить до: DD.MM.YYYY"
-        due_date_match = re.search(r"Оплатить до:\s*(\d{1,2}\.\d{1,2}\.\d{4})", line)
+        due_date_match = re.search(
+            r"Оплатить до:\s*(\d{1,2}\.\d{1,2}\.\d{4})", current_line
+        )
         if due_date_match and "due_date" not in personal_info:
             try:
                 from datetime import datetime
@@ -138,7 +145,7 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
         # Pattern 2: "Срок оплаты: DD.MM.YYYY"
         if "due_date" not in personal_info:
             due_date_match = re.search(
-                r"Срок оплаты:\s*(\d{1,2}\.\d{1,2}\.\d{4})", line
+                r"Срок оплаты:\s*(\d{1,2}\.\d{1,2}\.\d{4})", current_line
             )
             if due_date_match:
                 try:
@@ -153,7 +160,7 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
         # Pattern 3: "К оплате до: DD.MM.YYYY"
         if "due_date" not in personal_info:
             due_date_match = re.search(
-                r"К оплате до:\s*(\d{1,2}\.\d{1,2}\.\d{4})", line
+                r"К оплате до:\s*(\d{1,2}\.\d{1,2}\.\d{4})", current_line
             )
             if due_date_match:
                 try:
@@ -167,7 +174,9 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
 
         # Pattern 4: "Оплатить до DD.MM.YYYY" (without colon)
         if "due_date" not in personal_info:
-            due_date_match = re.search(r"Оплатить до\s+(\d{1,2}\.\d{1,2}\.\d{4})", line)
+            due_date_match = re.search(
+                r"Оплатить до\s+(\d{1,2}\.\d{1,2}\.\d{4})", current_line
+            )
             if due_date_match:
                 try:
                     from datetime import datetime
@@ -180,7 +189,9 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
 
         # Pattern 5: "Срок оплаты DD.MM.YYYY" (without colon)
         if "due_date" not in personal_info:
-            due_date_match = re.search(r"Срок оплаты\s+(\d{1,2}\.\d{1,2}\.\d{4})", line)
+            due_date_match = re.search(
+                r"Срок оплаты\s+(\d{1,2}\.\d{1,2}\.\d{4})", current_line
+            )
             if due_date_match:
                 try:
                     from datetime import datetime
@@ -192,8 +203,8 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
                     pass
 
         # Pattern 6: Any line containing "до" and date pattern
-        if "due_date" not in personal_info and "до" in line:
-            due_date_match = re.search(r"(\d{1,2}\.\d{1,2}\.\d{4})", line)
+        if "due_date" not in personal_info and "до" in current_line:
+            due_date_match = re.search(r"(\d{1,2}\.\d{1,2}\.\d{4})", current_line)
             if due_date_match:
                 try:
                     from datetime import datetime
@@ -207,12 +218,12 @@ def extract_personal_info_from_text(text_content: str) -> Dict[str, Any]:
     return personal_info
 
 
-def parse_services_data(table_data: List[List[Any]]) -> Dict[str, Any]:
+def parse_services_data(table_data: list[list[Any]]) -> dict[str, Any]:
     """Parse services data from the table."""
-    services = {}
+    services: dict[str, list[dict[str, Any]]] = {}
     current_category = None
 
-    for i, row in enumerate(table_data):
+    for row in table_data:
         if not row or not row[0]:
             continue
 
@@ -243,7 +254,8 @@ def parse_services_data(table_data: List[List[Any]]) -> Dict[str, Any]:
             continue
 
         # Parse service data
-        if current_category and len(row) >= 9:
+        minimum_row_length = 9
+        if current_category and len(row) >= minimum_row_length:
             service_data = {
                 "service_name": service_name,
                 "volume": row[1] if row[1] and row[1] != "None" else None,
@@ -260,11 +272,11 @@ def parse_services_data(table_data: List[List[Any]]) -> Dict[str, Any]:
     return services
 
 
-def extract_totals(table_data: List[List[Any]]) -> Dict[str, Decimal]:
+def extract_totals(table_data: list[list[Any]]) -> dict[str, Decimal]:
     """Extract total amounts from the table."""
     totals = {}
 
-    for _, row in enumerate(table_data):
+    for row in table_data:
         if not row or not row[0]:
             continue
 
@@ -299,12 +311,11 @@ def extract_totals(table_data: List[List[Any]]) -> Dict[str, Decimal]:
     return totals
 
 
-def parse_epd_pdf(pdf_file) -> Dict[str, Any]:
+def parse_epd_pdf(pdf_file: Any) -> dict[str, Any]:
     """Parse EPD PDF file and return structured data."""
     try:
         # Save uploaded file to temporary location
         import tempfile
-        import os
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             # Write uploaded file content to temporary file
@@ -353,11 +364,11 @@ def parse_epd_pdf(pdf_file) -> Dict[str, Any]:
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
 
-    except Exception as e:
+    except Exception:
         raise
 
 
-def save_epd_document_with_related_data(parsed_data: Dict[str, Any]) -> EpdDocument:
+def save_epd_document_with_related_data(parsed_data: dict[str, Any]) -> EpdDocument:
     """Save parsed data to Django models."""
     try:
         personal_info = parsed_data.get("personal_info", {})
@@ -395,14 +406,16 @@ def save_epd_document_with_related_data(parsed_data: Dict[str, Any]) -> EpdDocum
         order = 1
         total_services = 0
 
-        for category, services_list in services.items():
+        for services_list in services.values():
             for service_data in services_list:
                 ServiceCharge.objects.create(
                     document=document,
                     service_name=service_data["service_name"],
-                    volume=Decimal(str(service_data["volume"]))
-                    if service_data["volume"]
-                    else None,
+                    volume=(
+                        Decimal(str(service_data["volume"]))
+                        if service_data["volume"]
+                        else None
+                    ),
                     unit=service_data["unit"] or "",
                     tariff=service_data["tariff"],
                     amount=service_data["amount"],
@@ -418,8 +431,8 @@ def save_epd_document_with_related_data(parsed_data: Dict[str, Any]) -> EpdDocum
         logger.info(
             f"Saved {total_services} service charges for document {document.pk}"
         )
-        return document
+        return cast(EpdDocument, document)
 
     except Exception as e:
-        logger.error(f"Error saving EPD document: {str(e)}")
+        logger.error(f"Error saving EPD document: {e!s}")
         raise

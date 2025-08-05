@@ -18,7 +18,7 @@ function initSearch() {
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
     const searchForm = document.getElementById('searchForm');
-    
+
     if (searchInput) {
         // Real-time search
         let searchTimeout;
@@ -28,14 +28,14 @@ function initSearch() {
                 performSearch(this.value);
             }, 300);
         });
-        
+
         // Search button click
         if (searchBtn) {
             searchBtn.addEventListener('click', function() {
                 performSearch(searchInput.value);
             });
         }
-        
+
         // Search form submit
         if (searchForm) {
             searchForm.addEventListener('submit', function(e) {
@@ -54,10 +54,10 @@ function performSearch(query) {
         });
         return;
     }
-    
+
     const rows = document.querySelectorAll('.document-row');
     const searchTerm = query.toLowerCase();
-    
+
     rows.forEach(row => {
         const text = row.textContent.toLowerCase();
         if (text.includes(searchTerm)) {
@@ -67,7 +67,7 @@ function performSearch(query) {
             row.style.display = 'none';
         }
     });
-    
+
     // Update results count
     updateSearchResults();
 }
@@ -79,7 +79,7 @@ function highlightText(element, searchTerm) {
         parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
         parent.normalize();
     });
-    
+
     // Add new highlights
     const walker = document.createTreeWalker(
         element,
@@ -87,13 +87,13 @@ function highlightText(element, searchTerm) {
         null,
         false
     );
-    
+
     const textNodes = [];
     let node;
     while (node = walker.nextNode()) {
         textNodes.push(node);
     }
-    
+
     textNodes.forEach(textNode => {
         const text = textNode.textContent;
         const regex = new RegExp(`(${searchTerm})`, 'gi');
@@ -109,7 +109,7 @@ function highlightText(element, searchTerm) {
 function updateSearchResults() {
     const visibleRows = document.querySelectorAll('.document-row:not([style*="display: none"])');
     const resultsCount = document.getElementById('resultsCount');
-    
+
     if (resultsCount) {
         resultsCount.textContent = visibleRows.length;
     }
@@ -140,19 +140,19 @@ function initConfirmDialogs() {
  */
 function initDataTables() {
     const tables = document.querySelectorAll('.table-sortable');
-    
+
     tables.forEach(table => {
         const headers = table.querySelectorAll('th[data-sort]');
-        
+
         headers.forEach(header => {
             header.addEventListener('click', function() {
                 const column = this.dataset.sort;
                 const direction = this.dataset.direction === 'asc' ? 'desc' : 'asc';
-                
+
                 // Update all headers
                 headers.forEach(h => h.dataset.direction = '');
                 this.dataset.direction = direction;
-                
+
                 // Sort table
                 sortTable(table, column, direction);
             });
@@ -163,18 +163,18 @@ function initDataTables() {
 function sortTable(table, column, direction) {
     const tbody = table.querySelector('tbody');
     const rows = Array.from(tbody.querySelectorAll('tr'));
-    
+
     rows.sort((a, b) => {
         const aValue = a.querySelector(`td[data-${column}]`)?.dataset[column] || '';
         const bValue = b.querySelector(`td[data-${column}]`)?.dataset[column] || '';
-        
+
         if (direction === 'asc') {
             return aValue.localeCompare(bValue);
         } else {
             return bValue.localeCompare(aValue);
         }
     });
-    
+
     // Reorder rows
     rows.forEach(row => tbody.appendChild(row));
 }
@@ -186,11 +186,11 @@ function initCharts() {
     // Initialize charts if Chart.js is available
     if (typeof Chart !== 'undefined') {
         const chartElements = document.querySelectorAll('[data-chart]');
-        
+
         chartElements.forEach(element => {
             const chartType = element.dataset.chart;
             const chartData = JSON.parse(element.dataset.chartData || '{}');
-            
+
             new Chart(element, {
                 type: chartType,
                 data: chartData,
@@ -209,16 +209,16 @@ function initCharts() {
 function showAlert(message, type = 'info') {
     const alertContainer = document.getElementById('alertContainer') || document.body;
     const alertId = 'alert-' + Date.now();
-    
+
     const alertHtml = `
         <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
             ${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     `;
-    
+
     alertContainer.insertAdjacentHTML('afterbegin', alertHtml);
-    
+
     // Auto-dismiss after 5 seconds
     setTimeout(() => {
         const alert = document.getElementById(alertId);
@@ -246,4 +246,4 @@ window.EPDApp = {
     formatCurrency,
     formatDate,
     performSearch
-}; 
+};

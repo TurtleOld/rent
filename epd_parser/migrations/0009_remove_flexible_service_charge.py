@@ -4,13 +4,12 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('epd_parser', '0008_alter_epddocument_due_date'),
+        ("epd_parser", "0008_alter_epddocument_due_date"),
     ]
 
     operations = [
         migrations.DeleteModel(
-            name='FlexibleServiceCharge',
+            name="FlexibleServiceCharge",
         ),
     ]

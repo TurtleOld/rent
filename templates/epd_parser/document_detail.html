@@ -37,10 +37,10 @@
                         <dl class="row">
                             <dt class="col-sm-4">ФИО:</dt>
                             <dd class="col-sm-8">{{ document.full_name }}</dd>
-                            
+
                             <dt class="col-sm-4">Адрес:</dt>
                             <dd class="col-sm-8">{{ document.address|linebreaks }}</dd>
-                            
+
                             <dt class="col-sm-4">Лицевой счет:</dt>
                             <dd class="col-sm-8">
                                 <span class="badge bg-primary">{{ document.account_number }}</span>
@@ -49,7 +49,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="col-md-6">
                 <div class="card mb-4">
                     <div class="card-header">
@@ -63,7 +63,7 @@
                             <dd class="col-sm-8">
                                 <span class="badge bg-secondary">{{ document.payment_period }}</span>
                             </dd>
-                            
+
                             <dt class="col-sm-4">Срок оплаты:</dt>
                             <dd class="col-sm-8">
                                 {% if document.due_date %}
@@ -74,7 +74,7 @@
                                     <span class="text-muted">Не указан</span>
                                 {% endif %}
                             </dd>
-                            
+
                             <dt class="col-sm-4">Дата загрузки:</dt>
                             <dd class="col-sm-8">
                                 <small class="text-muted">{{ document.created_at|date:"d.m.Y H:i" }}</small>
@@ -251,4 +251,4 @@ function confirmDelete() {
     modal.show();
 }
 </script>
-{% endblock %} 
+{% endblock %}

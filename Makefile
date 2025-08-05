@@ -109,4 +109,4 @@ quality-fix: ## Run quality checks with auto-fix
 	uv run ruff check . --fix
 	uv run ruff format .
 	uv run isort .
-	uv run black . 
+	uv run black .

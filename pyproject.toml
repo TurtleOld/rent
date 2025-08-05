@@ -46,7 +46,7 @@ dev = [
 manage = "django.core.management:execute_from_command_line"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py312"
 line-length = 88
 
 [tool.ruff.lint]
@@ -104,12 +104,14 @@ module = [
     "django.*",
     "pdfplumber.*",
     "psycopg2.*",
+    "decouple.*",
+    "pdf2docx.*",
 ]
 ignore_missing_imports = true
 
 [tool.black]
 line-length = 88
-target-version = ['py313']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -156,7 +158,7 @@ exclude_lines = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["utility_parser", "epd_parser"] 
+packages = ["utility_parser", "epd_parser"]
 
 [dependency-groups]
 dev = [
@@ -169,25 +171,6 @@ max-line-length = 88
 max-complexity = 7
 max-arguments = 5
 max-returns = 3
-max-local-variables = 5
-max-expressions = 14
-max-module-members = 7
-max-methods = 7
-max-attributes = 7
-max-imports = 12
-max-string-usages = 3
-max-base-classes = 3
-max-decorators = 2
-max-await-levels = 2
-max-try-body-length = 5
-max-module-expressions = 7
-max-functions = 7
-max-classes = 7
-max-imports-from = 4
-max-asserts = 4
-max-public-methods = 20
-max-returns = 5
-max-arguments = 5
 max-local-variables = 5
 max-expressions = 14
 max-module-members = 7

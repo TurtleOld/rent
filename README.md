@@ -252,7 +252,7 @@ uv pip install -e ".[dev]"
 Pre-commit автоматически проверяет и исправляет код перед каждым коммитом. Включает:
 
 - **Black** - форматирование кода
-- **isort** - сортировка импортов  
+- **isort** - сортировка импортов
 - **Ruff** - быстрый линтер и форматтер
 - **Wemake Python Styleguide** - строгие правила качества кода
 - **Flake8** - дополнительные проверки стиля
@@ -377,4 +377,4 @@ docker-compose up -d --build
 
 # Применение миграций
 docker-compose exec web python manage.py migrate
-``` 
+```

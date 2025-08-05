@@ -16,10 +16,10 @@
                     <div class="row">
                         <div class="col-md-4 text-center">
                             {% if user.profile.avatar %}
-                                <img src="{{ user.profile.avatar.url }}" alt="Аватар" 
+                                <img src="{{ user.profile.avatar.url }}" alt="Аватар"
                                      class="img-fluid rounded-circle mb-3" style="max-width: 150px;">
                             {% else %}
-                                <div class="bg-secondary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
+                                <div class="bg-secondary rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
                                      style="width: 150px; height: 150px;">
                                     <i class="fas fa-user fa-3x text-white"></i>
                                 </div>
@@ -37,13 +37,13 @@
                                     <dl class="row">
                                         <dt class="col-sm-4">Имя пользователя:</dt>
                                         <dd class="col-sm-8">{{ user.username }}</dd>
-                                        
+
                                         <dt class="col-sm-4">Имя:</dt>
                                         <dd class="col-sm-8">{{ user.first_name|default:"Не указано" }}</dd>
-                                        
+
                                         <dt class="col-sm-4">Фамилия:</dt>
                                         <dd class="col-sm-8">{{ user.last_name|default:"Не указано" }}</dd>
-                                        
+
                                         <dt class="col-sm-4">Email:</dt>
                                         <dd class="col-sm-8">{{ user.email|default:"Не указано" }}</dd>
                                     </dl>
@@ -53,19 +53,19 @@
                                     <dl class="row">
                                         <dt class="col-sm-4">Телефон:</dt>
                                         <dd class="col-sm-8">{{ user.profile.phone|default:"Не указано" }}</dd>
-                                        
+
                                         <dt class="col-sm-4">Дата рождения:</dt>
                                         <dd class="col-sm-8">{{ user.profile.birth_date|date:"d.m.Y"|default:"Не указано" }}</dd>
-                                        
+
                                         <dt class="col-sm-4">Дата регистрации:</dt>
                                         <dd class="col-sm-8">{{ user.date_joined|date:"d.m.Y H:i" }}</dd>
-                                        
+
                                         <dt class="col-sm-4">Последний вход:</dt>
                                         <dd class="col-sm-8">{{ user.last_login|date:"d.m.Y H:i"|default:"Никогда" }}</dd>
                                     </dl>
                                 </div>
                             </div>
-                            
+
                             {% if user.profile.address %}
                             <div class="row mt-3">
                                 <div class="col-12">
@@ -86,4 +86,4 @@
         </div>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}

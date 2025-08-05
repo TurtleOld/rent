@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('epd_parser', '0007_flexibleservicecharge'),
+        ("epd_parser", "0007_flexibleservicecharge"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='epddocument',
-            name='due_date',
-            field=models.DateField(blank=True, help_text='Payment due date', null=True, verbose_name='Due Date'),
+            model_name="epddocument",
+            name="due_date",
+            field=models.DateField(
+                blank=True,
+                help_text="Payment due date",
+                null=True,
+                verbose_name="Due Date",
+            ),
         ),
     ]

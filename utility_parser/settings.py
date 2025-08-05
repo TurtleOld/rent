@@ -2,7 +2,6 @@
 Django settings for utility_parser project.
 """
 
-import os
 from pathlib import Path
 from urllib.parse import urlparse
 

@@ -370,6 +370,3 @@ class Recalculation(models.Model):
             )["order__max"]
             self.order = (last_order or 0) + 1
         super().save(*args, **kwargs)
-
-
-

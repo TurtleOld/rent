@@ -4,9 +4,9 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import pytest  # type: ignore
+import pytest
 
-from epd_parser.pdf_parser import EpdPdfParser  # type: ignore
+from epd_parser.pdf_parse import EpdPdfParser  # type: ignore
 
 
 class TestEpdParser:
@@ -17,7 +17,7 @@ class TestEpdParser:
         with pytest.raises(FileNotFoundError):
             EpdPdfParser(Path("nonexistent.pdf"))
 
-    @patch("epd_parser.pdf_parser.pdfplumber.open")
+    @patch("epd_parser.pdf_parse.pdfplumber.open")
     def test_parse_empty_pdf(self, mock_pdfplumber_open: Mock) -> None:
         """Test parsing empty PDF."""
         mock_pdf = Mock()
@@ -28,7 +28,7 @@ class TestEpdParser:
         with pytest.raises(ValueError, match="No text content available"):
             parser.parse()
 
-    @patch("epd_parser.pdf_parser.pdfplumber.open")
+    @patch("epd_parser.pdf_parse.pdfplumber.open")
     def test_parse_valid_pdf(self, mock_pdfplumber_open: Mock) -> None:
         """Test parsing valid PDF with mock data."""
         # Mock PDF content
