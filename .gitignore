@@ -237,3 +237,24 @@ dmypy.json
 .uv/ 
 
 .cursor/
+
+# Pre-commit
+.pre-commit-config.yaml.bak
+
+# Bandit reports
+bandit-report.json
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Pre-commit cache
+.pre-commit-cache/
+
+# Wemake Python Styleguide
+wemake-python-styleguide.toml

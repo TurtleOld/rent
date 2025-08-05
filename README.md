@@ -247,6 +247,45 @@ rent/
 uv pip install -e ".[dev]"
 ```
 
+### Настройка Pre-commit
+
+Pre-commit автоматически проверяет и исправляет код перед каждым коммитом. Включает:
+
+- **Black** - форматирование кода
+- **isort** - сортировка импортов  
+- **Ruff** - быстрый линтер и форматтер
+- **Wemake Python Styleguide** - строгие правила качества кода
+- **Flake8** - дополнительные проверки стиля
+- **MyPy** - проверка типов
+- **Bandit** - проверка безопасности
+- **Django checks** - проверка Django проекта
+
+#### Установка pre-commit hooks
+
+```bash
+# Установка hooks
+make pre-commit-install
+
+# Или вручную
+uv run pre-commit install
+```
+
+#### Использование pre-commit
+
+```bash
+# Запуск на всех файлах
+make pre-commit-run
+
+# Запуск с автоисправлением
+make quality-fix
+
+# Обновление hooks
+make pre-commit-update
+
+# Очистка кэша
+make pre-commit-clean
+```
+
 ### Запуск проверок качества кода
 
 ```bash
@@ -258,6 +297,9 @@ make lint
 
 # Запуск тестов
 make test
+
+# Полная проверка качества (включая pre-commit)
+make quality
 
 # Очистка кэша
 make clean

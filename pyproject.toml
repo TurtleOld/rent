@@ -35,9 +35,11 @@ dev = [
     "flake8>=6.1.0",
     "isort>=5.12.0",
     "mypy>=1.7.1",
+    "pre-commit>=3.6.0",
     "pytest>=7.4.3",
     "pytest-django>=4.7.0",
     "ruff>=0.1.9",
+    "wemake-python-styleguide>=0.20.0",
 ]
 
 [project.scripts]
@@ -161,3 +163,52 @@ dev = [
     "mypy>=1.17.1",
     "ruff>=0.12.7",
 ]
+
+[tool.wemake-python-styleguide]
+max-line-length = 88
+max-complexity = 7
+max-arguments = 5
+max-returns = 3
+max-local-variables = 5
+max-expressions = 14
+max-module-members = 7
+max-methods = 7
+max-attributes = 7
+max-imports = 12
+max-string-usages = 3
+max-base-classes = 3
+max-decorators = 2
+max-await-levels = 2
+max-try-body-length = 5
+max-module-expressions = 7
+max-functions = 7
+max-classes = 7
+max-imports-from = 4
+max-asserts = 4
+max-public-methods = 20
+max-returns = 5
+max-arguments = 5
+max-local-variables = 5
+max-expressions = 14
+max-module-members = 7
+max-methods = 7
+max-attributes = 7
+max-imports = 12
+max-string-usages = 3
+max-base-classes = 3
+max-decorators = 2
+max-await-levels = 2
+max-try-body-length = 5
+max-module-expressions = 7
+max-functions = 7
+max-classes = 7
+max-imports-from = 4
+max-asserts = 4
+max-public-methods = 20
+
+[tool.wemake-python-styleguide.checks]
+naming = true
+complexity = true
+consistency = true
+best-practices = true
+security = true

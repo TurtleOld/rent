@@ -1,4 +1,4 @@
-.PHONY: help install dev-install migrate makemigrations runserver test lint format clean docker-build docker-up docker-down prod-build prod-up prod-down prod-logs
+.PHONY: help install dev-install migrate makemigrations runserver test lint format clean docker-build docker-up docker-down prod-build prod-up prod-down prod-logs pre-commit-install pre-commit-run pre-commit-update
 
 help:
 	@echo "Available commands:"
@@ -87,4 +87,26 @@ uv-dev-install:
 	uv sync --extra dev
 
 uv-run:
-	uv run $(cmd) 
+	uv run $(cmd)
+
+pre-commit-install: ## Install pre-commit hooks
+	uv run pre-commit install
+
+pre-commit-run: ## Run pre-commit on all files
+	uv run pre-commit run --all-files
+
+pre-commit-update: ## Update pre-commit hooks
+	uv run pre-commit autoupdate
+
+pre-commit-clean: ## Clean pre-commit cache
+	uv run pre-commit clean
+
+quality: ## Run all quality checks
+	uv run pre-commit run --all-files
+	uv run pytest --cov=utility_parser --cov-report=html --cov-report=term-missing
+
+quality-fix: ## Run quality checks with auto-fix
+	uv run ruff check . --fix
+	uv run ruff format .
+	uv run isort .
+	uv run black . 

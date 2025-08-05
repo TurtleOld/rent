@@ -1,0 +1,123 @@
+repos:
+  # Основные инструменты форматирования и линтинга
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-json
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: name-tests-test
+      - id: requirements-txt-fixer
+
+  # Black для форматирования кода
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.13
+
+  # isort для сортировки импортов
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  # Ruff для быстрого линтинга
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Wemake Python Styleguide
+  - repo: https://github.com/wemake-services/wemake-python-styleguide
+    rev: 0.20.0
+    hooks:
+      - id: wemake-python-styleguide
+        args: [--max-line-length=88]
+
+  # Flake8 для дополнительных проверок
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: [--max-line-length=88, --extend-ignore=E203,W503]
+
+  # MyPy для проверки типов
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-requests, types-Pillow]
+        args: [--ignore-missing-imports]
+
+  # Bandit для безопасности
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: [-r, ., -f, json, -o, bandit-report.json]
+        exclude: ^tests/
+
+  # Safety для проверки уязвимостей в зависимостях
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: [-r, ., -f, json, -o, bandit-report.json]
+        exclude: ^tests/
+
+  # Проверка на дублирование кода
+  - repo: https://github.com/pre-commit/mirrors-jscodeshift
+    rev: v0.15.1
+    hooks:
+      - id: jscodeshift
+        args: [--parser=flow]
+
+  # Проверка Django специфичных вещей
+  - repo: local
+    hooks:
+      - id: django-check
+        name: Django check
+        entry: python manage.py check
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: django-migrations
+        name: Django migrations check
+        entry: python manage.py makemigrations --check --dry-run
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  # Проверка тестов
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        args: [--tb=short]
+
+  # Проверка покрытия кода
+  - repo: local
+    hooks:
+      - id: coverage
+        name: coverage
+        entry: coverage run -m pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual] 
