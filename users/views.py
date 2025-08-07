@@ -4,11 +4,11 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LoginView
+from django.contrib.auth.views import LoginView, LogoutView
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, UpdateView
+from django.views.generic import CreateView, TemplateView, UpdateView
 
 from .forms import ProfileUpdateForm, UserLoginForm, UserRegistrationForm
 from .models import Profile
@@ -111,6 +111,15 @@ class UserLoginView(LoginView):
     def get_success_url(self) -> str:
         return cast(str, reverse_lazy("epd_parser:home"))
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # Убеждаемся, что у пользователя есть профиль
+        self.request.user.get_or_create_profile()
+        messages.success(
+            self.request, f"Добро пожаловать, {self.request.user.username}!"
+        )
+        return response
+
     def form_invalid(self, form: Any) -> HttpResponse:
         messages.error(self.request, "Ошибка при входе. Проверьте введенные данные.")
         return cast(HttpResponse, super().form_invalid(form))
@@ -137,6 +146,26 @@ class UserRegistrationView(CreateView):
             self.request, "Ошибка при регистрации. Проверьте введенные данные."
         )
         return cast(HttpResponse, super().form_invalid(form))
+
+
+class UserLogoutView(LogoutView):
+    """Класс-представление для выхода пользователя"""
+
+    def get_next_page(self):
+        messages.success(self.request, "Вы успешно вышли из системы.")
+        return reverse_lazy("epd_parser:home")
+
+
+class ProfileView(LoginRequiredMixin, TemplateView):
+    """Класс-представление для просмотра профиля пользователя"""
+
+    template_name = "users/profile.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Убеждаемся, что у пользователя есть профиль
+        self.request.user.get_or_create_profile()
+        return context
 
 
 class ProfileUpdateView(LoginRequiredMixin, UpdateView):

@@ -14,6 +14,7 @@ requires-python = ">=3.13"
 dependencies = [
     "crispy-bootstrap5>=0.7",
     "django>=5.2.4,<5.3",
+    "django-cors-headers>=4.3.1",
     "django-crispy-forms>=2.1",
     "granian>=1.4.0",
     "pandas>=2.3.1",
@@ -163,6 +164,7 @@ packages = ["utility_parser", "epd_parser"]
 [dependency-groups]
 dev = [
     "mypy>=1.17.1",
+    "pre-commit>=4.2.0",
     "ruff>=0.12.7",
 ]
 

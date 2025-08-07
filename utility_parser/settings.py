@@ -26,6 +26,22 @@ ALLOWED_HOSTS: list[str] = config(
     cast=lambda v: [s.strip() for s in v.split(",")],
 )
 
+# CORS and CSRF settings
+CSRF_TRUSTED_ORIGINS: list[str] = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="http://localhost:8000,http://127.0.0.1:8000",
+    cast=lambda v: [s.strip() for s in v.split(",")],
+)
+
+# CORS settings for production
+CORS_ALLOWED_ORIGINS: list[str] = config(
+    "CORS_ALLOWED_ORIGINS",
+    default="http://localhost:8000,http://127.0.0.1:8000",
+    cast=lambda v: [s.strip() for s in v.split(",")],
+)
+
+CORS_ALLOW_CREDENTIALS = True
+
 
 # Application definition
 INSTALLED_APPS = [
@@ -35,6 +51,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "crispy_forms",
     "crispy_bootstrap5",
     "epd_parser",
@@ -44,6 +61,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
