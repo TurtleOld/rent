@@ -12,6 +12,7 @@ from django.db import models
 from django.db.models import Avg, Count, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
+from datetime import timedelta
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views import View
@@ -34,22 +35,20 @@ class HomeView(TemplateView):
         context = super().get_context_data(**kwargs)
 
         if self.request.user.is_authenticated:
-            # Для авторизованных пользователей показываем статистику
             context["total_documents"] = EpdDocument.objects.count()
             context["total_amount"] = EpdDocument.objects.aggregate(
                 total=Sum("total_with_insurance")
             )["total"] or Decimal("0.00")
             context["recent_documents"] = EpdDocument.objects.filter(
-                created_at__gte=timezone.now() - timezone.timedelta(days=7)
+                created_at__gte=timezone.now() - timedelta(days=7)
             ).count()
             context["unique_accounts"] = (
                 EpdDocument.objects.values("account_number").distinct().count()
             )
         else:
-            # Для неавторизованных пользователей показываем информацию о системе
             context["is_anonymous"] = True
 
-        return cast(dict[str, Any], context)
+        return context
 
 
 class EpdDocumentListView(LoginRequiredMixin, ListView):
@@ -67,11 +66,14 @@ class EpdDocumentListView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        context["total_documents"] = EpdDocument.objects.count()
-        context["total_amount"] = sum(
-            doc.total_with_insurance for doc in context["documents"]
+
+        stats = EpdDocument.objects.aggregate(
+            total_documents=Count("id"), total_amount=Sum("total_with_insurance")
         )
-        return cast(dict[str, Any], context)
+
+        context["total_documents"] = stats["total_documents"] or 0
+        context["total_amount"] = stats["total_amount"] or Decimal("0.00")
+        return context
 
 
 class EpdDocumentDetailView(LoginRequiredMixin, DetailView):
@@ -81,13 +83,18 @@ class EpdDocumentDetailView(LoginRequiredMixin, DetailView):
     template_name = "epd_parser/document_detail.html"
     context_object_name = "document"
 
+    def get_queryset(self) -> Any:
+        return EpdDocument.objects.prefetch_related(
+            "service_charges", "meter_readings", "recalculations"
+        )
+
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        document = cast(EpdDocument, self.get_object())
+        document = self.get_object()
         context["service_charges"] = document.service_charges.all().order_by("order")
         context["meter_readings"] = document.meter_readings.all().order_by("order")
         context["recalculations"] = document.recalculations.all().order_by("order")
-        return cast(dict[str, Any], context)
+        return context
 
 
 class EpdDocumentCreateView(LoginRequiredMixin, FormView):
@@ -118,13 +125,13 @@ class EpdDocumentUpdateView(LoginRequiredMixin, FormView):
 
     def get_object(self) -> EpdDocument:
         """Get the document to edit."""
-        return cast(EpdDocument, get_object_or_404(EpdDocument, pk=self.kwargs["pk"]))
+        return get_object_or_404(EpdDocument, pk=self.kwargs["pk"])
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         """Add document to context."""
         context = super().get_context_data(**kwargs)
         context["document"] = self.get_object()
-        return cast(dict[str, Any], context)
+        return context
 
     def get_initial(self) -> dict[str, Any]:
         """Pre-fill form with current document data."""
@@ -218,7 +225,7 @@ class EpdDocumentSearchView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["query"] = self.request.GET.get("q", "").strip()
         context["account_number"] = self.request.GET.get("account", "").strip()
-        return cast(dict[str, Any], context)
+        return context
 
 
 class EpdStatisticsView(LoginRequiredMixin, TemplateView):
@@ -230,28 +237,30 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
         """Add statistics data to context."""
         context = super().get_context_data(**kwargs)
 
-        # Get date range from request
         days = int(self.request.GET.get("days", 30))
-        start_date = timezone.now() - timezone.timedelta(days=days)
+        start_date = timezone.now() - timedelta(days=days)
+        previous_start_date = start_date - timedelta(days=days)
 
-        # Get statistics
         recent_documents = EpdDocument.objects.filter(created_at__gte=start_date)
 
-        # Calculate additional statistics
-        total_insurance = EpdDocument.objects.aggregate(total=Sum("insurance_amount"))[
-            "total"
-        ] or Decimal("0.00")
+        main_stats = EpdDocument.objects.aggregate(
+            total_documents=Count("id"),
+            total_amount=Sum("total_with_insurance"),
+            avg_amount=Avg("total_with_insurance"),
+            total_insurance=Sum("insurance_amount"),
+            unique_accounts=Count("account_number", distinct=True),
+        )
 
-        total_debt = ServiceCharge.objects.aggregate(total=Sum("debt"))[
-            "total"
-        ] or Decimal("0.00")
+        recent_stats = recent_documents.aggregate(
+            recent_documents=Count("id"), recent_amount=Sum("total_with_insurance")
+        )
 
-        total_paid = ServiceCharge.objects.aggregate(total=Sum("paid"))[
-            "total"
-        ] or Decimal("0.00")
-
-        # Calculate growth rate (comparing recent period with previous period)
-        previous_start_date = start_date - timezone.timedelta(days=days)
+        service_stats = ServiceCharge.objects.aggregate(
+            total_debt=Sum("debt"),
+            total_paid=Sum("paid"),
+            avg_service_amount=Avg("total"),
+            unique_services=Count("service_name", distinct=True),
+        )
         previous_documents = EpdDocument.objects.filter(
             created_at__gte=previous_start_date, created_at__lt=start_date
         ).count()
@@ -259,64 +268,43 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
         growth_rate = 0
         if previous_documents > 0:
             growth_rate = (
-                (recent_documents.count() - previous_documents) / previous_documents
+                (recent_stats["recent_documents"] - previous_documents)
+                / previous_documents
             ) * 100
 
-        # Calculate unique services count (instead of total service charges)
-        unique_services_count = (
-            ServiceCharge.objects.values("service_name").distinct().count()
-        )
-
         stats = {
-            "total_documents": EpdDocument.objects.count(),
-            "recent_documents": recent_documents.count(),
-            "total_amount": EpdDocument.objects.aggregate(
-                total=Sum("total_with_insurance")
-            )["total"]
+            "total_documents": main_stats["total_documents"] or 0,
+            "recent_documents": recent_stats["recent_documents"] or 0,
+            "total_amount": main_stats["total_amount"] or Decimal("0.00"),
+            "recent_amount": recent_stats["recent_amount"] or Decimal("0.00"),
+            "avg_amount": main_stats["avg_amount"] or Decimal("0.00"),
+            "total_service_charges": service_stats["unique_services"] or 0,
+            "avg_service_amount": service_stats["avg_service_amount"]
             or Decimal("0.00"),
-            "recent_amount": recent_documents.aggregate(
-                total=Sum("total_with_insurance")
-            )["total"]
-            or Decimal("0.00"),
-            "avg_amount": EpdDocument.objects.aggregate(
-                avg=Avg("total_with_insurance")
-            )["avg"]
-            or Decimal("0.00"),
-            "total_service_charges": unique_services_count,  # Changed to unique services
-            "avg_service_amount": ServiceCharge.objects.aggregate(avg=Avg("total"))[
-                "avg"
-            ]
-            or Decimal("0.00"),
-            "unique_accounts": EpdDocument.objects.values("account_number")
-            .distinct()
-            .count(),
-            "total_insurance": total_insurance,
-            "total_debt": total_debt,
-            "total_paid": total_paid,
+            "unique_accounts": main_stats["unique_accounts"] or 0,
+            "total_insurance": main_stats["total_insurance"] or Decimal("0.00"),
+            "total_debt": service_stats["total_debt"] or Decimal("0.00"),
+            "total_paid": service_stats["total_paid"] or Decimal("0.00"),
             "growth_rate": growth_rate,
         }
 
-        # Get top services with unique count (by documents, not by individual charges)
-        top_services = (
+        top_services = list(
             ServiceCharge.objects.values("service_name")
             .annotate(
-                count=Count("document", distinct=True),  # Count unique documents
+                count=Count("document", distinct=True),
                 total_amount=Sum("total"),
             )
             .order_by("-total_amount")[:10]
         )
 
-        # Calculate total amount for percentage calculation
         total_service_amount = sum(service["total_amount"] for service in top_services)
 
-        # Calculate average amount and percentage for each service
         for service in top_services:
             if service["count"] > 0:
                 service["avg_amount"] = service["total_amount"] / service["count"]
             else:
                 service["avg_amount"] = Decimal("0.00")
 
-            # Calculate percentage of total
             if total_service_amount > 0:
                 service["percentage"] = (
                     service["total_amount"] / total_service_amount
@@ -324,8 +312,7 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
             else:
                 service["percentage"] = Decimal("0.00")
 
-        # Get services distribution by personal accounts
-        services_by_accounts = (
+        services_by_accounts = list(
             ServiceCharge.objects.values("service_name")
             .annotate(
                 accounts_count=Count("document__account_number", distinct=True),
@@ -334,7 +321,6 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
             .order_by("-total_amount")[:10]
         )
 
-        # Calculate percentages for services by accounts
         total_accounts_amount = sum(
             service["total_amount"] for service in services_by_accounts
         )
@@ -346,10 +332,7 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
             else:
                 service["percentage"] = Decimal("0.00")
 
-        # Get timeline data for better chart
         timeline_data = self._get_timeline_data(days)
-
-        # Get data for individual account charts
         account_charts_data = self._get_account_charts_data()
 
         context.update(
@@ -363,7 +346,7 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
             }
         )
 
-        return cast(dict[str, Any], context)
+        return context
 
     def _get_timeline_data(self, days: int) -> dict[str, Any]:
         """Get timeline data for charts."""
@@ -371,7 +354,7 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
 
         # Get daily document counts for the last N days
         end_date = timezone.now()
-        start_date = end_date - timezone.timedelta(days=days)
+        start_date = end_date - timedelta(days=days)
 
         daily_counts = (
             EpdDocument.objects.filter(created_at__gte=start_date)
@@ -411,58 +394,52 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
             )
             amounts.append(float(amount_data["total"]) if amount_data else 0.0)
 
-            current_date += timezone.timedelta(days=1)
+            current_date += timedelta(days=1)
 
         return {"dates": dates, "counts": counts, "amounts": amounts}
 
     def _get_account_charts_data(self) -> list[dict[str, Any]]:
         """Get data for individual account charts."""
-        # Get all unique account numbers
-        unique_accounts = (
-            EpdDocument.objects.values("account_number", "full_name")
-            .distinct()
-            .order_by("account_number")
+        account_services_data = (
+            ServiceCharge.objects.select_related("document")
+            .values("document__account_number", "document__full_name", "service_name")
+            .annotate(total_amount=Sum("total"), count=Count("id"))
+            .order_by("document__account_number", "-total_amount")
         )
+        accounts_dict = {}
+        for item in account_services_data:
+            account_number = item["document__account_number"]
+            full_name = item["document__full_name"]
+
+            if account_number not in accounts_dict:
+                accounts_dict[account_number] = {
+                    "account_number": account_number,
+                    "full_name": full_name,
+                    "services": [],
+                    "total_amount": Decimal("0.00"),
+                }
+
+            service_data = {
+                "service_name": item["service_name"],
+                "total_amount": item["total_amount"],
+                "count": item["count"],
+            }
+            accounts_dict[account_number]["services"].append(service_data)
+            accounts_dict[account_number]["total_amount"] += item["total_amount"]
 
         account_charts = []
-        for account in unique_accounts:
-            account_number = account["account_number"]
-            full_name = account["full_name"]
+        for account_data in accounts_dict.values():
+            total_amount = account_data["total_amount"]
+            for service in account_data["services"]:
+                if total_amount > 0:
+                    service["percentage"] = (
+                        service["total_amount"] / total_amount
+                    ) * 100
+                else:
+                    service["percentage"] = Decimal("0.00")
 
-            # Get services for this specific account
-            account_services = (
-                ServiceCharge.objects.filter(document__account_number=account_number)
-                .values("service_name")
-                .annotate(
-                    total_amount=Sum("total"),
-                    count=Count("id"),
-                )
-                .order_by("-total_amount")
-            )
-
-            if account_services:
-                # Calculate total amount for percentage calculation
-                total_amount = sum(
-                    service["total_amount"] for service in account_services
-                )
-
-                # Calculate percentages
-                for service in account_services:
-                    if total_amount > 0:
-                        service["percentage"] = (
-                            service["total_amount"] / total_amount
-                        ) * 100
-                    else:
-                        service["percentage"] = Decimal("0.00")
-
-                account_charts.append(
-                    {
-                        "account_number": account_number,
-                        "full_name": full_name,
-                        "services": list(account_services),
-                        "total_amount": total_amount,
-                    }
-                )
+            if account_data["services"]:
+                account_charts.append(account_data)
 
         return account_charts
 
@@ -514,28 +491,30 @@ class StatisticsApiView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
         """Return statistics data in JSON format."""
         try:
-            # Get date range from request
             days = int(request.GET.get("days", 30))
-            start_date = timezone.now() - timezone.timedelta(days=days)
+            start_date = timezone.now() - timedelta(days=days)
+            previous_start_date = start_date - timedelta(days=days)
 
-            # Get statistics (reuse logic from EpdStatisticsView)
             recent_documents = EpdDocument.objects.filter(created_at__gte=start_date)
 
-            # Calculate additional statistics
-            total_insurance = EpdDocument.objects.aggregate(
-                total=Sum("insurance_amount")
-            )["total"] or Decimal("0.00")
+            main_stats = EpdDocument.objects.aggregate(
+                total_documents=Count("id"),
+                total_amount=Sum("total_with_insurance"),
+                avg_amount=Avg("total_with_insurance"),
+                total_insurance=Sum("insurance_amount"),
+                unique_accounts=Count("account_number", distinct=True),
+            )
 
-            total_debt = ServiceCharge.objects.aggregate(total=Sum("debt"))[
-                "total"
-            ] or Decimal("0.00")
+            recent_stats = recent_documents.aggregate(
+                recent_documents=Count("id"), recent_amount=Sum("total_with_insurance")
+            )
 
-            total_paid = ServiceCharge.objects.aggregate(total=Sum("paid"))[
-                "total"
-            ] or Decimal("0.00")
-
-            # Calculate growth rate
-            previous_start_date = start_date - timezone.timedelta(days=days)
+            service_stats = ServiceCharge.objects.aggregate(
+                total_debt=Sum("debt"),
+                total_paid=Sum("paid"),
+                avg_service_amount=Avg("total"),
+                total_service_charges=Count("id"),
+            )
             previous_documents = EpdDocument.objects.filter(
                 created_at__gte=previous_start_date, created_at__lt=start_date
             ).count()
@@ -543,41 +522,28 @@ class StatisticsApiView(LoginRequiredMixin, View):
             growth_rate = 0
             if previous_documents > 0:
                 growth_rate = (
-                    (recent_documents.count() - previous_documents) / previous_documents
+                    (recent_stats["recent_documents"] - previous_documents)
+                    / previous_documents
                 ) * 100
 
             stats = {
-                "total_documents": EpdDocument.objects.count(),
-                "recent_documents": recent_documents.count(),
-                "total_amount": float(
-                    EpdDocument.objects.aggregate(total=Sum("total_with_insurance"))[
-                        "total"
-                    ]
-                    or Decimal("0.00")
-                ),
+                "total_documents": main_stats["total_documents"] or 0,
+                "recent_documents": recent_stats["recent_documents"] or 0,
+                "total_amount": float(main_stats["total_amount"] or Decimal("0.00")),
                 "recent_amount": float(
-                    recent_documents.aggregate(total=Sum("total_with_insurance"))[
-                        "total"
-                    ]
-                    or Decimal("0.00")
+                    recent_stats["recent_amount"] or Decimal("0.00")
                 ),
-                "avg_amount": float(
-                    EpdDocument.objects.aggregate(avg=Avg("total_with_insurance"))[
-                        "avg"
-                    ]
-                    or Decimal("0.00")
-                ),
-                "total_service_charges": ServiceCharge.objects.count(),
+                "avg_amount": float(main_stats["avg_amount"] or Decimal("0.00")),
+                "total_service_charges": service_stats["total_service_charges"] or 0,
                 "avg_service_amount": float(
-                    ServiceCharge.objects.aggregate(avg=Avg("total"))["avg"]
-                    or Decimal("0.00")
+                    service_stats["avg_service_amount"] or Decimal("0.00")
                 ),
-                "unique_accounts": EpdDocument.objects.values("account_number")
-                .distinct()
-                .count(),
-                "total_insurance": float(total_insurance),
-                "total_debt": float(total_debt),
-                "total_paid": float(total_paid),
+                "unique_accounts": main_stats["unique_accounts"] or 0,
+                "total_insurance": float(
+                    main_stats["total_insurance"] or Decimal("0.00")
+                ),
+                "total_debt": float(service_stats["total_debt"] or Decimal("0.00")),
+                "total_paid": float(service_stats["total_paid"] or Decimal("0.00")),
                 "growth_rate": float(growth_rate),
                 "period_days": days,
             }

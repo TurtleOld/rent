@@ -7,6 +7,10 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+EPD_DOCUMENT_VERBOSE_NAME = "EPD Document"
+SERVICE_NAME_VERBOSE_NAME = "Service Name"
+SERVICE_NAME_HELP_TEXT = "Name of the utility service"
+
 
 class EpdDocument(models.Model):
     """Main model for storing EPD document information."""
@@ -78,13 +82,16 @@ class EpdDocument(models.Model):
     class Meta:
         """Meta options for EpdDocument model."""
 
-        verbose_name = _("EPD Document")
+        verbose_name = _(EPD_DOCUMENT_VERBOSE_NAME)
         verbose_name_plural = _("EPD Documents")
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["account_number"]),
             models.Index(fields=["payment_period"]),
             models.Index(fields=["due_date"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["account_number", "created_at"]),
+            models.Index(fields=["payment_period", "created_at"]),
         ]
 
     def __str__(self) -> str:
@@ -101,7 +108,6 @@ class EpdDocument(models.Model):
                 self.total_with_insurance - self.total_without_insurance
             )
         else:
-            # Set default value if totals are not available
             self.insurance_amount = Decimal("0.00")
         super().save(*args, **kwargs)
 
@@ -119,8 +125,8 @@ class ServiceCharge(models.Model):
     # Service information
     service_name: models.CharField = models.CharField(
         max_length=255,
-        verbose_name=_("Service Name"),
-        help_text=_("Name of the utility service"),
+        verbose_name=_(SERVICE_NAME_VERBOSE_NAME),
+        help_text=_(SERVICE_NAME_HELP_TEXT),
     )
 
     # Volume and tariff
@@ -133,13 +139,13 @@ class ServiceCharge(models.Model):
         null=True,
         blank=True,
     )
-    unit = models.CharField(
+    unit: models.CharField = models.CharField(
         max_length=20,
         verbose_name=_("Unit"),
         help_text=_("Unit of measurement (кв.м., куб.м., кВт*ч, etc.)"),
         blank=True,
     )
-    tariff = models.DecimalField(
+    tariff: models.DecimalField = models.DecimalField(
         max_digits=15,
         decimal_places=4,
         verbose_name=_("Tariff"),
@@ -150,14 +156,14 @@ class ServiceCharge(models.Model):
     )
 
     # Financial amounts
-    amount = models.DecimalField(
+    amount: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Amount"),
         help_text=_("Calculated amount for this service"),
         validators=[MinValueValidator(Decimal("0.00"))],
     )
-    recalculation = models.DecimalField(
+    recalculation: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Recalculation"),
@@ -165,7 +171,7 @@ class ServiceCharge(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
-    debt = models.DecimalField(
+    debt: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Debt"),
@@ -173,7 +179,7 @@ class ServiceCharge(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
-    paid = models.DecimalField(
+    paid: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Paid"),
@@ -181,7 +187,7 @@ class ServiceCharge(models.Model):
         validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
-    total = models.DecimalField(
+    total: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Total"),
@@ -190,7 +196,7 @@ class ServiceCharge(models.Model):
     )
 
     # Ordering
-    order = models.PositiveIntegerField(
+    order: models.PositiveIntegerField = models.PositiveIntegerField(
         verbose_name=_("Order"),
         help_text=_("Order of service in the document"),
         default=0,
@@ -205,6 +211,8 @@ class ServiceCharge(models.Model):
         indexes = [
             models.Index(fields=["document", "order"]),
             models.Index(fields=["service_name"]),
+            models.Index(fields=["document", "service_name"]),
+            models.Index(fields=["service_name", "total"]),
         ]
 
     def __str__(self) -> str:
@@ -213,11 +221,9 @@ class ServiceCharge(models.Model):
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to calculate total amount."""
-        # Проверяем, нужно ли пересчитывать total
         recalculate_total = kwargs.pop("recalculate_total", True)
 
         if recalculate_total:
-            # Правильная формула: total = amount + recalculation + debt - paid
             self.total = self.amount + self.recalculation + self.debt - self.paid
 
         super().save(*args, **kwargs)
@@ -226,7 +232,7 @@ class ServiceCharge(models.Model):
 class MeterReading(models.Model):
     """Model for storing meter readings from EPD."""
 
-    document = models.ForeignKey(
+    document: models.ForeignKey[EpdDocument, EpdDocument] = models.ForeignKey(
         EpdDocument,
         on_delete=models.CASCADE,
         related_name="meter_readings",
@@ -234,24 +240,24 @@ class MeterReading(models.Model):
     )
 
     # Meter information
-    service_name = models.CharField(
+    service_name: models.CharField = models.CharField(
         max_length=255,
-        verbose_name=_("Service Name"),
-        help_text=_("Name of the utility service"),
+        verbose_name=_(SERVICE_NAME_VERBOSE_NAME),
+        help_text=_(SERVICE_NAME_HELP_TEXT),
     )
-    meter_type = models.CharField(
+    meter_type: models.CharField = models.CharField(
         max_length=50,
         verbose_name=_("Meter Type"),
         help_text=_("Type of meter (ИПУ, ОДПУ, etc.)"),
         blank=True,
     )
-    meter_number = models.CharField(
+    meter_number: models.CharField = models.CharField(
         max_length=50,
         verbose_name=_("Meter Number"),
         help_text=_("Meter serial number"),
         blank=True,
     )
-    verification_date = models.DateField(
+    verification_date: models.DateField = models.DateField(
         verbose_name=_("Verification Date"),
         help_text=_("Date of meter verification"),
         null=True,
@@ -259,7 +265,7 @@ class MeterReading(models.Model):
     )
 
     # Readings
-    previous_reading = models.DecimalField(
+    previous_reading: models.DecimalField = models.DecimalField(
         max_digits=15,
         decimal_places=4,
         verbose_name=_("Previous Reading"),
@@ -268,7 +274,7 @@ class MeterReading(models.Model):
         null=True,
         blank=True,
     )
-    current_reading = models.DecimalField(
+    current_reading: models.DecimalField = models.DecimalField(
         max_digits=15,
         decimal_places=4,
         verbose_name=_("Current Reading"),
@@ -279,7 +285,7 @@ class MeterReading(models.Model):
     )
 
     # Ordering
-    order = models.PositiveIntegerField(
+    order: models.PositiveIntegerField = models.PositiveIntegerField(
         verbose_name=_("Order"),
         help_text=_("Display order"),
         default=0,
@@ -293,6 +299,8 @@ class MeterReading(models.Model):
         ordering = ["document", "order"]
         indexes = [
             models.Index(fields=["document", "service_name"]),
+            models.Index(fields=["document", "order"]),
+            models.Index(fields=["service_name", "meter_number"]),
         ]
 
     def __str__(self) -> str:
@@ -302,7 +310,6 @@ class MeterReading(models.Model):
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Save the meter reading."""
         if not self.order:
-            # Auto-assign order if not set
             last_order = MeterReading.objects.filter(document=self.document).aggregate(
                 models.Max("order")
             )["order__max"]
@@ -313,7 +320,7 @@ class MeterReading(models.Model):
 class Recalculation(models.Model):
     """Model for storing recalculation information from EPD."""
 
-    document = models.ForeignKey(
+    document: models.ForeignKey[EpdDocument, EpdDocument] = models.ForeignKey(
         EpdDocument,
         on_delete=models.CASCADE,
         related_name="recalculations",
@@ -321,18 +328,18 @@ class Recalculation(models.Model):
     )
 
     # Recalculation information
-    service_name = models.CharField(
+    service_name: models.CharField = models.CharField(
         max_length=255,
-        verbose_name=_("Service Name"),
-        help_text=_("Name of the utility service"),
+        verbose_name=_(SERVICE_NAME_VERBOSE_NAME),
+        help_text=_(SERVICE_NAME_HELP_TEXT),
     )
-    reason = models.CharField(
+    reason: models.CharField = models.CharField(
         max_length=255,
         verbose_name=_("Reason"),
         help_text=_("Reason for recalculation"),
         blank=True,
     )
-    amount = models.DecimalField(
+    amount: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Amount"),
@@ -341,7 +348,7 @@ class Recalculation(models.Model):
     )
 
     # Ordering
-    order = models.PositiveIntegerField(
+    order: models.PositiveIntegerField = models.PositiveIntegerField(
         verbose_name=_("Order"),
         help_text=_("Display order"),
         default=0,
@@ -355,6 +362,8 @@ class Recalculation(models.Model):
         ordering = ["document", "order"]
         indexes = [
             models.Index(fields=["document", "service_name"]),
+            models.Index(fields=["document", "order"]),
+            models.Index(fields=["service_name", "amount"]),
         ]
 
     def __str__(self) -> str:
@@ -364,7 +373,6 @@ class Recalculation(models.Model):
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Save the recalculation."""
         if not self.order:
-            # Auto-assign order if not set
             last_order = Recalculation.objects.filter(document=self.document).aggregate(
                 models.Max("order")
             )["order__max"]

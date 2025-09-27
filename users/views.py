@@ -13,21 +13,22 @@ from django.views.generic import CreateView, TemplateView, UpdateView
 from .forms import ProfileUpdateForm, UserLoginForm, UserRegistrationForm
 from .models import Profile
 
+HOME_URL = "epd_parser:home"
+
 
 def register(request: HttpRequest) -> HttpResponse:
     """Представление для регистрации пользователя"""
     if request.user.is_authenticated:
-        return redirect("epd_parser:home")
+        return redirect(HOME_URL)
 
     if request.method == "POST":
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            # Создаем профиль для нового пользователя
             user.get_or_create_profile()
             login(request, user)
             messages.success(request, "Регистрация прошла успешно!")
-            return redirect("epd_parser:home")
+            return redirect(HOME_URL)
         else:
             messages.error(
                 request, "Ошибка при регистрации. Проверьте введенные данные."
@@ -41,7 +42,7 @@ def register(request: HttpRequest) -> HttpResponse:
 def user_login(request: HttpRequest) -> HttpResponse:
     """Представление для входа пользователя"""
     if request.user.is_authenticated:
-        return redirect("epd_parser:home")
+        return redirect(HOME_URL)
 
     if request.method == "POST":
         form = UserLoginForm(request, data=request.POST)
@@ -50,11 +51,10 @@ def user_login(request: HttpRequest) -> HttpResponse:
             password = form.cleaned_data.get("password")
             user = authenticate(username=username, password=password)
             if user is not None:
-                # Убеждаемся, что у пользователя есть профиль
                 user.get_or_create_profile()
                 login(request, user)
                 messages.success(request, f"Добро пожаловать, {user.username}!")
-                return redirect("epd_parser:home")
+                return redirect(HOME_URL)
             else:
                 messages.error(request, "Неверное имя пользователя или пароль.")
         else:
@@ -65,7 +65,7 @@ def user_login(request: HttpRequest) -> HttpResponse:
     return render(request, "users/login.html", {"form": form})
 
 
-@login_required  # type: ignore[misc]
+@login_required
 def user_logout(request: HttpRequest) -> HttpResponse:
     """Представление для выхода пользователя"""
     logout(request)
@@ -73,18 +73,16 @@ def user_logout(request: HttpRequest) -> HttpResponse:
     return redirect("epd_parser:home")
 
 
-@login_required  # type: ignore[misc]
+@login_required
 def profile(request: HttpRequest) -> HttpResponse:
     """Представление для просмотра профиля пользователя"""
-    # Убеждаемся, что у пользователя есть профиль
     request.user.get_or_create_profile()
     return render(request, "users/profile.html")
 
 
-@login_required  # type: ignore[misc]
+@login_required
 def profile_edit(request: HttpRequest) -> HttpResponse:
     """Представление для редактирования профиля пользователя"""
-    # Убеждаемся, что у пользователя есть профиль
     profile = request.user.get_or_create_profile()
 
     if request.method == "POST":
@@ -109,14 +107,13 @@ class UserLoginView(LoginView):
     redirect_authenticated_user = True
 
     def get_success_url(self) -> str:
-        return cast(str, reverse_lazy("epd_parser:home"))
+        return cast(str, reverse_lazy(HOME_URL))
 
-    def form_valid(self, form):
+    def form_valid(self, form: Any) -> HttpResponse:
         response = super().form_valid(form)
-        # Убеждаемся, что у пользователя есть профиль
-        self.request.user.get_or_create_profile()
+        self.request.user.get_or_create_profile()  # type: ignore[attr-defined]
         messages.success(
-            self.request, f"Добро пожаловать, {self.request.user.username}!"
+            self.request, f"Добро пожаловать, {self.request.user.username}!"  # type: ignore[attr-defined]
         )
         return response
 
@@ -130,13 +127,12 @@ class UserRegistrationView(CreateView):
 
     form_class = UserRegistrationForm
     template_name = "users/register.html"
-    success_url = reverse_lazy("epd_parser:home")
+    success_url = reverse_lazy(HOME_URL)
     redirect_authenticated_user = True
 
     def form_valid(self, form: Any) -> HttpResponse:
-        response = cast(HttpResponse, super().form_valid(form))
-        # Создаем профиль для нового пользователя
-        self.object.get_or_create_profile()
+        response = super().form_valid(form)
+        self.object.get_or_create_profile()  # type: ignore[attr-defined]
         login(self.request, self.object)
         messages.success(self.request, "Регистрация прошла успешно!")
         return response
@@ -151,9 +147,9 @@ class UserRegistrationView(CreateView):
 class UserLogoutView(LogoutView):
     """Класс-представление для выхода пользователя"""
 
-    def get_next_page(self):
+    def get_next_page(self) -> str:
         messages.success(self.request, "Вы успешно вышли из системы.")
-        return reverse_lazy("epd_parser:home")
+        return reverse_lazy(HOME_URL)
 
 
 class ProfileView(LoginRequiredMixin, TemplateView):
@@ -161,10 +157,9 @@ class ProfileView(LoginRequiredMixin, TemplateView):
 
     template_name = "users/profile.html"
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        # Убеждаемся, что у пользователя есть профиль
-        self.request.user.get_or_create_profile()
+        self.request.user.get_or_create_profile()  # type: ignore[attr-defined]
         return context
 
 
@@ -177,12 +172,12 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     success_url = reverse_lazy("users:profile")
 
     def get_object(self, queryset: Any = None) -> Profile:
-        return cast(Profile, self.request.user.get_or_create_profile())
+        return self.request.user.get_or_create_profile()  # type: ignore[attr-defined]
 
     def form_valid(self, form: Any) -> HttpResponse:
         messages.success(self.request, "Профиль успешно обновлен!")
-        return cast(HttpResponse, super().form_valid(form))
+        return super().form_valid(form)
 
     def form_invalid(self, form: Any) -> HttpResponse:
         messages.error(self.request, "Ошибка при обновлении профиля.")
-        return cast(HttpResponse, super().form_invalid(form))
+        return super().form_invalid(form)
