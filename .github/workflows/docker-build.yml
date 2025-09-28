@@ -67,12 +67,14 @@ jobs:
     - name: Test Docker image
       if: github.event_name != 'pull_request'
       run: |
+        IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+        echo "Testing image: $IMAGE_TAG"
         docker run --rm -d --name test-container \
           -p 8000:8000 \
           -e DEBUG=False \
           -e SECRET_KEY=test-key \
           -e DATABASE_URL=sqlite:///test.db \
-          ${{ steps.meta.outputs.tags }} || true
+          "$IMAGE_TAG" || true
         sleep 10
         if docker ps | grep -q test-container; then
           echo "✅ Container is running"
@@ -86,13 +88,15 @@ jobs:
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       if: github.event_name != 'pull_request'
+      env:
+        IMAGE_TAG: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
       with:
-        image-ref: ${{ steps.meta.outputs.tags }}
+        image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         format: 'sarif'
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@3599b3baa15b485a2e49ef411a7a4bb2452e7f93
       if: github.event_name != 'pull_request' && always()
       with:
         sarif_file: 'trivy-results.sarif'
