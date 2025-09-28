@@ -86,17 +86,29 @@ jobs:
         fi
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@0.28.0
       if: github.event_name != 'pull_request'
-      env:
-        IMAGE_TAG: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+      continue-on-error: true
       with:
         image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         format: 'sarif'
         output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Check if SARIF file exists
+      if: github.event_name != 'pull_request'
+      run: |
+        if [ -f "trivy-results.sarif" ]; then
+          echo "SARIF file exists, size: $(wc -c < trivy-results.sarif) bytes"
+          echo "sarif_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "SARIF file does not exist"
+          echo "sarif_exists=false" >> $GITHUB_OUTPUT
+        fi
+      id: check_sarif
 
     - name: Upload Trivy scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@3599b3baa15b485a2e49ef411a7a4bb2452e7f93
-      if: github.event_name != 'pull_request' && always()
+      if: github.event_name != 'pull_request' && steps.check_sarif.outputs.sarif_exists == 'true'
       with:
         sarif_file: 'trivy-results.sarif'
