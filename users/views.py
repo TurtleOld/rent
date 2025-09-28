@@ -113,7 +113,8 @@ class UserLoginView(LoginView):
         response = super().form_valid(form)
         self.request.user.get_or_create_profile()  # type: ignore[attr-defined]
         messages.success(
-            self.request, f"Добро пожаловать, {self.request.user.username}!"  # type: ignore[attr-defined]
+            self.request,
+            f"Добро пожаловать, {self.request.user.username}!",  # type: ignore[attr-defined]
         )
         return response
 

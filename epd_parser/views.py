@@ -3,8 +3,9 @@
 import logging
 import os
 import tempfile
+from datetime import timedelta
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -12,7 +13,6 @@ from django.db import models
 from django.db.models import Avg, Count, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from datetime import timedelta
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views import View
