@@ -7,206 +7,453 @@
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">
-                <i class="bi bi-graph-up"></i> Статистика документов ЕПД
+            <div>
+                <h1 class="h3 mb-1" id="page-heading">
+                    <i class="bi bi-graph-up" aria-hidden="true"></i> Статистика документов ЕПД
             </h1>
+                <p class="text-muted mb-0">Анализ данных и визуализация по документам и счетам</p>
+            </div>
             <div class="d-flex gap-2">
                 <div class="btn-group">
-                    <a href="?days=7" class="btn btn-outline-primary {% if days == 7 %}active{% endif %}">7 дней</a>
-                    <a href="?days=30" class="btn btn-outline-primary {% if days == 30 %}active{% endif %}">30 дней</a>
-                    <a href="?days=90" class="btn btn-outline-primary {% if days == 90 %}active{% endif %}">90 дней</a>
+                    <a href="?days=7" class="btn btn-outline-primary {% if days == 7 %}active{% endif %}"
+                       aria-label="Статистика за 7 дней">7 дней</a>
+                    <a href="?days=30" class="btn btn-outline-primary {% if days == 30 %}active{% endif %}"
+                       aria-label="Статистика за 30 дней">30 дней</a>
+                    <a href="?days=90" class="btn btn-outline-primary {% if days == 90 %}active{% endif %}"
+                       aria-label="Статистика за 90 дней">90 дней</a>
                 </div>
-                <div class="btn-group">
-                    <button type="button" class="btn btn-outline-success" onclick="exportToCSV()">
-                        <i class="bi bi-download"></i> Экспорт CSV
+                <button type="button" class="btn btn-outline-info" onclick="printStatistics()"
+                        aria-label="Печать статистики">
+                    <i class="bi bi-printer" aria-hidden="true"></i> Печать
                     </button>
-                    <button type="button" class="btn btn-outline-info" onclick="printStatistics()">
-                        <i class="bi bi-printer"></i> Печать
-                    </button>
-                </div>
             </div>
         </div>
 
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs mb-4" id="statisticsTabs">
+            <li class="nav-item">
+                <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general"
+                        type="button" role="tab" aria-controls="general" aria-selected="true">
+                    <i class="bi bi-bar-chart me-2" aria-hidden="true"></i>Общая статистика
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="accounts-tab" data-bs-toggle="tab" data-bs-target="#accounts"
+                        type="button" role="tab" aria-controls="accounts" aria-selected="false">
+                    <i class="bi bi-people me-2" aria-hidden="true"></i>По счетам
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="statisticsTabContent">
+            <!-- General Statistics Tab -->
+            <div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab">
         <!-- Statistics Cards -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card stat-card text-center">
+                <section class="row mb-5" aria-labelledby="general-stats-heading">
+                    <div class="col-12">
+                        <h2 id="general-stats-heading" class="visually-hidden">Общая статистика</h2>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-primary text-white">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-file-earmark-text fa-2x opacity-75" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="card-title h2 mb-1" id="total-docs">{{ stats.total_documents }}</h3>
+                                <p class="card-text mb-0 opacity-90">Всего документов</p>
+                </div>
+            </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-success text-white">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-calendar-check fa-2x opacity-75" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="card-title h2 mb-1" id="recent-docs">{{ stats.recent_documents }}</h3>
+                                <p class="card-text mb-0 opacity-90">За последние {{ days }} дней</p>
+                </div>
+            </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-info text-white">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-cash-coin fa-2x opacity-75" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="card-title h2 mb-1" id="total-amount">{{ stats.total_amount }} ₽</h3>
+                                <p class="card-text mb-0 opacity-90">Общая сумма</p>
+                </div>
+            </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-warning text-dark">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-people fa-2x opacity-75" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="card-title h2 mb-1" id="unique-accounts">{{ stats.unique_accounts }}</h3>
+                                <p class="card-text mb-0 opacity-90">Уникальных счетов</p>
+                </div>
+            </div>
+        </div>
+                </section>
+
+                <!-- Filters Section -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0 d-flex align-items-center">
+                            <i class="bi bi-funnel me-2 text-primary" aria-hidden="true"></i>
+                            Фильтры и настройки
+                        </h5>
+                    </div>
                     <div class="card-body">
-                        <i class="bi bi-file-earmark-text display-4"></i>
-                        <div class="stat-number">{{ stats.total_documents }}</div>
-                        <div class="stat-label">Всего документов</div>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label for="dateFilter" class="form-label">Период</label>
+                                <select class="form-select" id="dateFilter" aria-label="Выберите период">
+                                    <option value="7">7 дней</option>
+                                    <option value="30" selected>30 дней</option>
+                                    <option value="90">90 дней</option>
+                                    <option value="365">Год</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="serviceFilter" class="form-label">Тип услуги</label>
+                                <select class="form-select" id="serviceFilter" aria-label="Выберите тип услуги">
+                                    <option value="">Все услуги</option>
+                                    <option value="housing">Жилищные услуги</option>
+                                    <option value="utilities">Коммунальные услуги</option>
+                                    <option value="insurance">Страхование</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="amountFilter" class="form-label">Сумма от</label>
+                                <input type="number" class="form-control" id="amountFilter" placeholder="0" aria-label="Минимальная сумма">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="chartType" class="form-label">Тип графика</label>
+                                <select class="form-select" id="chartType" aria-label="Выберите тип графика">
+                                    <option value="doughnut">Круговой</option>
+                                    <option value="pie">Пирог</option>
+                                    <option value="bar">Столбчатый</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button type="button" class="btn btn-primary" onclick="applyFilters()">
+                                    <i class="bi bi-search me-1" aria-hidden="true"></i> Применить фильтры
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" onclick="resetFilters()">
+                                    <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i> Сбросить
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                                </div>
+
+                <!-- Charts Row -->
+                <div class="row mb-4">
+                    <div class="col-lg-6 mb-4">
+                        <div class="card shadow-sm border-0">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0 d-flex align-items-center">
+                                    <i class="bi bi-pie-chart me-2 text-primary" aria-hidden="true"></i>
+                                    Распределение по услугам
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="position: relative; height: 300px;">
+                                    <canvas id="servicesChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                                </div>
+                    <div class="col-lg-6 mb-4">
+                        <div class="card shadow-sm border-0">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0 d-flex align-items-center">
+                                    <i class="bi bi-graph-up me-2 text-success" aria-hidden="true"></i>
+                                    Динамика загрузки документов
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="position: relative; height: 300px;">
+                                    <canvas id="timelineChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Services Table -->
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 d-flex align-items-center">
+                                <i class="bi bi-trophy me-2 text-warning" aria-hidden="true"></i>
+                                Топ-10 услуг по суммам
+                            </h5>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary active" data-sort="amount"
+                                        aria-label="Сортировка по сумме">
+                                    <i class="bi bi-cash-coin me-1" aria-hidden="true"></i> По сумме
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" data-sort="count"
+                                        aria-label="Сортировка по количеству">
+                                    <i class="bi bi-list-ol me-1" aria-hidden="true"></i> По количеству
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if top_services %}
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0" id="servicesTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="py-3">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="bi bi-list-ul me-2 text-muted" aria-hidden="true"></i>
+                                                    Услуга
+                                                </div>
+                                            </th>
+                                            <th class="text-center py-3">
+                                                <div class="d-flex align-items-center justify-content-center">
+                                                    <i class="bi bi-people me-2 text-muted" aria-hidden="true"></i>
+                                                    Количество счетов
+                                                </div>
+                                            </th>
+                                            <th class="text-end py-3">
+                                                <div class="d-flex align-items-center justify-content-end">
+                                                    <i class="bi bi-cash-coin me-2 text-muted" aria-hidden="true"></i>
+                                                    Общая сумма
+                                                </div>
+                                            </th>
+                                            <th class="text-end py-3">
+                                                <div class="d-flex align-items-center justify-content-end">
+                                                    <i class="bi bi-calculator me-2 text-muted" aria-hidden="true"></i>
+                                                    Средняя сумма
+                                                </div>
+                                            </th>
+                                            <th class="text-center py-3">
+                                                <div class="d-flex align-items-center justify-content-center">
+                                                    <i class="bi bi-percent me-2 text-muted" aria-hidden="true"></i>
+                                                    Доля от общей суммы
+                                                </div>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for service in top_services %}
+                                        <tr>
+                                            <td class="py-3">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="bi bi-tag me-2 text-primary" aria-hidden="true"></i>
+                                                    <strong>{{ service.service_name }}</strong>
+                                                </div>
+                                            </td>
+                                            <td class="text-center py-3">
+                                                <span class="badge bg-info-subtle text-info-emphasis px-3 py-2">
+                                                    {{ service.count }}
+                                                </span>
+                                            </td>
+                                            <td class="text-end py-3">
+                                                <div class="d-flex align-items-center justify-content-end">
+                                                    <i class="bi bi-cash-coin me-2 text-success" aria-hidden="true"></i>
+                                                    <strong class="text-success">{{ service.total_amount|floatformat:2 }} ₽</strong>
+                                                </div>
+                                            </td>
+                                            <td class="text-end py-3">
+                                                <span class="text-muted">{{ service.avg_amount|floatformat:2 }} ₽</span>
+                                            </td>
+                                            <td class="text-center py-3">
+                                                <span class="badge bg-primary px-3 py-2">
+                                                    {{ service.percentage|floatformat:2 }}%
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <div class="mb-4">
+                                    <i class="bi bi-inbox display-1 text-muted opacity-50" aria-hidden="true"></i>
+                                </div>
+                                <h4 class="mb-3 text-muted">Данные отсутствуют</h4>
+                                <p class="text-muted mb-4">Загрузите документы для отображения статистики</p>
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card stat-card text-center stat-card-success">
+
+            <!-- Accounts Statistics Tab -->
+            <div class="tab-pane fade" id="accounts" role="tabpanel" aria-labelledby="accounts-tab">
+                <!-- Account Filters -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0 d-flex align-items-center">
+                            <i class="bi bi-funnel me-2 text-primary" aria-hidden="true"></i>
+                            Фильтры по счетам
+                        </h5>
+                    </div>
                     <div class="card-body">
-                        <i class="bi bi-calendar-check display-4"></i>
-                        <div class="stat-number">{{ stats.recent_documents }}</div>
-                        <div class="stat-label">За последние {{ days }} дней</div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="accountSelect" class="form-label">Выберите счет</label>
+                                <select class="form-select" id="accountSelect" aria-label="Выберите счет">
+                                    <option value="">Все счета</option>
+                                    {% for account in accounts_data %}
+                                    <option value="{{ account.account_number }}">{{ account.account_number }} - {{ account.full_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="accountAmountFilter" class="form-label">Сумма от</label>
+                                <input type="number" class="form-control" id="accountAmountFilter" placeholder="0"
+                                       aria-label="Минимальная сумма по счету">
+                                </div>
+                            <div class="col-md-4">
+                                <label for="accountSort" class="form-label">Сортировка</label>
+                                <select class="form-select" id="accountSort" aria-label="Сортировка счетов">
+                                    <option value="amount">По сумме</option>
+                                    <option value="count">По количеству услуг</option>
+                                    <option value="name">По имени</option>
+                                    <option value="date">По дате</option>
+                                </select>
+                            </div>
+                                </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button type="button" class="btn btn-primary" onclick="applyAccountFilters()">
+                                    <i class="bi bi-search me-1" aria-hidden="true"></i> Применить фильтры
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" onclick="resetAccountFilters()">
+                                    <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i> Сбросить
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Account Statistics Cards -->
+                <section class="row mb-4" aria-labelledby="accounts-stats-heading">
+                    <div class="col-12">
+                        <h2 id="accounts-stats-heading" class="visually-hidden">Статистика по счетам</h2>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-primary text-white">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-people fa-2x opacity-75" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="card-title h2 mb-1" id="total-accounts">{{ accounts_stats.total_accounts }}</h3>
+                                <p class="card-text mb-0 opacity-90">Всего счетов</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-success text-white">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-cash-coin fa-2x opacity-75" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="card-title h2 mb-1" id="accounts-total-amount">{{ accounts_stats.total_amount }} ₽</h3>
+                                <p class="card-text mb-0 opacity-90">Общая сумма</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-info text-white">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-list-check fa-2x opacity-75" aria-hidden="true"></i>
+                </div>
+                                <h3 class="card-title h2 mb-1" id="accounts-avg-services">{{ accounts_stats.avg_services }}</h3>
+                                <p class="card-text mb-0 opacity-90">Среднее услуг на счет</p>
+            </div>
+        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card h-100 shadow-sm border-0 bg-warning text-dark">
+                            <div class="card-body text-center">
+                                <div class="d-flex justify-content-center align-items-center mb-3">
+                                    <i class="bi bi-graph-up fa-2x opacity-75" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="card-title h2 mb-1" id="accounts-top-amount">{{ accounts_stats.top_amount }} ₽</h3>
+                                <p class="card-text mb-0 opacity-90">Максимальная сумма</p>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card stat-card text-center stat-card-info">
-                    <div class="card-body">
-                        <i class="bi bi-cash-coin display-4"></i>
-                        <div class="stat-number">{{ stats.total_amount|floatformat:0 }} ₽</div>
-                        <div class="stat-label">Общая сумма</div>
+                </section>
+
+                <!-- Account Comparison Chart -->
+                <div class="card mb-4 shadow-sm border-0">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0 d-flex align-items-center">
+                            <i class="bi bi-bar-chart me-2 text-primary" aria-hidden="true"></i>
+                            Сравнение счетов по суммам
+                        </h5>
                     </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card text-center stat-card-warning">
                     <div class="card-body">
-                        <i class="bi bi-people display-4"></i>
-                        <div class="stat-number">{{ stats.unique_accounts }}</div>
-                        <div class="stat-label">Уникальных счетов</div>
-                    </div>
+                        <div class="chart-container" style="position: relative; height: 400px;">
+                            <canvas id="accountsComparisonChart"></canvas>
                 </div>
             </div>
         </div>
 
-        <!-- Additional Statistics -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-calculator"></i> Финансовая статистика
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h4 class="text-success">{{ stats.recent_amount|floatformat:2 }} ₽</h4>
-                                    <p class="text-muted">Сумма за {{ days }} дней</p>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h4 class="text-info">{{ stats.avg_amount|floatformat:2 }} ₽</h4>
-                                    <p class="text-muted">Средняя сумма</p>
-                                </div>
-                            </div>
-                        </div>
-                        <hr>
-                        <div class="row">
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h6 class="text-warning">{{ stats.total_insurance|floatformat:2 }} ₽</h6>
-                                    <p class="text-muted small">Общая сумма страхования</p>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h6 class="{% if stats.growth_rate > 0 %}text-success{% elif stats.growth_rate < 0 %}text-danger{% else %}text-muted{% endif %}">
-                                        {% if stats.growth_rate > 0 %}+{% endif %}{{ stats.growth_rate|floatformat:1 }}%
-                                    </h6>
-                                    <p class="text-muted small">Рост загрузки</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-list-check"></i> Статистика услуг
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h4 class="text-warning">{{ stats.total_service_charges }}</h4>
-                                    <p class="text-muted">Уникальных услуг</p>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h4 class="text-primary">{{ stats.avg_service_amount|floatformat:2 }} ₽</h4>
-                                    <p class="text-muted">Средняя сумма услуги</p>
-                                </div>
-                            </div>
-                        </div>
-                        <hr>
-                        <div class="row">
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h6 class="text-danger">{{ stats.total_debt|floatformat:2 }} ₽</h6>
-                                    <p class="text-muted small">Общая задолженность</p>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h6 class="text-success">{{ stats.total_paid|floatformat:2 }} ₽</h6>
-                                    <p class="text-muted small">Общая оплата</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Row -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-pie-chart"></i> Распределение по услугам
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="servicesChart" width="400" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-graph-up"></i> Динамика загрузки документов
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="timelineChart" width="400" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Individual Account Charts -->
-        {% if account_charts_data %}
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="bi bi-people"></i> Распределение услуг по счетам
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    {% for account in account_charts_data %}
-                    <div class="col-md-6 col-lg-4 mb-4">
-                        <div class="card h-100 account-chart-card">
+                <!-- Individual Account Statistics -->
+                <div class="row" id="accountsList">
+                    {% for account in accounts_data %}
+                    <div class="col-lg-6 col-xl-4 mb-4 account-card" data-account="{{ account.account_number }}"
+                         data-amount="{{ account.total_amount }}" data-services="{{ account.services_count }}">
+                        <div class="card h-100 shadow-sm border-0 account-chart-card">
                             <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-person-circle"></i>
+                                <h6 class="mb-1 d-flex align-items-center">
+                                    <i class="bi bi-person-circle me-2 text-primary" aria-hidden="true"></i>
                                     Счёт {{ account.account_number }}
                                 </h6>
                                 <small class="text-muted">{{ account.full_name }}</small>
                             </div>
                             <div class="card-body">
-                                <canvas id="accountChart{{ account.account_number }}" width="300" height="200"></canvas>
-                                <div class="mt-2 text-center">
-                                    <small class="text-muted">
-                                        Общая сумма: {{ account.total_amount|floatformat:2 }} ₽
-                                    </small>
+                                <div class="row mb-3">
+                                    <div class="col-6">
+                                        <div class="text-center">
+                                            <h5 class="text-success mb-1">{{ account.total_amount }} ₽</h5>
+                                            <small class="text-muted">Общая сумма</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="text-center">
+                                            <h5 class="text-info mb-1">{{ account.services_count }}</h5>
+                                            <small class="text-muted">Услуг</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Account Services Chart -->
+                                <div class="chart-container" style="position: relative; height: 200px;">
+                                    <canvas id="accountChart{{ account.account_number }}"></canvas>
+                                </div>
+
+                                <!-- Top Services for Account -->
+                                <div class="mt-3">
+                                    <h6 class="text-muted mb-2">Топ услуги:</h6>
+                                    <div class="list-group list-group-flush">
+                                        {% for service in account.top_services %}
+                                        <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-0 border-0">
+                                            <small class="text-truncate me-2">{{ service.service_name }}</small>
+                                            <span class="badge bg-primary-subtle text-primary-emphasis">
+                                                {{ service.amount }} ₽
+                                            </span>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -215,78 +462,28 @@
                 </div>
             </div>
         </div>
-        {% endif %}
-
-        <!-- Top Services -->
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">
-                    <i class="bi bi-trophy"></i> Топ услуг по суммам
-                </h5>
-                <div class="btn-group btn-group-sm">
-                    <button type="button" class="btn btn-outline-primary active" data-sort="amount">По сумме</button>
-                    <button type="button" class="btn btn-outline-primary" data-sort="count">По количеству</button>
-                </div>
-            </div>
-            <div class="card-body p-0">
-                {% if top_services %}
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0" id="servicesTable">
-                            <thead>
-                                <tr>
-                                    <th>Услуга</th>
-                                    <th class="text-center">Количество счетов</th>
-                                    <th class="text-end">Общая сумма</th>
-                                    <th class="text-end">Средняя сумма</th>
-                                    <th class="text-center">Доля от общей суммы</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for service in top_services %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ service.service_name }}</strong>
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-info">{{ service.count }}</span>
-                                    </td>
-                                    <td class="text-end">
-                                        <strong class="text-success">{{ service.total_amount|floatformat:2 }} ₽</strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="text-muted">{{ service.avg_amount|floatformat:2 }} ₽</span>
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-primary">{{ service.percentage|default:0|floatformat:1 }}%</span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="text-center py-5">
-                        <i class="bi bi-inbox display-1 text-muted"></i>
-                        <h4 class="mt-3 text-muted">Данные отсутствуют</h4>
-                        <p class="text-muted">Загрузите документы для отображения статистики</p>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
 
         <!-- Back to List -->
         <div class="mt-4">
             <a href="{% url 'epd_parser:document_list' %}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Назад к списку
+                <i class="bi bi-arrow-left me-1" aria-hidden="true"></i> Назад к списку
             </a>
         </div>
     </div>
 </div>
+{% endblock %}
 
-<!-- JavaScript for Charts and Interactivity -->
+{% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    let servicesChart, timelineChart, accountsComparisonChart;
+    let accountCharts = {};
+
+    // Initialize all charts
+    initializeCharts();
+
     // Services Chart
+    function initializeServicesChart() {
     const servicesCtx = document.getElementById('servicesChart');
     if (servicesCtx) {
         const servicesData = {
@@ -302,7 +499,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }]
         };
 
-        new Chart(servicesCtx, {
+            servicesChart = new Chart(servicesCtx, {
             type: 'doughnut',
             data: servicesData,
             options: {
@@ -333,9 +530,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+        }
     }
 
-    // Timeline Chart - Improved with actual timeline data
+    // Timeline Chart
+    function initializeTimelineChart() {
     const timelineCtx = document.getElementById('timelineChart');
     if (timelineCtx) {
         const timelineData = {
@@ -346,93 +545,100 @@ document.addEventListener('DOMContentLoaded', function() {
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
                 borderColor: 'rgba(54, 162, 235, 1)',
                 borderWidth: 2,
-                borderRadius: 5,
-                yAxisID: 'y'
-            }, {
-                label: 'Сумма (₽)',
-                data: [{% for amount in timeline_data.amounts %}{{ amount }}{% if not forloop.last %}, {% endif %}{% endfor %}],
-                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                borderColor: 'rgba(255, 99, 132, 1)',
-                borderWidth: 2,
-                borderRadius: 5,
-                yAxisID: 'y1',
-                type: 'line'
-            }]
-        };
+                    borderRadius: 5
+                }]
+            };
 
-        new Chart(timelineCtx, {
+            timelineChart = new Chart(timelineCtx, {
             type: 'bar',
             data: timelineData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false,
-                },
-                scales: {
-                    x: {
-                        display: true,
-                        title: {
+                    plugins: {
+                        legend: {
                             display: true,
-                            text: 'Дата'
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y}`;
+                                }
+                            }
                         }
                     },
-                    y: {
-                        type: 'linear',
-                        display: true,
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: 'Количество документов'
-                        },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
                         ticks: {
                             stepSize: 1
-                        }
-                    },
-                    y1: {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        title: {
-                            display: true,
-                            text: 'Сумма (₽)'
-                        },
-                        grid: {
-                            drawOnChartArea: false,
-                        },
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top'
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                if (context.dataset.label === 'Сумма (₽)') {
-                                    return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ru-RU')} ₽`;
-                                }
-                                return `${context.dataset.label}: ${context.parsed.y}`;
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 
+    // Accounts Comparison Chart
+    function initializeAccountsComparisonChart() {
+        const accountsCtx = document.getElementById('accountsComparisonChart');
+        if (accountsCtx) {
+            const accountsData = {
+                labels: [{% for account in accounts_data %}'{{ account.account_number }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
+                datasets: [{
+                    label: 'Сумма по счетам',
+                    data: [{% for account in accounts_data %}{{ account.total_amount }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 2,
+                    borderRadius: 5
+                }]
+            };
 
+            accountsComparisonChart = new Chart(accountsCtx, {
+                type: 'bar',
+                data: accountsData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                            display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                    return `Счёт ${context.label}: ${context.parsed.y.toLocaleString('ru-RU')} ₽`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString('ru-RU') + ' ₽';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
 
     // Individual Account Charts
-    {% for account in account_charts_data %}
+    function initializeAccountCharts() {
+        {% for account in accounts_data %}
     const accountChart{{ account.account_number }}Ctx = document.getElementById('accountChart{{ account.account_number }}');
     if (accountChart{{ account.account_number }}Ctx) {
         const accountData{{ account.account_number }} = {
-            labels: [{% for service in account.services %}'{{ service.service_name|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
+                labels: [{% for service in account.top_services %}'{{ service.service_name|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}],
             datasets: [{
-                data: [{% for service in account.services %}{{ service.total_amount }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+                    data: [{% for service in account.top_services %}{{ service.amount }}{% if not forloop.last %}, {% endif %}{% endfor %}],
                 backgroundColor: [
                     '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
                     '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
@@ -442,7 +648,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }]
         };
 
-        new Chart(accountChart{{ account.account_number }}Ctx, {
+            accountCharts['{{ account.account_number }}'] = new Chart(accountChart{{ account.account_number }}Ctx, {
             type: 'doughnut',
             data: accountData{{ account.account_number }},
             options: {
@@ -450,14 +656,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'bottom',
-                        labels: {
-                            padding: 10,
-                            usePointStyle: true,
-                            font: {
-                                size: 9
-                            }
-                        }
+                            display: false
                     },
                     tooltip: {
                         callbacks: {
@@ -475,76 +674,96 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     {% endfor %}
-
-    // Table Sorting
-    const sortButtons = document.querySelectorAll('[data-sort]');
-    const servicesTable = document.getElementById('servicesTable');
-
-    if (servicesTable && sortButtons.length > 0) {
-        sortButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                const sortType = this.getAttribute('data-sort');
-
-                // Update active button
-                sortButtons.forEach(btn => btn.classList.remove('active'));
-                this.classList.add('active');
-
-                // Sort table rows
-                const tbody = servicesTable.querySelector('tbody');
-                const rows = Array.from(tbody.querySelectorAll('tr'));
-
-                rows.sort((a, b) => {
-                    let aValue, bValue;
-
-                    if (sortType === 'amount') {
-                        aValue = parseFloat(a.cells[2].textContent.replace(/[^\d.-]/g, ''));
-                        bValue = parseFloat(b.cells[2].textContent.replace(/[^\d.-]/g, ''));
-                    } else {
-                        aValue = parseInt(a.cells[1].textContent);
-                        bValue = parseInt(b.cells[1].textContent);
-                    }
-
-                    return bValue - aValue;
-                });
-
-                // Reorder rows
-                rows.forEach(row => tbody.appendChild(row));
-            });
-        });
     }
 
-    // Export to CSV function
-    window.exportToCSV = function() {
-        const table = document.getElementById('servicesTable');
-        if (!table) return;
+    // Initialize all charts
+    function initializeCharts() {
+        initializeServicesChart();
+        initializeTimelineChart();
+        initializeAccountsComparisonChart();
+        initializeAccountCharts();
+    }
 
-        const rows = Array.from(table.querySelectorAll('tr'));
-        let csv = 'Услуга,Количество счетов,Общая сумма,Средняя сумма,Доля от общей суммы\n';
+    // Filter Functions
+    window.applyFilters = function() {
+        const dateFilter = document.getElementById('dateFilter').value;
+        const serviceFilter = document.getElementById('serviceFilter').value;
+        const amountFilter = document.getElementById('amountFilter').value;
+        const chartType = document.getElementById('chartType').value;
 
-        rows.forEach(row => {
-            const cells = Array.from(row.querySelectorAll('td'));
-            if (cells.length > 0) {
-                const rowData = cells.map(cell => {
-                    // Remove HTML tags and get clean text
-                    let text = cell.textContent.trim();
-                    // Remove currency symbols and extra spaces
-                    text = text.replace(/₽/g, '').replace(/\s+/g, ' ').trim();
-                    // Escape quotes
-                    return `"${text}"`;
-                });
-                csv += rowData.join(',') + '\n';
+        // Update chart type
+        if (servicesChart) {
+            servicesChart.config.type = chartType;
+            servicesChart.update();
+        }
+
+        // Apply other filters (would need backend integration)
+        console.log('Applying filters:', { dateFilter, serviceFilter, amountFilter, chartType });
+    };
+
+    window.resetFilters = function() {
+        document.getElementById('dateFilter').value = '30';
+        document.getElementById('serviceFilter').value = '';
+        document.getElementById('amountFilter').value = '';
+        document.getElementById('chartType').value = 'doughnut';
+
+        if (servicesChart) {
+            servicesChart.config.type = 'doughnut';
+            servicesChart.update();
+        }
+    };
+
+    window.applyAccountFilters = function() {
+        const accountSelect = document.getElementById('accountSelect').value;
+        const accountAmountFilter = document.getElementById('accountAmountFilter').value;
+        const accountSort = document.getElementById('accountSort').value;
+
+        // Filter and sort account cards
+        const accountCards = document.querySelectorAll('.account-card');
+        accountCards.forEach(card => {
+            const accountNumber = card.dataset.account;
+            const amount = parseFloat(card.dataset.amount);
+
+            let show = true;
+
+            if (accountSelect && accountNumber !== accountSelect) {
+                show = false;
+            }
+
+            if (accountAmountFilter && amount < parseFloat(accountAmountFilter)) {
+                show = false;
+            }
+
+            card.style.display = show ? 'block' : 'none';
+        });
+
+        // Sort cards
+        const accountsList = document.getElementById('accountsList');
+        const sortedCards = Array.from(accountCards).sort((a, b) => {
+            switch(accountSort) {
+                case 'amount':
+                    return parseFloat(b.dataset.amount) - parseFloat(a.dataset.amount);
+                case 'count':
+                    return parseInt(b.dataset.services) - parseInt(a.dataset.services);
+                case 'name':
+                    return a.dataset.account.localeCompare(b.dataset.account);
+                default:
+                    return 0;
             }
         });
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `statistics_${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        sortedCards.forEach(card => accountsList.appendChild(card));
+    };
+
+    window.resetAccountFilters = function() {
+        document.getElementById('accountSelect').value = '';
+        document.getElementById('accountAmountFilter').value = '';
+        document.getElementById('accountSort').value = 'amount';
+
+        // Show all cards
+        document.querySelectorAll('.account-card').forEach(card => {
+            card.style.display = 'block';
+        });
     };
 
     // Print function

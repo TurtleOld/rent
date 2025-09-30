@@ -6,63 +6,68 @@
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-lg-8">
-        <div class="card">
-            <div class="card-header">
-                <h4 class="mb-0">
-                    <i class="bi bi-upload"></i> Загрузка документа ЕПД
-                </h4>
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h1 class="mb-0 h4" id="upload-heading">
+                    <i class="bi bi-upload" aria-hidden="true"></i> Загрузка документа ЕПД
+                </h1>
             </div>
             <div class="card-body">
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i>
+                <div class="alert alert-info" role="alert">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
                     <strong>Инструкция:</strong> Загрузите PDF файл документа ЕПД (Единый платежный документ).
                     Система автоматически извлечет все данные из документа и сохранит их в базу данных.
                 </div>
 
-                <form method="post" enctype="multipart/form-data">
+                <form method="post" enctype="multipart/form-data" aria-labelledby="upload-heading">
                     {% csrf_token %}
 
                     <!-- PDF Upload Section -->
                     <div class="mb-4">
-                        <h5>Выберите PDF файл</h5>
+                        <label for="pdf_file" class="form-label h5">Выберите PDF файл</label>
                         <div class="form-group">
-                            <input type="file" name="pdf_file" accept=".pdf" class="form-control" required>
-                            <small class="text-muted">Максимальный размер: 10MB</small>
+                            <input type="file" name="pdf_file" id="pdf_file" accept=".pdf" class="form-control"
+                                   required aria-describedby="file-help">
+                            <div id="file-help" class="form-text">Максимальный размер: 10MB</div>
                         </div>
 
                         <!-- Progress indicator (hidden by default) -->
-                        <div id="uploadProgress" class="mt-3" style="display: none;">
+                        <div id="uploadProgress" class="mt-3" style="display: none;" aria-live="polite" aria-label="Прогресс загрузки">
                             <div class="progress mb-2">
                                 <div class="progress-bar progress-bar-striped progress-bar-animated"
-                                     role="progressbar" style="width: 0%"></div>
+                                     style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                             </div>
                             <small class="text-muted" id="progressText">Подготовка к загрузке...</small>
                         </div>
 
                         <!-- Form Errors -->
                         {% if form.errors %}
-                        <div class="alert alert-danger mt-3">
-                            <h6><i class="bi bi-exclamation-triangle"></i> Ошибки:</h6>
-                            {% for field, errors in form.errors.items %}
-                                {% for error in errors %}
-                                    <p class="mb-1">{{ error }}</p>
+                        <div class="alert alert-danger mt-3" role="alert" aria-live="assertive">
+                            <h6><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Ошибки:</h6>
+                            <ul class="mb-0">
+                                {% for field, errors in form.errors.items %}
+                                    {% for error in errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
                                 {% endfor %}
-                            {% endfor %}
+                            </ul>
                         </div>
                         {% endif %}
                     </div>
 
                     <!-- Submit Buttons -->
-                    <div class="d-flex justify-content-between">
-                        <a href="{% url 'epd_parser:document_list' %}" class="btn btn-secondary" id="backBtn">
-                            <i class="bi bi-arrow-left"></i> Назад к списку
+                    <div class="d-flex justify-content-between flex-wrap gap-2">
+                        <a href="{% url 'epd_parser:document_list' %}" class="btn btn-secondary" id="backBtn"
+                           aria-label="Вернуться к списку документов">
+                            <i class="bi bi-arrow-left" aria-hidden="true"></i> Назад к списку
                         </a>
-                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <button type="submit" class="btn btn-primary" id="submitBtn"
+                                aria-label="Загрузить и обработать документ">
                             <span class="btn-content">
-                                <i class="bi bi-upload"></i> Загрузить и сохранить
+                                <i class="bi bi-upload" aria-hidden="true"></i> Загрузить и сохранить
                             </span>
-                            <span class="btn-loading" style="display: none;">
-                                <span class="loading-spinner"></span>
+                            <span class="btn-loading" style="display: none;" aria-hidden="true">
+                                <span class="loading-spinner" aria-hidden="true"></span>
                                 <span class="loading-text">Обработка документа...</span>
                             </span>
                         </button>

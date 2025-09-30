@@ -7,65 +7,93 @@
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3 mb-0">
-                <i class="bi bi-list-ul"></i> Документы ЕПД
-            </h1>
-            <a href="{% url 'epd_parser:upload' %}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Загрузить документ
+            <div>
+                <h1 class="h3 mb-1" id="page-heading">
+                    <i class="bi bi-list-ul" aria-hidden="true"></i> Документы ЕПД
+                </h1>
+                <p class="text-muted mb-0">Управление и просмотр документов Единого платежного документа</p>
+            </div>
+            <a href="{% url 'epd_parser:upload' %}" class="btn btn-primary btn-lg shadow-sm"
+               aria-label="Загрузить новый документ ЕПД">
+                <i class="bi bi-plus-circle me-2" aria-hidden="true"></i> Загрузить документ
             </a>
         </div>
 
         <!-- Statistics Cards -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card text-center">
-                    <div class="card-body">
-                        <h5 class="card-title text-primary">{{ total_documents }}</h5>
-                        <p class="card-text text-muted">Всего документов</p>
+        <section class="row mb-5" aria-labelledby="stats-heading">
+            <div class="col-12">
+                <h2 id="stats-heading" class="visually-hidden">Статистика документов</h2>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card h-100 shadow-sm border-0 bg-primary text-white">
+                    <div class="card-body text-center">
+                        <div class="d-flex justify-content-center align-items-center mb-3">
+                            <i class="bi bi-file-earmark-text fa-2x opacity-75" aria-hidden="true"></i>
+                        </div>
+                        <h3 class="card-title h2 mb-1" id="total-docs">{{ total_documents }}</h3>
+                        <p class="card-text mb-0 opacity-90">Всего документов</p>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card text-center">
-                    <div class="card-body">
-                        <i class="bi bi-cash-coin display-6 text-success mb-2"></i>
-                        <h5 class="card-title text-success">{{ total_amount|floatformat:2 }} ₽</h5>
-                        <p class="card-text text-muted">Общая сумма</p>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card h-100 shadow-sm border-0 bg-success text-white">
+                    <div class="card-body text-center">
+                        <div class="d-flex justify-content-center align-items-center mb-3">
+                            <i class="bi bi-cash-coin fa-2x opacity-75" aria-hidden="true"></i>
+                        </div>
+                        <h3 class="card-title h2 mb-1" id="total-amount">{{ total_amount }} ₽</h3>
+                        <p class="card-text mb-0 opacity-90">Общая сумма</p>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card text-center">
-                    <div class="card-body">
-                        <h5 class="card-title text-info">{{ documents|length }}</h5>
-                        <p class="card-text text-muted">На этой странице</p>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card h-100 shadow-sm border-0 bg-info text-white">
+                    <div class="card-body text-center">
+                        <div class="d-flex justify-content-center align-items-center mb-3">
+                            <i class="bi bi-list-check fa-2x opacity-75" aria-hidden="true"></i>
+                        </div>
+                        <h3 class="card-title h2 mb-1" id="page-docs">{{ documents|length }}</h3>
+                        <p class="card-text mb-0 opacity-90">На этой странице</p>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card text-center">
-                    <div class="card-body">
-                        <h5 class="card-title text-warning">
-                            <i class="bi bi-clock"></i>
-                        </h5>
-                        <p class="card-text text-muted">Последние обновления</p>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card h-100 shadow-sm border-0 bg-warning text-dark">
+                    <div class="card-body text-center">
+                        <div class="d-flex justify-content-center align-items-center mb-3">
+                            <i class="bi bi-clock-history fa-2x opacity-75" aria-hidden="true"></i>
+                        </div>
+                        <h3 class="card-title h2 mb-1" id="recent-updates">
+                            <span class="visually-hidden">Последние обновления</span>
+                        </h3>
+                        <p class="card-text mb-0 opacity-90">Последние обновления</p>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
         <!-- Documents Table -->
-        <div class="card">
-            <div class="card-header">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-light border-0">
                 <div class="row align-items-center">
                     <div class="col">
-                        <h5 class="mb-0">Список документов <span id="resultsCount" class="badge bg-secondary">{{ documents|length }}</span></h5>
+                        <h5 class="mb-0 d-flex align-items-center">
+                            <i class="bi bi-table me-2 text-primary" aria-hidden="true"></i>
+                            Список документов
+                            <span id="resultsCount" class="badge bg-primary ms-2">{{ documents|length }}</span>
+                        </h5>
                     </div>
                     <div class="col-auto">
                         <div class="input-group">
-                            <input type="text" class="form-control" id="searchInput" placeholder="Поиск по ФИО, адресу, лицевому счету...">
-                            <button class="btn btn-outline-secondary" type="button" id="searchBtn">
-                                <i class="bi bi-search"></i>
+                            <span class="input-group-text bg-white border-end-0">
+                                <i class="bi bi-search text-muted" aria-hidden="true"></i>
+                            </span>
+                            <input type="text" class="form-control border-start-0" id="searchInput"
+                                   placeholder="Поиск по ФИО, адресу, лицевому счету..."
+                                   aria-label="Поиск документов">
+                            <button class="btn btn-outline-primary" type="button" id="searchBtn"
+                                    aria-label="Выполнить поиск">
+                                <i class="bi bi-search" aria-hidden="true"></i>
                             </button>
                         </div>
                     </div>
@@ -75,73 +103,133 @@
                 {% if documents %}
                     <div class="table-responsive">
                         <table class="table table-hover mb-0 table-sortable">
-                            <thead>
+                            <thead class="table-light">
                                 <tr>
-                                    <th data-sort="account_number" class="table-sortable">
-                                        Лицевой счет <i class="bi bi-arrow-down-up"></i>
+                                    <th data-sort="account_number" class="table-sortable py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-credit-card me-2 text-muted" aria-hidden="true"></i>
+                                            Лицевой счет
+                                            <i class="bi bi-arrow-down-up ms-2 text-muted" aria-hidden="true"></i>
+                                        </div>
                                     </th>
-                                    <th data-sort="full_name" class="table-sortable">
-                                        ФИО <i class="bi bi-arrow-down-up"></i>
+                                    <th data-sort="full_name" class="table-sortable py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-person me-2 text-muted" aria-hidden="true"></i>
+                                            ФИО
+                                            <i class="bi bi-arrow-down-up ms-2 text-muted" aria-hidden="true"></i>
+                                        </div>
                                     </th>
-                                    <th data-sort="payment_period" class="table-sortable">
-                                        Период <i class="bi bi-arrow-down-up"></i>
+                                    <th data-sort="payment_period" class="table-sortable py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-calendar me-2 text-muted" aria-hidden="true"></i>
+                                            Период
+                                            <i class="bi bi-arrow-down-up ms-2 text-muted" aria-hidden="true"></i>
+                                        </div>
                                     </th>
-                                    <th data-sort="due_date" class="table-sortable">
-                                        Срок оплаты <i class="bi bi-arrow-down-up"></i>
+                                    <th data-sort="due_date" class="table-sortable py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-clock me-2 text-muted" aria-hidden="true"></i>
+                                            Срок оплаты
+                                            <i class="bi bi-arrow-down-up ms-2 text-muted" aria-hidden="true"></i>
+                                        </div>
                                     </th>
-                                    <th data-sort="total_with_insurance" class="table-sortable">
-                                        Сумма с учетом страхования <i class="bi bi-arrow-down-up"></i>
+                                    <th data-sort="total_with_insurance" class="table-sortable py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-cash-coin me-2 text-muted" aria-hidden="true"></i>
+                                            Сумма с учетом страхования
+                                            <i class="bi bi-arrow-down-up ms-2 text-muted" aria-hidden="true"></i>
+                                        </div>
                                     </th>
-                                    <th>Услуг</th>
-                                    <th data-sort="created_at" class="table-sortable">
-                                        Дата загрузки <i class="bi bi-arrow-down-up"></i>
+                                    <th class="py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-list-ul me-2 text-muted" aria-hidden="true"></i>
+                                            Услуг
+                                        </div>
                                     </th>
-                                    <th>Действия</th>
+                                    <th data-sort="created_at" class="table-sortable py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-calendar-plus me-2 text-muted" aria-hidden="true"></i>
+                                            Дата загрузки
+                                            <i class="bi bi-arrow-down-up ms-2 text-muted" aria-hidden="true"></i>
+                                        </div>
+                                    </th>
+                                    <th class="py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-gear me-2 text-muted" aria-hidden="true"></i>
+                                            Действия
+                                        </div>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for document in documents %}
                                 <tr class="document-row">
-                                    <td data-account_number="{{ document.account_number }}">
-                                        <strong>{{ document.account_number }}</strong>
+                                    <td data-account_number="{{ document.account_number }}" class="py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-credit-card me-2 text-muted" aria-hidden="true"></i>
+                                            <strong class="text-primary">{{ document.account_number }}</strong>
+                                        </div>
                                     </td>
-                                    <td data-full_name="{{ document.full_name }}">{{ document.full_name }}</td>
-                                    <td data-payment_period="{{ document.payment_period }}">
-                                        <span class="badge bg-secondary">{{ document.payment_period }}</span>
+                                    <td data-full_name="{{ document.full_name }}" class="py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-person me-2 text-muted" aria-hidden="true"></i>
+                                            <span class="fw-medium">{{ document.full_name }}</span>
+                                        </div>
                                     </td>
-                                    <td data-due_date="{{ document.due_date|date:'Y-m-d' }}">
+                                    <td data-payment_period="{{ document.payment_period }}" class="py-3">
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis px-3 py-2">
+                                            {{ document.payment_period }}
+                                        </span>
+                                    </td>
+                                    <td data-due_date="{{ document.due_date|date:'Y-m-d' }}" class="py-3">
                                         {% if document.due_date %}
-                                            <span class="text-{% if document.due_date < today %}danger{% else %}success{% endif %}">
-                                                {{ document.due_date|date:"d.m.Y" }}
-                                            </span>
+                                            <div class="d-flex align-items-center">
+                                                <i class="bi bi-{% if document.due_date < today %}exclamation-triangle text-danger{% else %}check-circle text-success{% endif %} me-2" aria-hidden="true"></i>
+                                                <span class="text-{% if document.due_date < today %}danger{% else %}success{% endif %} fw-medium">
+                                                    {{ document.due_date|date:"d.m.Y" }}
+                                                </span>
+                                            </div>
                                         {% else %}
                                             <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
-                                    <td data-total_with_insurance="{{ document.total_with_insurance }}">
-                                        <strong class="text-success">{{ document.total_with_insurance|floatformat:2 }} ₽</strong>
+                                    <td data-total_with_insurance="{{ document.total_with_insurance }}" class="py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-cash-coin me-2 text-success" aria-hidden="true"></i>
+                                            <strong class="text-success fs-6">{{ document.total_with_insurance }} ₽</strong>
+                                        </div>
                                     </td>
-                                    <td>
-                                        <span class="badge bg-info">{{ document.service_charges.count }}</span>
+                                    <td class="py-3">
+                                        <span class="badge bg-info-subtle text-info-emphasis px-3 py-2">
+                                            {{ document.service_charges.count }}
+                                        </span>
                                     </td>
-                                    <td data-created_at="{{ document.created_at|date:'Y-m-d' }}">
-                                        <small class="text-muted">{{ document.created_at|date:"d.m.Y H:i" }}</small>
+                                    <td data-created_at="{{ document.created_at|date:'Y-m-d' }}" class="py-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-calendar-plus me-2 text-muted" aria-hidden="true"></i>
+                                            <small class="text-muted">{{ document.created_at|date:"d.m.Y H:i" }}</small>
+                                        </div>
                                     </td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm" role="group">
+                                    <td class="py-3">
+                                        <div class="btn-group btn-group-sm">
                                             <a href="{% url 'epd_parser:document_detail' document.pk %}"
-                                               class="btn btn-outline-primary" title="Просмотр">
-                                                <i class="bi bi-eye"></i>
+                                               class="btn btn-outline-primary btn-sm"
+                                               title="Просмотр документа"
+                                               aria-label="Просмотр документа {{ document.account_number }}">
+                                                <i class="bi bi-eye" aria-hidden="true"></i>
                                             </a>
                                             <a href="{% url 'epd_parser:edit' document.pk %}"
-                                               class="btn btn-outline-warning" title="Редактировать">
-                                                <i class="bi bi-pencil"></i>
+                                               class="btn btn-outline-warning btn-sm"
+                                               title="Редактировать документ"
+                                               aria-label="Редактировать документ {{ document.account_number }}">
+                                                <i class="bi bi-pencil" aria-hidden="true"></i>
                                             </a>
-
-                                                                                         <button type="button" class="btn btn-outline-danger btn-delete"
-                                                     onclick="confirmDelete({{ document.pk }})" title="Удалить">
-                                                 <i class="bi bi-trash"></i>
-                                             </button>
+                                            <button type="button" class="btn btn-outline-danger btn-sm btn-delete"
+                                                    onclick="confirmDelete({{ document.pk }})"
+                                                    title="Удалить документ"
+                                                    aria-label="Удалить документ {{ document.account_number }}">
+                                                <i class="bi bi-trash" aria-hidden="true"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -151,11 +239,14 @@
                     </div>
                 {% else %}
                     <div class="text-center py-5">
-                        <i class="bi bi-inbox display-1 text-muted"></i>
-                        <h4 class="mt-3 text-muted">Документы не найдены</h4>
-                        <p class="text-muted">Загрузите первый документ ЕПД для начала работы</p>
-                        <a href="{% url 'epd_parser:upload' %}" class="btn btn-primary">
-                            <i class="bi bi-upload"></i> Загрузить документ
+                        <div class="mb-4">
+                            <i class="bi bi-inbox display-1 text-muted opacity-50" aria-hidden="true"></i>
+                        </div>
+                        <h4 class="mb-3 text-muted">Документы не найдены</h4>
+                        <p class="text-muted mb-4">Загрузите первый документ ЕПД для начала работы</p>
+                        <a href="{% url 'epd_parser:upload' %}" class="btn btn-primary btn-lg shadow-sm"
+                           aria-label="Загрузить первый документ ЕПД">
+                            <i class="bi bi-upload me-2" aria-hidden="true"></i> Загрузить документ
                         </a>
                     </div>
                 {% endif %}
@@ -164,70 +255,82 @@
 
         <!-- Pagination -->
         {% if is_paginated %}
-        <nav aria-label="Навигация по страницам" class="mt-4">
-            <ul class="pagination justify-content-center">
-                {% if page_obj.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page=1">
-                            <i class="bi bi-chevron-double-left"></i>
-                        </a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">
-                            <i class="bi bi-chevron-left"></i>
-                        </a>
-                    </li>
-                {% endif %}
-
-                {% for num in page_obj.paginator.page_range %}
-                    {% if page_obj.number == num %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ num }}</span>
-                        </li>
-                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+        <nav aria-label="Навигация по страницам" class="mt-5">
+            <div class="d-flex justify-content-center">
+                <ul class="pagination pagination-lg">
+                    {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                            <a class="page-link" href="?page=1" aria-label="Первая страница">
+                                <i class="bi bi-chevron-double-left" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}" aria-label="Предыдущая страница">
+                                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                            </a>
                         </li>
                     {% endif %}
-                {% endfor %}
 
-                {% if page_obj.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">
-                            <i class="bi bi-chevron-right"></i>
-                        </a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">
-                            <i class="bi bi-chevron-double-right"></i>
-                        </a>
-                    </li>
-                {% endif %}
-            </ul>
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if page_obj.number == num %}
+                            <li class="page-item active">
+                                <span class="page-link bg-primary border-primary">{{ num }}</span>
+                            </li>
+                        {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}" aria-label="Следующая страница">
+                                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}" aria-label="Последняя страница">
+                                <i class="bi bi-chevron-double-right" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
         </nav>
         {% endif %}
     </div>
 </div>
 
 <!-- Delete Confirmation Modal -->
-<div class="modal fade" id="deleteModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Подтверждение удаления</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+            <div class="modal-header border-0">
+                <h5 class="modal-title d-flex align-items-center" id="deleteModalLabel">
+                    <i class="bi bi-exclamation-triangle text-warning me-2" aria-hidden="true"></i>
+                    Подтверждение удаления
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
             </div>
             <div class="modal-body">
-                <p>Вы уверены, что хотите удалить этот документ ЕПД?</p>
-                <p class="text-danger"><small>Это действие нельзя отменить.</small></p>
+                <div class="alert alert-warning d-flex align-items-center" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2" aria-hidden="true"></i>
+                    <div>
+                        <strong>Внимание!</strong> Вы уверены, что хотите удалить этот документ ЕПД?
+                    </div>
+                </div>
+                <p class="text-muted mb-0">Это действие нельзя отменить. Все данные документа будут безвозвратно удалены.</p>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                                        <form id="deleteForm" method="post" class="form-inline">
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1" aria-hidden="true"></i> Отмена
+                </button>
+                <form id="deleteForm" method="post" class="form-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger" id="deleteConfirmBtn">
-                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                        Удалить
+                        <span class="spinner-border spinner-border-sm d-none" aria-label="Загрузка"></span>
+                        <i class="bi bi-trash me-1" aria-hidden="true"></i> Удалить
                     </button>
                 </form>
             </div>

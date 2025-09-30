@@ -97,21 +97,21 @@
                     <div class="col-md-3 text-center">
                         <div class="border-end">
                             <i class="bi bi-cash-coin display-6 text-primary mb-2"></i>
-                            <h4 class="text-primary">{{ document.total_without_insurance|floatformat:2 }} ₽</h4>
+                            <h4 class="text-primary">{{ document.total_without_insurance }} ₽</h4>
                             <p class="text-muted mb-0">Без страхования</p>
                         </div>
                     </div>
                     <div class="col-md-3 text-center">
                         <div class="border-end">
                             <i class="bi bi-cash-coin display-6 text-success mb-2"></i>
-                            <h4 class="text-success">{{ document.total_with_insurance|floatformat:2 }} ₽</h4>
+                            <h4 class="text-success">{{ document.total_with_insurance }} ₽</h4>
                             <p class="text-muted mb-0">С учетом страхования</p>
                         </div>
                     </div>
                     <div class="col-md-3 text-center">
                         <div class="border-end">
                             <i class="bi bi-shield-check display-6 text-info mb-2"></i>
-                            <h4 class="text-info">{{ document.insurance_amount|floatformat:2 }} ₽</h4>
+                            <h4 class="text-info">{{ document.insurance_amount }} ₽</h4>
                             <p class="text-muted mb-0">Страхование</p>
                         </div>
                     </div>
@@ -157,7 +157,7 @@
                                     </td>
                                     <td class="text-center">
                                         {% if charge.volume %}
-                                            {{ charge.volume|floatformat:4 }}
+                                            {{ charge.volume }}
                                         {% else %}
                                             <span>0,00</span>
                                         {% endif %}
@@ -171,30 +171,30 @@
                                     </td>
                                     <td class="text-center">
                                         {% if charge.tariff %}
-                                            {{ charge.tariff|floatformat:4 }} ₽
+                                            {{ charge.tariff }} ₽
                                         {% else %}
                                             <span>0,00</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
-                                        <span class="text-primary">{{ charge.amount|floatformat:2 }} ₽</span>
+                                        <span class="text-primary">{{ charge.amount }} ₽</span>
                                     </td>
                                     <td class="text-end">
                                         {% if charge.debt > 0 %}
-                                            <span class="text-danger">{{ charge.debt|floatformat:2 }} ₽</span>
+                                            <span class="text-danger">{{ charge.debt }} ₽</span>
                                         {% else %}
                                             <span>0,00</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
                                         {% if charge.paid > 0 %}
-                                            <span class="text-success">{{ charge.paid|floatformat:2 }} ₽</span>
+                                            <span class="text-success">{{ charge.paid }} ₽</span>
                                         {% else %}
                                             <span>0,00</span>
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
-                                        <strong class="text-dark">{{ charge.total|floatformat:2 }} ₽</strong>
+                                        <strong class="text-dark">{{ charge.total }} ₽</strong>
                                     </td>
                                 </tr>
                                 {% endfor %}

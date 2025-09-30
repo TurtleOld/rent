@@ -7,154 +7,179 @@
     <!-- Контент для авторизованных пользователей -->
     <div class="row">
         <div class="col-12">
-            <h1 class="mb-4">
-                <i class="bi bi-house-door"></i> Добро пожаловать в EPD Parser
-            </h1>
+            <header>
+                <h1 class="mb-4" id="main-heading">
+                    <i class="bi bi-house-door" aria-hidden="true"></i> Добро пожаловать в EPD Parser
+                </h1>
+            </header>
         </div>
     </div>
 
     <!-- Статистика -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white">
+    <section class="row mb-4" aria-labelledby="stats-heading">
+        <div class="col-12">
+            <h2 id="stats-heading" class="visually-hidden">Статистика системы</h2>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card bg-primary text-white h-100" aria-labelledby="total-docs">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h4 class="card-title">{{ total_documents }}</h4>
-                            <p class="card-text">Всего документов</p>
+                            <h3 class="card-title h2 mb-1" id="total-docs">{{ total_documents }}</h3>
+                            <p class="card-text mb-0">Всего документов</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bi bi-file-earmark-text fa-2x"></i>
+                            <i class="bi bi-file-earmark-text fa-2x" aria-hidden="true"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
+        <div class="col-md-3 mb-3">
+            <div class="card bg-success text-white h-100" aria-labelledby="total-amount">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h4 class="card-title">{{ total_amount|floatformat:2 }} ₽</h4>
-                            <p class="card-text">Общая сумма</p>
+                            <h3 class="card-title h2 mb-1" id="total-amount">{{ total_amount }} ₽</h3>
+                            <p class="card-text mb-0">Общая сумма</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bi bi-currency-ruble fa-2x"></i>
+                            <i class="bi bi-currency-ruble fa-2x" aria-hidden="true"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
+        <div class="col-md-3 mb-3">
+            <div class="card bg-info text-white h-100" aria-labelledby="recent-docs">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h4 class="card-title">{{ recent_documents }}</h4>
-                            <p class="card-text">За неделю</p>
+                            <h3 class="card-title h2 mb-1" id="recent-docs">{{ recent_documents }}</h3>
+                            <p class="card-text mb-0">За неделю</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bi bi-calendar-week fa-2x"></i>
+                            <i class="bi bi-calendar-week fa-2x" aria-hidden="true"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark">
+        <div class="col-md-3 mb-3">
+            <div class="card bg-warning text-dark h-100" aria-labelledby="unique-accounts">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h4 class="card-title">{{ unique_accounts }}</h4>
-                            <p class="card-text">Уникальных счетов</p>
+                            <h3 class="card-title h2 mb-1" id="unique-accounts">{{ unique_accounts }}</h3>
+                            <p class="card-text mb-0">Уникальных счетов</p>
                         </div>
                         <div class="align-self-center">
-                            <i class="bi bi-person-badge fa-2x"></i>
+                            <i class="bi bi-person-badge fa-2x" aria-hidden="true"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Быстрые действия -->
-    <div class="row">
+    <section class="row" aria-labelledby="quick-actions-heading">
         <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-lightning"></i> Быстрые действия
-                    </h5>
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h2 class="card-title mb-0 h5" id="quick-actions-heading">
+                        <i class="bi bi-lightning" aria-hidden="true"></i> Быстрые действия
+                    </h2>
                 </div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <a href="{% url 'epd_parser:upload' %}" class="btn btn-primary btn-lg w-100">
-                                <i class="bi bi-upload me-2"></i>Загрузить документ
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <a href="{% url 'epd_parser:upload' %}" class="btn btn-primary btn-lg w-100 h-100 d-flex flex-column justify-content-center align-items-center text-decoration-none"
+                               aria-label="Загрузить новый документ ЕПД">
+                                <i class="bi bi-upload mb-2" aria-hidden="true"></i>
+                                <span>Загрузить документ</span>
                             </a>
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <a href="{% url 'epd_parser:document_list' %}" class="btn btn-success btn-lg w-100">
-                                <i class="bi bi-list-ul me-2"></i>Просмотр документов
+                        <div class="col-md-4">
+                            <a href="{% url 'epd_parser:document_list' %}" class="btn btn-success btn-lg w-100 h-100 d-flex flex-column justify-content-center align-items-center text-decoration-none"
+                               aria-label="Просмотр списка всех документов">
+                                <i class="bi bi-list-ul mb-2" aria-hidden="true"></i>
+                                <span>Просмотр документов</span>
                             </a>
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <a href="{% url 'epd_parser:search' %}" class="btn btn-info btn-lg w-100">
-                                <i class="bi bi-search me-2"></i>Поиск документов
+                        <div class="col-md-4">
+                            <a href="{% url 'epd_parser:search' %}" class="btn btn-info btn-lg w-100 h-100 d-flex flex-column justify-content-center align-items-center text-decoration-none"
+                               aria-label="Поиск документов по различным критериям">
+                                <i class="bi bi-search mb-2" aria-hidden="true"></i>
+                                <span>Поиск документов</span>
                             </a>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
 {% else %}
     <!-- Контент для неавторизованных пользователей -->
     <div class="row justify-content-center">
         <div class="col-md-8 text-center">
-            <div class="card shadow-lg">
+            <div class="card shadow-lg border-0">
                 <div class="card-body p-5">
-                    <h1 class="display-4 mb-4">
-                        <i class="bi bi-file-earmark-text text-primary"></i>
-                        EPD Parser
-                    </h1>
-                    <p class="lead mb-4">
-                        Система управления и анализа документов Единого платежного документа (ЕПД)
-                    </p>
+                    <header>
+                        <h1 class="display-4 mb-4" id="welcome-heading">
+                            <i class="bi bi-file-earmark-text text-primary" aria-hidden="true"></i>
+                            EPD Parser
+                        </h1>
+                        <p class="lead mb-4">
+                            Система управления и анализа документов Единого платежного документа (ЕПД)
+                        </p>
+                    </header>
 
-                    <div class="row mb-5">
-                        <div class="col-md-4">
-                            <div class="text-center mb-3">
-                                <i class="bi bi-upload text-primary fa-3x mb-3"></i>
-                                <h5>Загрузка документов</h5>
+                    <section class="row mb-5" aria-labelledby="features-heading">
+                        <div class="col-12">
+                            <h2 id="features-heading" class="visually-hidden">Возможности системы</h2>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="text-center h-100">
+                                <div class="feature-icon mb-3">
+                                    <i class="bi bi-upload text-primary fa-3x" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="h5">Загрузка документов</h3>
                                 <p class="text-muted">Загружайте PDF файлы ЕПД для автоматического парсинга</p>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <div class="text-center mb-3">
-                                <i class="bi bi-graph-up text-success fa-3x mb-3"></i>
-                                <h5>Анализ данных</h5>
+                        <div class="col-md-4 mb-4">
+                            <div class="text-center h-100">
+                                <div class="feature-icon mb-3">
+                                    <i class="bi bi-graph-up text-success fa-3x" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="h5">Анализ данных</h3>
                                 <p class="text-muted">Получайте детальную статистику и аналитику по документам</p>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <div class="text-center mb-3">
-                                <i class="bi bi-search text-info fa-3x mb-3"></i>
-                                <h5>Поиск и фильтрация</h5>
+                        <div class="col-md-4 mb-4">
+                            <div class="text-center h-100">
+                                <div class="feature-icon mb-3">
+                                    <i class="bi bi-search text-info fa-3x" aria-hidden="true"></i>
+                                </div>
+                                <h3 class="h5">Поиск и фильтрация</h3>
                                 <p class="text-muted">Быстрый поиск документов по различным критериям</p>
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <div class="alert alert-info">
-                        <h5><i class="bi bi-info-circle me-2"></i>Для доступа к системе необходимо авторизоваться</h5>
+                    <div class="alert alert-info" role="alert">
+                        <h5 class="alert-heading">
+                            <i class="bi bi-info-circle me-2" aria-hidden="true"></i>Для доступа к системе необходимо авторизоваться
+                        </h5>
                         <p class="mb-0">Войдите в систему для начала работы. Для получения доступа обратитесь к администратору.</p>
                     </div>
 
                     <div class="d-grid gap-3 d-md-flex justify-content-md-center">
-                        <a href="{% url 'users:login' %}" class="btn btn-primary btn-lg">
-                            <i class="bi bi-box-arrow-in-right me-2"></i>Войти в систему
+                        <a href="{% url 'users:login' %}" class="btn btn-primary btn-lg"
+                           aria-label="Войти в систему для доступа к функциям">
+                            <i class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></i>Войти в систему
                         </a>
                     </div>
                 </div>

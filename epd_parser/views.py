@@ -10,7 +10,7 @@ from typing import Any
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import models
-from django.db.models import Avg, Count, Sum
+from django.db.models import Avg, Count, Max, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
@@ -27,11 +27,22 @@ logger = logging.getLogger(__name__)
 
 
 class HomeView(TemplateView):
-    """View for the home page - shows different content for authenticated and anonymous users."""
+    """View for the home page.
+
+    Shows different content for authenticated and anonymous users.
+    """
 
     template_name = "epd_parser/home.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        """Get context data for the home page.
+
+        Args:
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict[str, Any]: Context data with statistics for authenticated users.
+        """
         context = super().get_context_data(**kwargs)
 
         if self.request.user.is_authenticated:
@@ -60,11 +71,24 @@ class EpdDocumentListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self) -> Any:
+        """Get queryset for EPD documents.
+
+        Returns:
+            Any: Queryset with prefetched service charges, ordered by creation date.
+        """
         return EpdDocument.objects.prefetch_related("service_charges").order_by(
             "-created_at"
         )
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        """Get context data for the document list.
+
+        Args:
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict[str, Any]: Context data with document statistics.
+        """
         context = super().get_context_data(**kwargs)
 
         stats = EpdDocument.objects.aggregate(
@@ -84,11 +108,24 @@ class EpdDocumentDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "document"
 
     def get_queryset(self) -> Any:
+        """Get queryset for EPD document details.
+
+        Returns:
+            Any: Queryset with prefetched related objects.
+        """
         return EpdDocument.objects.prefetch_related(
             "service_charges", "meter_readings", "recalculations"
         )
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        """Get context data for document details.
+
+        Args:
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict[str, Any]: Context data with ordered related objects.
+        """
         context = super().get_context_data(**kwargs)
         document = self.get_object()
         context["service_charges"] = document.service_charges.all().order_by("order")
@@ -104,11 +141,27 @@ class EpdDocumentCreateView(LoginRequiredMixin, FormView):
     form_class = PdfUploadForm
 
     def form_valid(self, form: PdfUploadForm) -> HttpResponse:
+        """Handle valid form submission.
+
+        Args:
+            form: The validated PDF upload form.
+
+        Returns:
+            HttpResponse: Redirect to document detail page.
+        """
         parsed_data = form.parsed_data
         document = save_epd_document_with_related_data(parsed_data)
         return redirect("epd_parser:document_detail", pk=document.pk)
 
     def form_invalid(self, form: PdfUploadForm) -> HttpResponse:
+        """Handle invalid form submission.
+
+        Args:
+            form: The invalid PDF upload form.
+
+        Returns:
+            HttpResponse: Render form with errors.
+        """
         logger.error("form_invalid method called")
         logger.error(f"Form is invalid. Errors: {form.errors}")
         error_message = _("Please correct the errors below.")
@@ -124,17 +177,32 @@ class EpdDocumentUpdateView(LoginRequiredMixin, FormView):
     context_object_name = "document"
 
     def get_object(self) -> EpdDocument:
-        """Get the document to edit."""
+        """Get the document to edit.
+
+        Returns:
+            EpdDocument: The document to be edited.
+        """
         return get_object_or_404(EpdDocument, pk=self.kwargs["pk"])
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        """Add document to context."""
+        """Add document to context.
+
+        Args:
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict[str, Any]: Context data with document.
+        """
         context = super().get_context_data(**kwargs)
         context["document"] = self.get_object()
         return context
 
     def get_initial(self) -> dict[str, Any]:
-        """Pre-fill form with current document data."""
+        """Pre-fill form with current document data.
+
+        Returns:
+            dict[str, Any]: Initial form data from document.
+        """
         document = self.get_object()
         return {
             "full_name": document.full_name,
@@ -147,15 +215,25 @@ class EpdDocumentUpdateView(LoginRequiredMixin, FormView):
         }
 
     def get_success_url(self) -> str:
-        """Return URL to redirect to after successful update."""
+        """Return URL to redirect to after successful update.
+
+        Returns:
+            str: URL to document detail page.
+        """
         document = self.get_object()
         return f"/{document.pk}/"
 
     def form_valid(self, form: EpdDocumentForm) -> HttpResponse:
-        """Handle valid form submission."""
+        """Handle valid form submission.
+
+        Args:
+            form: The validated document form.
+
+        Returns:
+            HttpResponse: Redirect to document detail page.
+        """
         document = self.get_object()
 
-        # Update document fields manually
         document.full_name = form.cleaned_data["full_name"]
         document.address = form.cleaned_data["address"]
         document.account_number = form.cleaned_data["account_number"]
@@ -169,7 +247,14 @@ class EpdDocumentUpdateView(LoginRequiredMixin, FormView):
         return redirect("epd_parser:document_detail", pk=document.pk)
 
     def form_invalid(self, form: EpdDocumentForm) -> HttpResponse:
-        """Handle invalid form submission."""
+        """Handle invalid form submission.
+
+        Args:
+            form: The invalid document form.
+
+        Returns:
+            HttpResponse: Render form with errors.
+        """
         messages.error(self.request, _("Please correct the errors below."))
         return super().form_invalid(form)
 
@@ -183,7 +268,16 @@ class EpdDocumentDeleteView(LoginRequiredMixin, DeleteView):
     context_object_name = "document"
 
     def delete(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
-        """Handle document deletion."""
+        """Handle document deletion.
+
+        Args:
+            request: The HTTP request.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            HttpResponse: Redirect response after deletion.
+        """
         try:
             response = super().delete(request, *args, **kwargs)
             messages.success(request, _("EPD document successfully deleted!"))
@@ -202,7 +296,11 @@ class EpdDocumentSearchView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self) -> Any:
-        """Filter queryset based on search parameters."""
+        """Filter queryset based on search parameters.
+
+        Returns:
+            Any: Filtered queryset based on search criteria.
+        """
         queryset = EpdDocument.objects.all()
 
         query = self.request.GET.get("q", "").strip()
@@ -221,7 +319,14 @@ class EpdDocumentSearchView(LoginRequiredMixin, ListView):
         return queryset.prefetch_related("service_charges").order_by("-created_at")
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        """Add search parameters to context."""
+        """Add search parameters to context.
+
+        Args:
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict[str, Any]: Context data with search parameters.
+        """
         context = super().get_context_data(**kwargs)
         context["query"] = self.request.GET.get("q", "").strip()
         context["account_number"] = self.request.GET.get("account", "").strip()
@@ -234,7 +339,14 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
     template_name = "epd_parser/statistics.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        """Add statistics data to context."""
+        """Add statistics data to context.
+
+        Args:
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            dict[str, Any]: Context data with comprehensive statistics.
+        """
         context = super().get_context_data(**kwargs)
 
         days = int(self.request.GET.get("days", 30))
@@ -245,14 +357,14 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
 
         main_stats = EpdDocument.objects.aggregate(
             total_documents=Count("id"),
-            total_amount=Sum("total_with_insurance"),
-            avg_amount=Avg("total_with_insurance"),
+            total_amount=Sum("total_without_insurance"),
+            avg_amount=Avg("total_without_insurance"),
             total_insurance=Sum("insurance_amount"),
             unique_accounts=Count("account_number", distinct=True),
         )
 
         recent_stats = recent_documents.aggregate(
-            recent_documents=Count("id"), recent_amount=Sum("total_with_insurance")
+            recent_documents=Count("id"), recent_amount=Sum("total_without_insurance")
         )
 
         service_stats = ServiceCharge.objects.aggregate(
@@ -335,6 +447,9 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
         timeline_data = self._get_timeline_data(days)
         account_charts_data = self._get_account_charts_data()
 
+        accounts_data = self._get_accounts_data()
+        accounts_stats = self._get_accounts_statistics()
+
         context.update(
             {
                 "stats": stats,
@@ -342,6 +457,8 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
                 "services_by_accounts": services_by_accounts,
                 "timeline_data": timeline_data,
                 "account_charts_data": account_charts_data,
+                "accounts_data": accounts_data,
+                "accounts_stats": accounts_stats,
                 "days": days,
             }
         )
@@ -349,10 +466,16 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
         return context
 
     def _get_timeline_data(self, days: int) -> dict[str, Any]:
-        """Get timeline data for charts."""
+        """Get timeline data for charts.
+
+        Args:
+            days: Number of days to include in timeline.
+
+        Returns:
+            dict[str, Any]: Timeline data with dates, counts, and amounts.
+        """
         from django.db.models.functions import TruncDate
 
-        # Get daily document counts for the last N days
         end_date = timezone.now()
         start_date = end_date - timedelta(days=days)
 
@@ -364,7 +487,6 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
             .order_by("date")
         )
 
-        # Get daily amounts
         daily_amounts = (
             EpdDocument.objects.filter(created_at__gte=start_date)
             .annotate(date=TruncDate("created_at"))
@@ -373,7 +495,6 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
             .order_by("date")
         )
 
-        # Create complete timeline with all dates
         dates = []
         counts = []
         amounts = []
@@ -382,13 +503,11 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
         while current_date <= end_date.date():
             dates.append(current_date.strftime("%d.%m"))
 
-            # Find count for this date
             count_data = next(
                 (item for item in daily_counts if item["date"] == current_date), None
             )
             counts.append(count_data["count"] if count_data else 0)
 
-            # Find amount for this date
             amount_data = next(
                 (item for item in daily_amounts if item["date"] == current_date), None
             )
@@ -399,7 +518,11 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
         return {"dates": dates, "counts": counts, "amounts": amounts}
 
     def _get_account_charts_data(self) -> list[dict[str, Any]]:
-        """Get data for individual account charts."""
+        """Get data for individual account charts.
+
+        Returns:
+            list[dict[str, Any]]: Account charts data with services and percentages.
+        """
         account_services_data = (
             ServiceCharge.objects.select_related("document")
             .values("document__account_number", "document__full_name", "service_name")
@@ -443,12 +566,94 @@ class EpdStatisticsView(LoginRequiredMixin, TemplateView):
 
         return account_charts
 
+    def _get_accounts_data(self) -> list[dict[str, Any]]:
+        """Get accounts data for dropdown and individual account statistics.
+
+        Returns:
+            list[dict[str, Any]]: Accounts data with statistics and top services.
+        """
+        accounts_data = (
+            EpdDocument.objects.values("account_number", "full_name")
+            .annotate(
+                total_amount=Sum("total_without_insurance", distinct=True),
+                services_count=Count("service_charges", distinct=True),
+                documents_count=Count("id", distinct=True),
+            )
+            .order_by("-total_amount")
+        )
+
+        accounts_list = []
+        for account in accounts_data:
+            account_number = account["account_number"]
+
+            top_services = (
+                ServiceCharge.objects.filter(document__account_number=account_number)
+                .values("service_name")
+                .annotate(amount=Sum("total"))
+                .order_by("-amount")[:5]
+            )
+
+            account_data = {
+                "account_number": account_number,
+                "full_name": account["full_name"],
+                "total_amount": float(account["total_amount"]),
+                "services_count": account["services_count"],
+                "documents_count": account["documents_count"],
+                "top_services": [
+                    {
+                        "service_name": service["service_name"],
+                        "amount": float(service["amount"]),
+                    }
+                    for service in top_services
+                ],
+            }
+            accounts_list.append(account_data)
+
+        return accounts_list
+
+    def _get_accounts_statistics(self) -> dict[str, Any]:
+        """Get statistics for accounts section.
+
+        Returns:
+            dict[str, Any]: Account statistics including totals and averages.
+        """
+        unique_accounts = EpdDocument.objects.values("account_number").distinct()
+        total_accounts = unique_accounts.count()
+
+        accounts_data = (
+            EpdDocument.objects.values("account_number")
+            .annotate(account_total=Sum("total_without_insurance"))
+            .aggregate(
+                total_amount=Sum("account_total"),
+                top_amount=Max("account_total"),
+            )
+        )
+
+        total_services = ServiceCharge.objects.count()
+        avg_services = total_services / total_accounts if total_accounts > 0 else 0
+
+        return {
+            "total_accounts": total_accounts,
+            "total_amount": float(accounts_data["total_amount"] or Decimal("0.00")),
+            "avg_services": float(avg_services),
+            "top_amount": float(accounts_data["top_amount"] or Decimal("0.00")),
+        }
+
 
 class ParsePdfApiView(LoginRequiredMixin, View):
     """API view for parsing PDF files."""
 
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
-        """Handle PDF parsing API requests."""
+        """Handle PDF parsing API requests.
+
+        Args:
+            request: The HTTP request.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            JsonResponse: Response with parsed data or error message.
+        """
         try:
             if "pdf_file" not in request.FILES:
                 return JsonResponse(
@@ -457,26 +662,22 @@ class ParsePdfApiView(LoginRequiredMixin, View):
 
             pdf_file = request.FILES["pdf_file"]
 
-            # Validate file
             if not pdf_file.name.lower().endswith(".pdf"):
                 return JsonResponse(
                     {"success": False, "error": "File must be a PDF"}, status=400
                 )
 
-            # Save file temporarily and parse
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
                 for chunk in pdf_file.chunks():
                     temp_file.write(chunk)
                 temp_file_path = temp_file.name
 
             try:
-                # Parse the PDF
                 parsed_data = parse_epd_pdf(pdf_file)
 
                 return JsonResponse({"success": True, "data": parsed_data})
 
             finally:
-                # Clean up temporary file
                 os.unlink(temp_file_path)
 
         except Exception:
@@ -489,7 +690,16 @@ class StatisticsApiView(LoginRequiredMixin, View):
     """API view for exporting statistics data."""
 
     def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> JsonResponse:
-        """Return statistics data in JSON format."""
+        """Return statistics data in JSON format.
+
+        Args:
+            request: The HTTP request.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            JsonResponse: Response with statistics data or error message.
+        """
         try:
             days = int(request.GET.get("days", 30))
             start_date = timezone.now() - timedelta(days=days)
@@ -497,16 +707,26 @@ class StatisticsApiView(LoginRequiredMixin, View):
 
             recent_documents = EpdDocument.objects.filter(created_at__gte=start_date)
 
+            accounts_totals = (
+                EpdDocument.objects.values("account_number")
+                .annotate(account_total=Sum("total_without_insurance"))
+                .aggregate(
+                    total_amount=Sum("account_total"),
+                    avg_amount=Avg("account_total"),
+                )
+            )
+
             main_stats = EpdDocument.objects.aggregate(
                 total_documents=Count("id"),
-                total_amount=Sum("total_with_insurance"),
-                avg_amount=Avg("total_with_insurance"),
                 total_insurance=Sum("insurance_amount"),
                 unique_accounts=Count("account_number", distinct=True),
             )
 
+            main_stats.update(accounts_totals)
+
             recent_stats = recent_documents.aggregate(
-                recent_documents=Count("id"), recent_amount=Sum("total_with_insurance")
+                recent_documents=Count("id"),
+                recent_amount=Sum("total_without_insurance"),
             )
 
             service_stats = ServiceCharge.objects.aggregate(
@@ -548,19 +768,16 @@ class StatisticsApiView(LoginRequiredMixin, View):
                 "period_days": days,
             }
 
-            # Get top services
             top_services = (
                 ServiceCharge.objects.values("service_name")
                 .annotate(count=Count("id"), total_amount=Sum("total"))
                 .order_by("-total_amount")[:10]
             )
 
-            # Calculate total amount for percentage calculation
             total_service_amount = sum(
                 service["total_amount"] for service in top_services
             )
 
-            # Calculate average amount and percentage for each service
             services_data = []
             for service in top_services:
                 if service["count"] > 0:
@@ -568,7 +785,6 @@ class StatisticsApiView(LoginRequiredMixin, View):
                 else:
                     avg_amount = Decimal("0.00")
 
-                # Calculate percentage of total
                 if total_service_amount > 0:
                     percentage = (service["total_amount"] / total_service_amount) * 100
                 else:

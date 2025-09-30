@@ -56,38 +56,46 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- Skip link for accessibility -->
+    <a href="#main-content" class="skip-link">Перейти к основному содержимому</a>
+
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary" role="navigation" aria-label="Основная навигация">
         <div class="container">
-            <a class="navbar-brand" href="{% url 'epd_parser:home' %}">
-                <i class="bi bi-file-earmark-text"></i> EPD Parser
+            <a class="navbar-brand" href="{% url 'epd_parser:home' %}" aria-label="EPD Parser - Главная страница">
+                <i class="bi bi-file-earmark-text" aria-hidden="true"></i> EPD Parser
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Переключить навигацию">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <div class="collapse navbar-collapse" id="navbarNav">
+            <div class="collapse navbar-collapse" id="navbarNav" role="menubar">
                 {% if user.is_authenticated %}
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'epd_parser:document_list' %}">
-                            <i class="bi bi-list-ul"></i> Документы
+                        <a class="nav-link" href="{% url 'epd_parser:document_list' %}"
+                           aria-label="Просмотр списка документов">
+                            <i class="bi bi-list-ul" aria-hidden="true"></i> Документы
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'epd_parser:upload' %}">
-                            <i class="bi bi-upload"></i> Загрузить
+                        <a class="nav-link" href="{% url 'epd_parser:upload' %}"
+                           aria-label="Загрузить новый документ">
+                            <i class="bi bi-upload" aria-hidden="true"></i> Загрузить
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'epd_parser:search' %}">
-                            <i class="bi bi-search"></i> Поиск
+                        <a class="nav-link" href="{% url 'epd_parser:search' %}"
+                           aria-label="Поиск документов">
+                            <i class="bi bi-search" aria-hidden="true"></i> Поиск
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'epd_parser:statistics' %}">
-                            <i class="bi bi-graph-up"></i> Статистика
+                        <a class="nav-link" href="{% url 'epd_parser:statistics' %}"
+                           aria-label="Просмотр статистики">
+                            <i class="bi bi-graph-up" aria-hidden="true"></i> Статистика
                         </a>
                     </li>
                 </ul>
@@ -96,35 +104,31 @@
                 <ul class="navbar-nav">
                     {% if user.is_authenticated %}
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-person-circle"></i> {{ user.username }}
+                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown"
+                               data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true"
+                               aria-label="Меню пользователя {{ user.username }}">
+                                <i class="bi bi-person-circle" aria-hidden="true"></i> {{ user.username }}
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end">
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                                 <li><a class="dropdown-item" href="{% url 'users:profile' %}">
-                                    <i class="bi bi-person"></i> Профиль
+                                    <i class="bi bi-person" aria-hidden="true"></i> Профиль
                                 </a></li>
                                 <li><a class="dropdown-item" href="{% url 'users:profile_edit' %}">
-                                    <i class="bi bi-pencil"></i> Редактировать профиль
+                                    <i class="bi bi-pencil" aria-hidden="true"></i> Редактировать профиль
                                 </a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'users:logout' %}">
-                                    <i class="bi bi-box-arrow-right"></i> Выйти
+                                    <i class="bi bi-box-arrow-right" aria-hidden="true"></i> Выйти
                                 </a></li>
                             </ul>
                         </li>
                     {% else %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'users:login' %}">
-                                <i class="bi bi-box-arrow-in-right"></i> Войти
+                            <a class="nav-link" href="{% url 'users:login' %}"
+                               aria-label="Войти в систему">
+                                <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Войти
                             </a>
                         </li>
-                    {% endif %}
-                    {% if user.is_authenticated and user.is_staff %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/" target="_blank">
-                            <i class="bi bi-gear"></i> Админка
-                        </a>
-                    </li>
                     {% endif %}
                 </ul>
             </div>
@@ -132,14 +136,16 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="container my-4">
+    <main id="main-content" class="container my-4" role="main" aria-label="Основной контент">
         <!-- Messages -->
         {% if messages %}
-            <div class="messages">
+            <div class="messages" role="alert" aria-live="polite" aria-atomic="true">
                 {% for message in messages %}
-                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert"
+                         aria-live="assertive" aria-atomic="true">
                         {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"
+                                aria-label="Закрыть уведомление"></button>
                     </div>
                 {% endfor %}
             </div>
@@ -150,7 +156,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="footer" role="contentinfo" aria-label="Информация о сайте">
         <div class="container">
             <div class="row">
                 <div class="col-md-6">
