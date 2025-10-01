@@ -156,11 +156,15 @@
                                         <strong>{{ charge.service_name }}</strong>
                                     </td>
                                     <td class="text-center">
-                                        {% if charge.volume %}
-                                            {{ charge.volume }}
-                                        {% else %}
-                                            <span>0,00</span>
-                                        {% endif %}
+                                        {% with volume_class=charge.comparison_classes.volume %}
+                                            <span class="{% if volume_class %}{{ volume_class }}{% endif %}">
+                                                {% if charge.volume %}
+                                                    {{ charge.volume }}
+                                                {% else %}
+                                                    0,00
+                                                {% endif %}
+                                            </span>
+                                        {% endwith %}
                                     </td>
                                     <td class="text-center">
                                         {% if charge.unit %}
@@ -170,11 +174,15 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        {% if charge.tariff %}
-                                            {{ charge.tariff }} ₽
-                                        {% else %}
-                                            <span>0,00</span>
-                                        {% endif %}
+                                        {% with tariff_class=charge.comparison_classes.tariff %}
+                                            <span class="{% if tariff_class %}{{ tariff_class }}{% endif %}">
+                                                {% if charge.tariff %}
+                                                    {{ charge.tariff }} ₽
+                                                {% else %}
+                                                    0,00 ₽
+                                                {% endif %}
+                                            </span>
+                                        {% endwith %}
                                     </td>
                                     <td class="text-end">
                                         <span class="text-primary">{{ charge.amount }} ₽</span>
@@ -194,7 +202,11 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-end">
-                                        <strong class="text-dark">{{ charge.total }} ₽</strong>
+                                        {% with total_class=charge.comparison_classes.total %}
+                                            <strong class="{% if total_class %}{{ total_class }}{% else %}text-dark{% endif %}">
+                                                {{ charge.total }} ₽
+                                            </strong>
+                                        {% endwith %}
                                     </td>
                                 </tr>
                                 {% endfor %}
