@@ -242,6 +242,10 @@ class EpdDocumentDetailView(LoginRequiredMixin, DetailView):
                 previous_charge = previous_charges_map.get(key)
                 if previous_charge is None:
                     previous_charge = previous_charges_by_order.get(charge.order)
+                    if previous_charge is not None:
+                        previous_key = previous_charge.service_name.strip().lower()
+                        if previous_key != key:
+                            previous_charge = None
 
             if previous_charge is not None:
                 comparison["volume"] = comparison_class(
