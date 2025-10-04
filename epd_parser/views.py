@@ -2,8 +2,9 @@
 
 import logging
 import os
+import re
 import tempfile
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -22,6 +23,94 @@ from django.views.generic.edit import FormView
 from epd_parser.forms import EpdDocumentForm, PdfUploadForm
 from epd_parser.models import EpdDocument, ServiceCharge
 from epd_parser.pdf_parse import parse_epd_pdf, save_epd_document_with_related_data
+
+MONTH_NAME_TO_NUMBER = {
+    "январь": 1,
+    "февраль": 2,
+    "март": 3,
+    "апрель": 4,
+    "май": 5,
+    "июнь": 6,
+    "июль": 7,
+    "август": 8,
+    "сентябрь": 9,
+    "октябрь": 10,
+    "ноябрь": 11,
+    "декабрь": 12,
+    # Support for some alternative month spellings that may appear in data
+    "мая": 5,
+}
+
+
+def parse_payment_period(payment_period: str) -> date | None:
+    """Convert a textual payment period into a ``date`` object.
+
+    Args:
+        payment_period: Payment period in formats like "январь 2024" or "01.2024".
+
+    Returns:
+        date | None: The first day of the month for the payment period or ``None``
+        if parsing fails.
+    """
+
+    if not payment_period:
+        return None
+
+    normalized_period = payment_period.strip().lower()
+
+    numeric_match = re.search(r"(0?[1-9]|1[0-2])[./](\d{4})", normalized_period)
+    if numeric_match:
+        month = int(numeric_match.group(1))
+        year = int(numeric_match.group(2))
+        try:
+            return date(year, month, 1)
+        except ValueError:
+            return None
+
+    year_match = re.search(r"\d{4}", normalized_period)
+    if not year_match:
+        return None
+
+    year = int(year_match.group())
+    parts = normalized_period.split()
+    if not parts:
+        return None
+
+    month_key = parts[0]
+    month = MONTH_NAME_TO_NUMBER.get(month_key)
+    if month is None and len(parts) > 1:
+        month = MONTH_NAME_TO_NUMBER.get(" ".join(parts[:2]))
+
+    if month is None:
+        return None
+
+    try:
+        return date(year, month, 1)
+    except ValueError:
+        return None
+
+
+def comparison_class(current: Decimal | None, previous: Decimal | None) -> str:
+    """Return CSS class for comparing two numeric values."""
+
+    if previous is None:
+        return ""
+
+    current_value = current if isinstance(current, Decimal) else None
+    previous_value = previous if isinstance(previous, Decimal) else None
+
+    if current_value is None:
+        current_value = Decimal("0") if current is None else Decimal(str(current))
+    if previous_value is None:
+        previous_value = (
+            Decimal("0") if previous is None else Decimal(str(previous))
+        )
+
+    if current_value > previous_value:
+        return "text-danger"
+    if current_value < previous_value:
+        return "text-success"
+    return ""
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +217,86 @@ class EpdDocumentDetailView(LoginRequiredMixin, DetailView):
         """
         context = super().get_context_data(**kwargs)
         document = self.get_object()
-        context["service_charges"] = document.service_charges.all().order_by("order")
+        service_charges = list(
+            document.service_charges.all().order_by("order")
+        )
+        previous_document = self._get_previous_document(document)
+        previous_charges_map: dict[str, ServiceCharge] = {}
+        previous_charges_by_order: dict[int, ServiceCharge] = {}
+
+        if previous_document is not None:
+            previous_charges = previous_document.service_charges.all()
+            for service in previous_charges:
+                previous_charges_map[service.service_name.strip().lower()] = service
+                previous_charges_by_order[service.order] = service
+
+        for charge in service_charges:
+            comparison = {
+                "volume": "",
+                "tariff": "",
+                "total": "",
+            }
+            previous_charge = None
+            if previous_charges_map:
+                key = charge.service_name.strip().lower()
+                previous_charge = previous_charges_map.get(key)
+                if previous_charge is None:
+                    previous_charge = previous_charges_by_order.get(charge.order)
+                    if previous_charge is not None:
+                        previous_key = previous_charge.service_name.strip().lower()
+                        if previous_key != key:
+                            previous_charge = None
+
+            if previous_charge is not None:
+                comparison["volume"] = comparison_class(
+                    charge.volume, previous_charge.volume
+                )
+                comparison["tariff"] = comparison_class(
+                    charge.tariff, previous_charge.tariff
+                )
+                comparison["total"] = comparison_class(
+                    charge.total, previous_charge.total
+                )
+
+            setattr(charge, "comparison_classes", comparison)
+
+        context["service_charges"] = service_charges
         context["meter_readings"] = document.meter_readings.all().order_by("order")
         context["recalculations"] = document.recalculations.all().order_by("order")
+        context["previous_document"] = previous_document
+        context["has_previous_document"] = previous_document is not None
         return context
+
+    def _get_previous_document(self, document: EpdDocument) -> EpdDocument | None:
+        """Find the previous document for the same account number."""
+
+        account_documents = (
+            EpdDocument.objects.filter(account_number=document.account_number)
+            .exclude(pk=document.pk)
+            .only("id", "payment_period", "created_at")
+        )
+
+        current_period = parse_payment_period(document.payment_period)
+        dated_documents: list[tuple[date | None, EpdDocument]] = [
+            (parse_payment_period(doc.payment_period), doc)
+            for doc in account_documents
+        ]
+
+        if current_period is not None:
+            earlier_documents = [
+                (period, doc)
+                for period, doc in dated_documents
+                if period is not None and period < current_period
+            ]
+            if earlier_documents:
+                earlier_documents.sort(key=lambda item: item[0])
+                return earlier_documents[-1][1]
+
+        return (
+            account_documents.filter(created_at__lt=document.created_at)
+            .order_by("-created_at")
+            .first()
+        )
 
 
 class EpdDocumentCreateView(LoginRequiredMixin, FormView):
