@@ -20,16 +20,138 @@ def clean_amount(amount_str: Any) -> Decimal:
     if not amount_str or amount_str == "None":
         return Decimal("0.00")
 
-    # Remove spaces and replace comma with dot
-    cleaned = str(amount_str).replace(" ", "").replace(",", ".")
+    cleaned = (
+        str(amount_str)
+        .replace(" ", "")
+        .replace("\xa0", "")
+        .replace(",", ".")
+        .strip()
+    )
 
-    # Extract numeric value
-    match = re.search(r"[\d.]+", cleaned)
+    match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
     if match:
         try:
             return Decimal(match.group())
         except (ValueError, TypeError):
             return Decimal("0.00")
+    return Decimal("0.00")
+
+
+def normalize_header_text(value: Any) -> str:
+    """Normalize header cell text for easier comparison.
+
+    Args:
+        value: Raw header cell value from the table.
+
+    Returns:
+        Normalized string ready for pattern matching.
+    """
+
+    if value is None:
+        return ""
+
+    text = str(value).lower().replace("\n", " ")
+    text = text.replace("ё", "е")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def build_column_map(header_row: list[Any]) -> dict[str, int]:
+    """Build mapping of service fields to table column indices.
+
+    Args:
+        header_row: Table row that contains column titles.
+
+    Returns:
+        Dictionary mapping known field names to their column indices.
+    """
+
+    column_map: dict[str, int] = {}
+    for index, cell in enumerate(header_row):
+        header_text = normalize_header_text(cell)
+        if not header_text:
+            continue
+
+        if "объем" in header_text:
+            column_map["volume"] = index
+        elif any(
+            pattern in header_text
+            for pattern in ["ед.", "ед изм", "ед. изм", "ед изм."]
+        ):
+            column_map["unit"] = index
+        elif "тариф" in header_text:
+            column_map["tariff"] = index
+        elif "начислено по тариф" in header_text:
+            column_map["amount_by_tariff"] = index
+        elif "перерас" in header_text:
+            column_map["recalculation"] = index
+        elif "начислено" in header_text and "по тариф" not in header_text:
+            column_map["amount"] = index
+        elif any(
+            pattern in header_text
+            for pattern in ["долг", "задолж", "переплат", "недоплат"]
+        ):
+            column_map["debt"] = index
+        elif "оплач" in header_text:
+            column_map["paid"] = index
+        elif "итого" in header_text:
+            column_map["total"] = index
+
+    return column_map
+
+
+def get_cell_value(row: list[Any], index: int | None) -> Any:
+    """Return cell value by index with sanity checks.
+
+    Args:
+        row: Current table row.
+        index: Target column index.
+
+    Returns:
+        Cell value if available; otherwise ``None``.
+    """
+
+    if index is None or index < 0 or index >= len(row):
+        return None
+
+    value = row[index]
+    if value in (None, "", "None"):
+        return None
+    return value
+
+
+def find_amount_in_row(row: list[Any], preferred_index: int | None = None) -> Decimal:
+    """Extract decimal amount from a row using preferred index fallback.
+
+    Args:
+        row: Table row to inspect.
+        preferred_index: Optional preferred column index.
+
+    Returns:
+        Decimal value parsed from the row.
+    """
+
+    candidate_indices: list[int] = []
+    if preferred_index is not None:
+        candidate_indices.append(preferred_index)
+
+    candidate_indices.extend(
+        index for index in range(len(row) - 1, -1, -1) if index not in candidate_indices
+    )
+
+    for index in candidate_indices:
+        if index < 0 or index >= len(row):
+            continue
+        cell = row[index]
+        if cell in (None, "", "None"):
+            continue
+        text = str(cell).strip()
+        if not text:
+            continue
+        if not re.search(r"\d", text):
+            continue
+        return clean_amount(text)
+
     return Decimal("0.00")
 
 
@@ -222,89 +344,132 @@ def parse_services_data(table_data: list[list[Any]]) -> dict[str, Any]:
     """Parse services data from the table."""
     services: dict[str, list[dict[str, Any]]] = {}
     current_category = None
+    column_map: dict[str, int] = {}
 
     for row in table_data:
-        if not row or not row[0]:
+        if not row:
             continue
 
-        service_name = row[0].strip()
+        first_cell = row[0]
+        if not first_cell:
+            continue
 
-        # Check if it's a category header
-        if service_name in [
-            "Начисления за жилищные услуги",
-            "Начисления за коммунальные услуги",
-            "Начисления за иные услуги",
-        ]:
+        service_name = str(first_cell).strip()
+
+        normalized_first = normalize_header_text(first_cell)
+        if "виды услуг" in normalized_first:
+            column_map = build_column_map(row)
+            continue
+
+        if normalized_first in {
+            "начисления за жилищные услуги",
+            "начисления за коммунальные услуги",
+            "начисления за иные услуги",
+        }:
             current_category = service_name
             services[current_category] = []
             continue
 
-        # Check if it's a total row
+        lower_service_name = service_name.lower()
         if (
-            "Всего за" in service_name
-            or "Итого к оплате" in service_name
-            or "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ" in service_name
-            or "без учета добровольного страхования" in service_name.lower()
-            or "с учетом добровольного страхования" in service_name.lower()
+            "всего за" in lower_service_name
+            or "итого к оплате" in lower_service_name
+            or "добровольное страхование" in lower_service_name
+            or "без учета добровольного страхования" in lower_service_name
+            or "с учетом добровольного страхования" in lower_service_name
         ):
             continue
 
-        # Skip header row
-        if service_name == "Виды услуг":
+        if not current_category:
             continue
 
-        # Parse service data
-        minimum_row_length = 9
-        if current_category and len(row) >= minimum_row_length:
-            service_data = {
-                "service_name": service_name,
-                "volume": row[1] if row[1] and row[1] != "None" else None,
-                "unit": row[2] if row[2] and row[2] != "None" else None,
-                "tariff": clean_amount(row[3]),
-                "amount": clean_amount(row[4]),
-                "recalculation": clean_amount(row[5]),
-                "debt": clean_amount(row[6]),
-                "paid": clean_amount(row[7]),
-                "total": clean_amount(row[8]),
+        if not column_map:
+            default_map: dict[str, int] = {
+                "volume": 1,
+                "unit": 2,
+                "tariff": 3,
+                "recalculation": 5,
             }
-            services[current_category].append(service_data)
+            if len(row) >= 10:
+                default_map.update(
+                    {
+                        "amount_by_tariff": 4,
+                        "amount": 6,
+                        "paid": 7,
+                        "debt": 8,
+                        "total": 9,
+                    }
+                )
+            else:
+                default_map.update(
+                    {
+                        "amount": 4,
+                        "debt": 6,
+                        "paid": 7,
+                        "total": 8,
+                    }
+                )
+            column_map = default_map
+
+        service_volume = get_cell_value(row, column_map.get("volume"))
+        service_unit = get_cell_value(row, column_map.get("unit"))
+        tariff_value = get_cell_value(row, column_map.get("tariff"))
+
+        amount_index = column_map.get("amount")
+        if amount_index is None:
+            amount_index = column_map.get("amount_by_tariff")
+        amount_value = get_cell_value(row, amount_index)
+
+        recalculation_value = get_cell_value(row, column_map.get("recalculation"))
+        paid_value = get_cell_value(row, column_map.get("paid"))
+        debt_value = get_cell_value(row, column_map.get("debt"))
+
+        service_data = {
+            "service_name": service_name,
+            "volume": service_volume,
+            "unit": service_unit,
+            "tariff": clean_amount(tariff_value),
+            "amount": clean_amount(amount_value),
+            "recalculation": clean_amount(recalculation_value),
+            "debt": clean_amount(debt_value),
+            "paid": clean_amount(paid_value),
+            "total": find_amount_in_row(row, column_map.get("total")),
+        }
+        services.setdefault(current_category, []).append(service_data)
 
     return services
 
 
 def extract_totals(table_data: list[list[Any]]) -> dict[str, Decimal]:
     """Extract total amounts from the table."""
-    totals = {}
+    totals: dict[str, Decimal] = {}
+    column_map: dict[str, int] = {}
 
     for row in table_data:
-        if not row or not row[0]:
+        if not row:
             continue
 
-        row_text = row[0].strip()
+        first_cell = row[0]
+        if not first_cell:
+            continue
 
-        # Look for various patterns for totals
-        if any(
-            pattern in row_text
-            for pattern in [
-                "без учета добровольного страхования",
-                "БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
-            ]
-        ):
-            amount = clean_amount(row[8])
+        normalized_first = normalize_header_text(first_cell)
+        if "виды услуг" in normalized_first:
+            column_map = build_column_map(row)
+            continue
+
+        lower_text = normalized_first
+
+        if "без учета добровольного страхования" in lower_text:
+            amount = find_amount_in_row(row, column_map.get("total"))
             totals["total_without_insurance"] = amount
             logger.info(f"Found total without insurance: {amount}")
-        elif any(
-            pattern in row_text
-            for pattern in [
-                "с учетом добровольного страхования",
-                "С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ",
-            ]
-        ):
-            amount = clean_amount(row[8])
+        elif "с учетом добровольного страхования" in lower_text:
+            amount = find_amount_in_row(row, column_map.get("total"))
             totals["total_with_insurance"] = amount
             logger.info(f"Found total with insurance: {amount}")
-        elif "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ" in row_text:
-            amount = clean_amount(row[8])
+        elif "добровольное страхование" in lower_text:
+            amount = find_amount_in_row(row, column_map.get("total"))
             totals["insurance_amount"] = amount
             logger.info(f"Found insurance amount: {amount}")
 
