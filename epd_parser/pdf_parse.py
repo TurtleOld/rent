@@ -20,17 +20,64 @@ def clean_amount(amount_str: Any) -> Decimal:
     if not amount_str or amount_str == "None":
         return Decimal("0.00")
 
-    # Remove spaces and replace comma with dot
-    cleaned = str(amount_str).replace(" ", "").replace(",", ".")
+    raw_value = str(amount_str)
 
-    # Extract numeric value
-    match = re.search(r"[\d.]+", cleaned)
-    if match:
+    # Normalise whitespace characters, including non-breaking spaces and newlines
+    cleaned = (
+        raw_value.replace("\xa0", " ")
+        .replace("\u202f", " ")
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    decimal_pattern = r"\d+(?:[ \u00a0\u202f]\d{3})*(?:[.,]\d+)?"
+    matches = list(re.finditer(decimal_pattern, cleaned))
+
+    if not matches:
+        return Decimal("0.00")
+
+    selected_fragment: str | None = None
+    for match in matches:
+        fragment = match.group(0).replace(" ", "")
         try:
-            return Decimal(match.group())
-        except (ValueError, TypeError):
-            return Decimal("0.00")
-    return Decimal("0.00")
+            candidate = Decimal(fragment.replace(",", "."))
+        except (ValueError, TypeError, ArithmeticError):
+            continue
+
+        if candidate != 0:
+            selected_fragment = fragment
+
+    if selected_fragment is None:
+        selected_fragment = matches[-1].group(0).replace(" ", "")
+
+    try:
+        value = Decimal(selected_fragment.replace(",", "."))
+    except (ValueError, TypeError, ArithmeticError):
+        return Decimal("0.00")
+
+    cleaned_no_space = cleaned.replace(" ", "")
+    raw_compact = (
+        raw_value.replace(" ", "")
+        .replace("\xa0", "")
+        .replace("\u202f", "")
+        .replace("\n", "")
+        .replace("\r", "")
+    )
+
+    is_negative = False
+    stripped_raw = raw_value.strip()
+    if cleaned.endswith("-") or cleaned_no_space.endswith("-"):
+        is_negative = True
+    elif stripped_raw.startswith("-") or raw_compact.startswith("-"):
+        is_negative = True
+    elif stripped_raw.endswith("-") or raw_compact.endswith("-"):
+        is_negative = True
+
+    if is_negative:
+        value = -value
+
+    return value
 
 
 def extract_personal_info_from_text(text_content: str) -> dict[str, Any | date]:
