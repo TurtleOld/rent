@@ -77,7 +77,31 @@ def _extract_amount_fragments(amount_str: Any) -> tuple[str, str, list[AmountFra
         return "", "", []
 
     raw_value, segments, flattened = _prepare_amount_text(amount_str)
+    flat_matches = list(_DECIMAL_PATTERN.finditer(flattened))
+    flat_index = 0
     fragments: list[AmountFragment] = []
+
+    sign_chars = {"-", "−", "–", "+"}
+    negative_chars = {"-", "−", "–"}
+
+    def detect_sign(container: str, start: int, end: int) -> tuple[bool, int]:
+        """Detect sign around a numeric fragment within a container string."""
+
+        before_idx = start - 1
+        while before_idx >= 0 and container[before_idx].isspace():
+            before_idx -= 1
+        if before_idx >= 0 and container[before_idx] in sign_chars:
+            sign_multiplier = -1 if container[before_idx] in negative_chars else 1
+            return True, sign_multiplier
+
+        after_idx = end
+        while after_idx < len(container) and container[after_idx].isspace():
+            after_idx += 1
+        if after_idx < len(container) and container[after_idx] in sign_chars:
+            sign_multiplier = -1 if container[after_idx] in negative_chars else 1
+            return True, sign_multiplier
+
+        return False, 1
 
     for segment in segments:
         for match in _DECIMAL_PATTERN.finditer(segment):
@@ -90,21 +114,18 @@ def _extract_amount_fragments(amount_str: Any) -> tuple[str, str, list[AmountFra
             sign = 1
             explicit_sign = False
 
-            sign_chars = {"-", "−", "–", "+"}
+            explicit_sign, sign = detect_sign(segment, match.start(), match.end())
 
-            before_idx = match.start() - 1
-            while before_idx >= 0 and segment[before_idx].isspace():
-                before_idx -= 1
-            if before_idx >= 0 and segment[before_idx] in sign_chars:
-                explicit_sign = True
-                sign = -1 if segment[before_idx] in {"-", "−", "–"} else 1
-            else:
-                after_idx = match.end()
-                while after_idx < len(segment) and segment[after_idx].isspace():
-                    after_idx += 1
-                if after_idx < len(segment) and segment[after_idx] in sign_chars:
+            flat_match = flat_matches[flat_index] if flat_index < len(flat_matches) else None
+            flat_index += 1
+
+            if not explicit_sign and flat_match is not None:
+                fallback_detected, fallback_sign = detect_sign(
+                    flattened, flat_match.start(), flat_match.end()
+                )
+                if fallback_detected:
                     explicit_sign = True
-                    sign = -1 if segment[after_idx] in {"-", "−", "–"} else 1
+                    sign = fallback_sign
 
             fragments.append(
                 AmountFragment(

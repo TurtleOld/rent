@@ -220,9 +220,13 @@ def test_clean_amount_fragment_selection() -> None:
     """Ensure clean_amount picks the most relevant numeric fragment."""
     multiline_value = "0,00\n1\u00a0243,09"
     trailing_minus_value = "202,85-"
+    newline_minus_value = "202,85\n-"
+    leading_newline_minus = "-\n202,85"
 
     assert clean_amount(multiline_value) == Decimal("1243.09")
     assert clean_amount(trailing_minus_value) == Decimal("-202.85")
+    assert clean_amount(newline_minus_value) == Decimal("-202.85")
+    assert clean_amount(leading_newline_minus) == Decimal("-202.85")
 
 
 def test_parse_services_data_resolves_signs_from_fragments() -> None:

@@ -161,14 +161,12 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Amount"),
         help_text=_("Calculated amount for this service"),
-        validators=[MinValueValidator(Decimal("0.00"))],
     )
     recalculation: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Recalculation"),
         help_text=_("Recalculation amount"),
-        validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
     debt: models.DecimalField = models.DecimalField(
@@ -176,7 +174,6 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Debt"),
         help_text=_("Previous debt amount"),
-        validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
     paid: models.DecimalField = models.DecimalField(
@@ -184,7 +181,6 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Paid"),
         help_text=_("Amount already paid"),
-        validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
     total: models.DecimalField = models.DecimalField(
@@ -192,7 +188,6 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Total"),
         help_text=_("Total amount to pay (amount + debt - paid)"),
-        validators=[MinValueValidator(Decimal("0.00"))],
     )
 
     # Ordering
@@ -344,7 +339,6 @@ class Recalculation(models.Model):
         decimal_places=2,
         verbose_name=_("Amount"),
         help_text=_("Recalculation amount"),
-        validators=[MinValueValidator(Decimal("0.00"))],
     )
 
     # Ordering
