@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 import pdfplumber
 from pdf2docx import Converter
@@ -116,7 +116,9 @@ def _extract_amount_fragments(amount_str: Any) -> tuple[str, str, list[AmountFra
 
             explicit_sign, sign = detect_sign(segment, match.start(), match.end())
 
-            flat_match = flat_matches[flat_index] if flat_index < len(flat_matches) else None
+            flat_match = (
+                flat_matches[flat_index] if flat_index < len(flat_matches) else None
+            )
             flat_index += 1
 
             if not explicit_sign and flat_match is not None:
@@ -169,7 +171,9 @@ def _apply_contextual_sign(
     return fragment.magnitude
 
 
-def _compute_amount_with_context(amount_str: Any, column_hint: str | None = None) -> Decimal:
+def _compute_amount_with_context(
+    amount_str: Any, column_hint: str | None = None
+) -> Decimal:
     """Compute an amount using contextual hints for plus/minus handling."""
 
     _, _, fragments = _extract_amount_fragments(amount_str)
@@ -402,10 +406,11 @@ def _table_contains_keywords(
 def _table_looks_like_service_table(table_data: list[list[Any]]) -> bool:
     """Determine if a table resembles the main services table."""
 
-    has_wide_row = any(len(row) >= 8 for row in table_data)
-    return has_wide_row and _table_contains_keywords(
-        table_data, ("тариф", "начислено")
+    minimum_columns_for_service_table = 8
+    has_wide_row = any(
+        len(row) >= minimum_columns_for_service_table for row in table_data
     )
+    return has_wide_row and _table_contains_keywords(table_data, ("тариф", "начислено"))
 
 
 def _table_looks_like_recalculation_table(table_data: list[list[Any]]) -> bool:
@@ -528,12 +533,10 @@ def parse_services_data(table_data: list[list[Any]]) -> dict[str, Any]:
                 "unit": row[2] if row[2] and row[2] != "None" else None,
                 "tariff": clean_amount(row[3]),
                 "amount": clean_amount(row[4]),
-                "recalculation": _compute_amount_with_context(
-                    row[5], "recalculation"
-                ),
+                "recalculation": _compute_amount_with_context(row[5], "recalculation"),
                 "debt": _compute_amount_with_context(row[6], "debt"),
                 "paid": _compute_amount_with_context(row[7], "paid"),
-                "total": clean_amount(row[8]),
+                "total": clean_amount(row[8]),  # Используем итого напрямую из таблицы
             }
             services[current_category].append(service_data)
 
@@ -731,7 +734,7 @@ def save_epd_document_with_related_data(parsed_data: dict[str, Any]) -> EpdDocum
             document.pk,
         )
 
-        return cast(EpdDocument, document)
+        return document
 
     except Exception as e:
         logger.error(f"Error saving EPD document: {e!s}")
