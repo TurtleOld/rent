@@ -143,6 +143,7 @@
                                     <th class="text-center">Ед.изм.</th>
                                     <th class="text-center">Тариф</th>
                                     <th class="text-end">Начислено</th>
+                                    <th class="text-end">Перерасчет</th>
                                     <th class="text-end">Долг</th>
                                     <th class="text-end">Оплачено</th>
                                     <th class="text-end">Итого</th>
@@ -188,8 +189,19 @@
                                         <span class="text-primary">{{ charge.amount }} ₽</span>
                                     </td>
                                     <td class="text-end">
+                                        {% if charge.recalculation != 0 %}
+                                            <span class="{% if charge.recalculation > 0 %}text-success{% else %}text-danger{% endif %}">
+                                                {{ charge.recalculation }} ₽
+                                            </span>
+                                        {% else %}
+                                            <span>0,00</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
                                         {% if charge.debt > 0 %}
                                             <span class="text-danger">{{ charge.debt }} ₽</span>
+                                        {% elif charge.debt < 0 %}
+                                            <span class="text-success">{{ charge.debt }} ₽</span>
                                         {% else %}
                                             <span>0,00</span>
                                         {% endif %}

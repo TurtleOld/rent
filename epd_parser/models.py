@@ -119,7 +119,7 @@ class ServiceCharge(models.Model):
         EpdDocument,
         on_delete=models.CASCADE,
         related_name="service_charges",
-        verbose_name=_("EPD Document"),
+        verbose_name=_(EPD_DOCUMENT_VERBOSE_NAME),
     )
 
     # Service information
@@ -161,14 +161,12 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Amount"),
         help_text=_("Calculated amount for this service"),
-        validators=[MinValueValidator(Decimal("0.00"))],
     )
     recalculation: models.DecimalField = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         verbose_name=_("Recalculation"),
         help_text=_("Recalculation amount"),
-        validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
     debt: models.DecimalField = models.DecimalField(
@@ -176,7 +174,6 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Debt"),
         help_text=_("Previous debt amount"),
-        validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
     paid: models.DecimalField = models.DecimalField(
@@ -184,7 +181,6 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Paid"),
         help_text=_("Amount already paid"),
-        validators=[MinValueValidator(Decimal("0.00"))],
         default=Decimal("0.00"),
     )
     total: models.DecimalField = models.DecimalField(
@@ -192,7 +188,6 @@ class ServiceCharge(models.Model):
         decimal_places=2,
         verbose_name=_("Total"),
         help_text=_("Total amount to pay (amount + debt - paid)"),
-        validators=[MinValueValidator(Decimal("0.00"))],
     )
 
     # Ordering
@@ -220,12 +215,10 @@ class ServiceCharge(models.Model):
         return f"{self.document.account_number} - {self.service_name}"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        """Override save to calculate total amount."""
-        recalculate_total = kwargs.pop("recalculate_total", True)
-
-        if recalculate_total:
-            self.total = self.amount + self.recalculation + self.debt - self.paid
-
+        """Override save to preserve original total from PDF."""
+        # Не пересчитываем итого - используем данные из колонки "ИТОГО" напрямую
+        # Это позволяет сохранить оригинальные значения из PDF, включая обнуление
+        # отрицательных итого согласно правилам ЕПД
         super().save(*args, **kwargs)
 
 
@@ -236,7 +229,7 @@ class MeterReading(models.Model):
         EpdDocument,
         on_delete=models.CASCADE,
         related_name="meter_readings",
-        verbose_name=_("EPD Document"),
+        verbose_name=_(EPD_DOCUMENT_VERBOSE_NAME),
     )
 
     # Meter information
@@ -324,7 +317,7 @@ class Recalculation(models.Model):
         EpdDocument,
         on_delete=models.CASCADE,
         related_name="recalculations",
-        verbose_name=_("EPD Document"),
+        verbose_name=_(EPD_DOCUMENT_VERBOSE_NAME),
     )
 
     # Recalculation information
@@ -344,7 +337,6 @@ class Recalculation(models.Model):
         decimal_places=2,
         verbose_name=_("Amount"),
         help_text=_("Recalculation amount"),
-        validators=[MinValueValidator(Decimal("0.00"))],
     )
 
     # Ordering
