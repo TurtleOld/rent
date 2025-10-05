@@ -106,6 +106,10 @@ _ensure_optional_dependencies()
 pdf_parse_module = import_module("epd_parser.pdf_parse")
 clean_amount = getattr(pdf_parse_module, "clean_amount")
 EpdPdfParser = getattr(pdf_parse_module, "EpdPdfParser", None)
+parse_services_data = getattr(pdf_parse_module, "parse_services_data")
+parse_recalculation_table = getattr(
+    pdf_parse_module, "parse_recalculation_table"
+)
 
 
 @pytest.mark.skipif(EpdPdfParser is None, reason="EpdPdfParser not available")
@@ -219,3 +223,87 @@ def test_clean_amount_fragment_selection() -> None:
 
     assert clean_amount(multiline_value) == Decimal("1243.09")
     assert clean_amount(trailing_minus_value) == Decimal("-202.85")
+
+
+def test_parse_services_data_resolves_signs_from_fragments() -> None:
+    """Ensure recalculation and debt columns respect implicit minus values."""
+
+    table_data = [
+        [
+            "Начисления за коммунальные услуги",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ],
+        [
+            "Виды услуг",
+            "Объем",
+            "Ед.",
+            "Тариф",
+            "Начислено",
+            "Перерасчеты (начисления, уменьшения)",
+            "Задолженность (Переплата (-))",
+            "Оплачено",
+            "Итого",
+        ],
+        [
+            "ГОРЯЧЕЕ В/С (ЭНЕРГИЯ) ОДН",
+            "0,000",
+            "Гкал",
+            "0,00",
+            "0,00",
+            "0,00\n1\u00a0243,09",
+            "0,00\n1\u00a0243,09",
+            "0,00",
+            "0,00",
+        ],
+    ]
+
+    services = parse_services_data(table_data)
+    assert "Начисления за коммунальные услуги" in services
+    service_entry = services["Начисления за коммунальные услуги"][0]
+
+    assert service_entry["recalculation"] == Decimal("-1243.09")
+    assert service_entry["debt"] == Decimal("-1243.09")
+
+
+def test_parse_recalculation_table_extracts_entries() -> None:
+    """Validate recalculation parsing from dedicated tables."""
+
+    table_data = [
+        ["Перерасчеты"],
+        ["Вид услуги", "Период", "Основание", "Сумма"],
+        [
+            "Горячее водоснабжение",
+            "08.2025",
+            "Корректировка показаний",
+            "202,85-",
+        ],
+        [
+            "Холодное водоснабжение",
+            "07.2025",
+            "Доначисление",
+            "150,00",
+        ],
+        ["Итого", "", "", "52,85"],
+    ]
+
+    recalculations = parse_recalculation_table(table_data)
+
+    assert recalculations == [
+        {
+            "service_name": "Горячее водоснабжение",
+            "reason": "08.2025; Корректировка показаний",
+            "amount": Decimal("-202.85"),
+        },
+        {
+            "service_name": "Холодное водоснабжение",
+            "reason": "07.2025; Доначисление",
+            "amount": Decimal("150.00"),
+        },
+    ]

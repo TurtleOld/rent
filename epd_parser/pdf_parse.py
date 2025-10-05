@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any, cast
@@ -10,74 +11,171 @@ from typing import Any, cast
 import pdfplumber
 from pdf2docx import Converter
 
-from .models import EpdDocument, ServiceCharge
+from .models import EpdDocument, Recalculation, ServiceCharge
 
 logger = logging.getLogger(__name__)
 
 
-def clean_amount(amount_str: Any) -> Decimal:
-    """Clean amount string and convert to Decimal."""
-    if not amount_str or amount_str == "None":
-        return Decimal("0.00")
+@dataclass
+class AmountFragment:
+    """Container describing a parsed numeric fragment."""
+
+    magnitude: Decimal
+    signed: Decimal
+    segment_lower: str
+    has_explicit_sign: bool
+
+
+_DECIMAL_PATTERN = re.compile(
+    r"\d+(?:[ \u00a0\u202f]\d{3})*(?:[.,]\d+)?",
+    re.UNICODE,
+)
+
+_COLUMN_SIGN_HINTS: dict[str, dict[str, Any]] = {
+    "recalculation": {
+        "positive": ("начис", "доначис", "увелич", "поступ"),
+        "negative": ("уменьш", "переплат", "сниж", "вычет"),
+        "alternate": True,
+    },
+    "debt": {
+        "positive": ("задолж", "долг"),
+        "negative": ("переплат", "аванс"),
+        "alternate": True,
+    },
+    "paid": {
+        "positive": (),
+        "negative": ("переплат",),
+        "alternate": False,
+    },
+}
+
+
+def _prepare_amount_text(amount_str: Any) -> tuple[str, list[str], str]:
+    """Normalise amount text and split it into contextual segments."""
 
     raw_value = str(amount_str)
-
-    # Normalise whitespace characters, including non-breaking spaces and newlines
-    cleaned = (
+    normalised = (
         raw_value.replace("\xa0", " ")
         .replace("\u202f", " ")
-        .replace("\r", " ")
-        .replace("\n", " ")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
     )
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    segments = []
+    for piece in re.split(r"\n+", normalised):
+        segment = re.sub(r"\s+", " ", piece).strip()
+        if segment:
+            segments.append(segment)
 
-    decimal_pattern = r"\d+(?:[ \u00a0\u202f]\d{3})*(?:[.,]\d+)?"
-    matches = list(re.finditer(decimal_pattern, cleaned))
+    flattened = re.sub(r"\s+", " ", normalised.replace("\n", " ")).strip()
+    return raw_value, segments, flattened
 
-    if not matches:
+
+def _extract_amount_fragments(amount_str: Any) -> tuple[str, str, list[AmountFragment]]:
+    """Extract numeric fragments from the given amount string."""
+
+    if amount_str is None or amount_str == "" or amount_str == "None":
+        return "", "", []
+
+    raw_value, segments, flattened = _prepare_amount_text(amount_str)
+    fragments: list[AmountFragment] = []
+
+    for segment in segments:
+        for match in _DECIMAL_PATTERN.finditer(segment):
+            fragment_text = match.group(0).replace(" ", "")
+            try:
+                magnitude = Decimal(fragment_text.replace(",", "."))
+            except (ArithmeticError, ValueError, TypeError):
+                continue
+
+            sign = 1
+            explicit_sign = False
+
+            sign_chars = {"-", "−", "–", "+"}
+
+            before_idx = match.start() - 1
+            while before_idx >= 0 and segment[before_idx].isspace():
+                before_idx -= 1
+            if before_idx >= 0 and segment[before_idx] in sign_chars:
+                explicit_sign = True
+                sign = -1 if segment[before_idx] in {"-", "−", "–"} else 1
+            else:
+                after_idx = match.end()
+                while after_idx < len(segment) and segment[after_idx].isspace():
+                    after_idx += 1
+                if after_idx < len(segment) and segment[after_idx] in sign_chars:
+                    explicit_sign = True
+                    sign = -1 if segment[after_idx] in {"-", "−", "–"} else 1
+
+            fragments.append(
+                AmountFragment(
+                    magnitude=magnitude,
+                    signed=magnitude * sign,
+                    segment_lower=segment.lower(),
+                    has_explicit_sign=explicit_sign,
+                )
+            )
+
+    return raw_value, flattened, fragments
+
+
+def _apply_contextual_sign(
+    fragment: AmountFragment, index: int, column_hint: str
+) -> Decimal:
+    """Apply contextual hints to determine the effective sign for a fragment."""
+
+    hints = _COLUMN_SIGN_HINTS.get(column_hint, {})
+    positive_hints: tuple[str, ...] = hints.get("positive", ())
+    negative_hints: tuple[str, ...] = hints.get("negative", ())
+    use_alternation: bool = hints.get("alternate", False)
+
+    if fragment.magnitude == 0:
         return Decimal("0.00")
 
-    selected_fragment: str | None = None
-    for match in matches:
-        fragment = match.group(0).replace(" ", "")
-        try:
-            candidate = Decimal(fragment.replace(",", "."))
-        except (ValueError, TypeError, ArithmeticError):
-            continue
+    if fragment.has_explicit_sign and fragment.signed != fragment.magnitude:
+        return fragment.signed
 
-        if candidate != 0:
-            selected_fragment = fragment
+    segment_lower = fragment.segment_lower
 
-    if selected_fragment is None:
-        selected_fragment = matches[-1].group(0).replace(" ", "")
+    if any(keyword in segment_lower for keyword in negative_hints):
+        return -fragment.magnitude
 
-    try:
-        value = Decimal(selected_fragment.replace(",", "."))
-    except (ValueError, TypeError, ArithmeticError):
+    if any(keyword in segment_lower for keyword in positive_hints):
+        return fragment.magnitude
+
+    if use_alternation:
+        return fragment.magnitude if index % 2 == 0 else -fragment.magnitude
+
+    return fragment.magnitude
+
+
+def _compute_amount_with_context(amount_str: Any, column_hint: str | None = None) -> Decimal:
+    """Compute an amount using contextual hints for plus/minus handling."""
+
+    _, _, fragments = _extract_amount_fragments(amount_str)
+
+    if not fragments:
         return Decimal("0.00")
 
-    cleaned_no_space = cleaned.replace(" ", "")
-    raw_compact = (
-        raw_value.replace(" ", "")
-        .replace("\xa0", "")
-        .replace("\u202f", "")
-        .replace("\n", "")
-        .replace("\r", "")
-    )
+    if column_hint is None:
+        selected: Decimal | None = None
+        for fragment in fragments:
+            if fragment.signed != 0:
+                selected = fragment.signed
+        if selected is None:
+            selected = fragments[-1].signed
+        return selected
 
-    is_negative = False
-    stripped_raw = raw_value.strip()
-    if cleaned.endswith("-") or cleaned_no_space.endswith("-"):
-        is_negative = True
-    elif stripped_raw.startswith("-") or raw_compact.startswith("-"):
-        is_negative = True
-    elif stripped_raw.endswith("-") or raw_compact.endswith("-"):
-        is_negative = True
+    total = Decimal("0.00")
+    for index, fragment in enumerate(fragments):
+        adjusted = _apply_contextual_sign(fragment, index, column_hint)
+        total += adjusted
 
-    if is_negative:
-        value = -value
+    return total
 
-    return value
+
+def clean_amount(amount_str: Any) -> Decimal:
+    """Clean amount string and convert to Decimal."""
+    return _compute_amount_with_context(amount_str)
 
 
 def extract_personal_info_from_text(text_content: str) -> dict[str, Any | date]:
@@ -265,6 +363,106 @@ def extract_personal_info_from_text(text_content: str) -> dict[str, Any | date]:
     return personal_info
 
 
+def _table_contains_keywords(
+    table_data: list[list[Any]], keywords: tuple[str, ...]
+) -> bool:
+    """Check if any cell within the table includes the provided keywords."""
+
+    lowered_keywords = tuple(keyword.lower() for keyword in keywords)
+    for row in table_data:
+        for cell in row:
+            if isinstance(cell, str):
+                cell_lower = cell.lower()
+                if any(keyword in cell_lower for keyword in lowered_keywords):
+                    return True
+    return False
+
+
+def _table_looks_like_service_table(table_data: list[list[Any]]) -> bool:
+    """Determine if a table resembles the main services table."""
+
+    has_wide_row = any(len(row) >= 8 for row in table_data)
+    return has_wide_row and _table_contains_keywords(
+        table_data, ("тариф", "начислено")
+    )
+
+
+def _table_looks_like_recalculation_table(table_data: list[list[Any]]) -> bool:
+    """Determine if a table likely contains recalculation details."""
+
+    if not _table_contains_keywords(table_data, ("перерасч",)):
+        return False
+
+    if _table_looks_like_service_table(table_data):
+        return False
+
+    if _table_contains_keywords(table_data, ("тариф", "начислено")):
+        return False
+
+    return True
+
+
+def parse_recalculation_table(table_data: list[list[Any]]) -> list[dict[str, Any]]:
+    """Parse recalculation rows from a secondary table."""
+
+    recalculations: list[dict[str, Any]] = []
+
+    for row in table_data:
+        if not row:
+            continue
+
+        cell_texts = [str(cell).strip() if cell else "" for cell in row]
+        if not any(cell_texts):
+            continue
+
+        amount_index: int | None = None
+        for index in range(len(cell_texts) - 1, -1, -1):
+            cell_value = cell_texts[index]
+            if not cell_value:
+                continue
+            _, _, fragments = _extract_amount_fragments(cell_value)
+            if fragments:
+                amount_index = index
+                break
+
+        if amount_index is None:
+            continue
+
+        descriptive_parts = [
+            part for part in cell_texts[:amount_index] if part and part.lower() != "-"
+        ]
+
+        if not descriptive_parts:
+            continue
+
+        service_name = descriptive_parts[0]
+        service_name_lower = service_name.lower()
+        if "вид" in service_name_lower and "услуг" in service_name_lower:
+            continue
+        if service_name_lower.startswith("перерасч"):
+            continue
+
+        reason_parts = descriptive_parts[1:]
+        reason = "; ".join(reason_parts)
+
+        if service_name_lower.startswith("итого") or reason.lower().startswith("итого"):
+            continue
+
+        amount_value = _compute_amount_with_context(
+            cell_texts[amount_index], "recalculation"
+        )
+
+        recalculations.append(
+            {
+                "service_name": service_name,
+                "reason": reason,
+                "amount": amount_value,
+            }
+        )
+
+    return recalculations
+
+
 def parse_services_data(table_data: list[list[Any]]) -> dict[str, Any]:
     """Parse services data from the table."""
     services: dict[str, list[dict[str, Any]]] = {}
@@ -309,9 +507,11 @@ def parse_services_data(table_data: list[list[Any]]) -> dict[str, Any]:
                 "unit": row[2] if row[2] and row[2] != "None" else None,
                 "tariff": clean_amount(row[3]),
                 "amount": clean_amount(row[4]),
-                "recalculation": clean_amount(row[5]),
-                "debt": clean_amount(row[6]),
-                "paid": clean_amount(row[7]),
+                "recalculation": _compute_amount_with_context(
+                    row[5], "recalculation"
+                ),
+                "debt": _compute_amount_with_context(row[6], "debt"),
+                "paid": _compute_amount_with_context(row[7], "paid"),
                 "total": clean_amount(row[8]),
             }
             services[current_category].append(service_data)
@@ -373,7 +573,7 @@ def parse_epd_pdf(pdf_file: Any) -> dict[str, Any]:
         try:
             # Extract tables using pdf2docx
             cv = Converter(temp_file_path)
-            tables = cv.extract_tables(start=0, end=1)
+            tables = cv.extract_tables()
             cv.close()
 
             # Extract text using pdfplumber
@@ -389,18 +589,29 @@ def parse_epd_pdf(pdf_file: Any) -> dict[str, Any]:
             # Extract personal info from text content
             personal_info = extract_personal_info_from_text(text_content)
 
-            # Use the first table for services and totals (main charges table)
-            main_table = tables[0]
+            primary_table = tables[0]
 
-            services_data = parse_services_data(main_table)
+            services_data: dict[str, Any] = {}
+            totals: dict[str, Decimal] = {}
+            recalculations: list[dict[str, Any]] = []
 
-            totals = extract_totals(main_table)
+            for table in tables:
+                if not services_data and _table_looks_like_service_table(table):
+                    services_data = parse_services_data(table)
+                    totals = extract_totals(table)
+                elif _table_looks_like_recalculation_table(table):
+                    recalculations.extend(parse_recalculation_table(table))
+
+            if not services_data:
+                services_data = parse_services_data(primary_table)
+                totals = extract_totals(primary_table)
 
             # Create result structure
             result = {
                 "personal_info": personal_info,
                 "totals": totals,
                 "services": services_data,
+                "recalculations": recalculations,
                 "text_content": text_content,
             }
 
@@ -421,6 +632,7 @@ def save_epd_document_with_related_data(parsed_data: dict[str, Any]) -> EpdDocum
         personal_info = parsed_data.get("personal_info", {})
         totals = parsed_data.get("totals", {})
         services = parsed_data.get("services", {})
+        recalculations = parsed_data.get("recalculations", [])
 
         # Create EPD document
         due_date_value = personal_info.get("due_date")
@@ -478,6 +690,26 @@ def save_epd_document_with_related_data(parsed_data: dict[str, Any]) -> EpdDocum
         logger.info(
             f"Saved {total_services} service charges for document {document.pk}"
         )
+        recalculation_order = 1
+        saved_recalculations = 0
+
+        for recalculation_data in recalculations:
+            Recalculation.objects.create(
+                document=document,
+                service_name=recalculation_data.get("service_name", ""),
+                reason=recalculation_data.get("reason", ""),
+                amount=recalculation_data.get("amount", Decimal("0.00")),
+                order=recalculation_order,
+            )
+            recalculation_order += 1
+            saved_recalculations += 1
+
+        logger.info(
+            "Saved %s recalculations for document %s",
+            saved_recalculations,
+            document.pk,
+        )
+
         return cast(EpdDocument, document)
 
     except Exception as e:
