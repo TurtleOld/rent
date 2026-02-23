@@ -1,7 +1,7 @@
 # Django core
 Django==5.0.4
 djangorestframework==3.15.1
-djangorestframework-simplejwt==5.3.1
+djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.3.1
 dj-database-url==2.1.0
 whitenoise==6.6.0
