@@ -31,6 +31,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "period_month",
             "period_year",
             "amount_due",
+            "amount_due_without_insurance",
+            "amount_due_with_insurance",
             "amount_charged",
             "amount_paid_ai",
             "amount_recalculation",

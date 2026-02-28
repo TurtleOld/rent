@@ -99,6 +99,8 @@ export interface Invoice {
   period_month: number | null;
   period_year: number | null;
   amount_due: string | null;
+  amount_due_without_insurance: string | null;
+  amount_due_with_insurance: string | null;
   amount_charged: string | null;
   amount_paid_ai: string | null;
   amount_recalculation: string | null;
@@ -122,6 +124,18 @@ export async function getInvoices(page = 1): Promise<PaginatedResponse<Invoice>>
   return request<PaginatedResponse<Invoice>>(`/invoices/?page=${page}`, {
     headers: authHeaders(),
   });
+}
+
+export async function getInvoicesAll(): Promise<Invoice[]> {
+  const all: Invoice[] = [];
+  let page = 1;
+  while (true) {
+    const data = await getInvoices(page);
+    all.push(...data.results);
+    if (!data.next) break;
+    page++;
+  }
+  return all;
 }
 
 export async function uploadInvoice(file: File): Promise<Invoice> {

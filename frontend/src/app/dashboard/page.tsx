@@ -50,8 +50,11 @@ function groupByPeriod(invoices: Invoice[]): InvoiceGroup[] {
     const [year, monthStr] = key.split("-");
     const month = parseInt(monthStr, 10);
     const label = `${MONTH_NAMES[month - 1]} ${year}`;
-    const totalDue = items.some((i) => i.amount_due != null)
-      ? items.reduce((sum, i) => sum + (i.amount_due ? parseFloat(i.amount_due) : 0), 0)
+    const totalDue = items.some((i) => i.amount_due_without_insurance != null || i.amount_due != null)
+      ? items.reduce((sum, i) => {
+          const v = i.amount_due_without_insurance ?? i.amount_due;
+          return sum + (v ? parseFloat(v) : 0);
+        }, 0)
       : null;
     groups.push({ key, label, totalDue, invoices: items });
   }
@@ -130,6 +133,9 @@ export default function DashboardPage() {
             />
             {uploading ? "Загрузка..." : "+ Загрузить квитанцию"}
           </label>
+          <button onClick={() => router.push("/reports")} className={styles.reportsBtn}>
+            Отчёты
+          </button>
           <button onClick={handleLogout} className={styles.logoutBtn}>
             Выйти
           </button>
@@ -166,14 +172,35 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <div className={styles.cardBody}>
-                      {inv.amount_due && (
+                      {inv.amount_due_without_insurance != null || inv.amount_due_with_insurance != null ? (
+                        <>
+                          {inv.amount_due_without_insurance != null && (
+                            <p className={styles.amount}>
+                              {parseFloat(inv.amount_due_without_insurance).toLocaleString("ru-RU", {
+                                minimumFractionDigits: 2,
+                              })}{" "}
+                              ₽{" "}
+                              <span className={styles.amountLabel}>без страх.</span>
+                            </p>
+                          )}
+                          {inv.amount_due_with_insurance != null && (
+                            <p className={styles.amountSecondary}>
+                              {parseFloat(inv.amount_due_with_insurance).toLocaleString("ru-RU", {
+                                minimumFractionDigits: 2,
+                              })}{" "}
+                              ₽{" "}
+                              <span className={styles.amountLabel}>со страх.</span>
+                            </p>
+                          )}
+                        </>
+                      ) : inv.amount_due ? (
                         <p className={styles.amount}>
                           {parseFloat(inv.amount_due).toLocaleString("ru-RU", {
                             minimumFractionDigits: 2,
                           })}{" "}
                           ₽
                         </p>
-                      )}
+                      ) : null}
                       <span className={`${styles.payBadge} ${styles[`pay__${inv.payment_status}`]}`}>
                         {PAYMENT_LABELS[inv.payment_status]}
                       </span>

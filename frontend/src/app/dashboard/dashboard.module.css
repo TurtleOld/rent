@@ -47,6 +47,18 @@
   display: none;
 }
 
+.reportsBtn {
+  padding: 0.6rem 1rem;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.reportsBtn:hover {
+  background: #f3f4f6;
+}
+
 .logoutBtn {
   padding: 0.6rem 1rem;
   background: transparent;
@@ -173,6 +185,18 @@
 .amount {
   font-size: 1.25rem;
   font-weight: 700;
+}
+
+.amountSecondary {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.amountLabel {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: #9ca3af;
 }
 
 .payBadge {

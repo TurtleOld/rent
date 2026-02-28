@@ -1,0 +1,224 @@
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.backBtn {
+  padding: 0.45rem 0.9rem;
+  background: transparent;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.backBtn:hover {
+  background: #f3f4f6;
+}
+
+.heading {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.loading {
+  text-align: center;
+  padding: 4rem;
+  color: #6b7280;
+}
+
+.error {
+  color: #e53e3e;
+  margin-bottom: 1rem;
+}
+
+.empty {
+  color: #6b7280;
+  text-align: center;
+  margin-top: 3rem;
+}
+
+/* ── Section ─────────────────────────────────────────────────────────────── */
+
+.section {
+  margin-bottom: 3rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.sectionTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+  color: #111827;
+}
+
+.sectionHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+/* ── Charts ──────────────────────────────────────────────────────────────── */
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: 1.25rem;
+}
+
+.chartCard {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem 1.25rem 1rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.chartTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.75rem;
+}
+
+.chartSvg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chartTick {
+  font-size: 10px;
+  fill: #9ca3af;
+  font-family: inherit;
+}
+
+.chartLegend {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 0.5rem;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Account picker ──────────────────────────────────────────────────────── */
+
+.accountPicker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pickerLabel {
+  font-size: 0.9rem;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.pickerSelect {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+}
+
+/* ── Service table ───────────────────────────────────────────────────────── */
+
+.serviceTable {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 0.875rem;
+}
+
+.th {
+  padding: 0.65rem 0.9rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.trTariff {
+  border-top: 2px solid #f3f4f6;
+}
+
+.trTariff:first-child {
+  border-top: none;
+}
+
+.trAmount {
+  background: #fafafa;
+}
+
+.tdService {
+  padding: 0.5rem 0.9rem;
+  border-right: 1px solid #f3f4f6;
+  min-width: 180px;
+}
+
+.serviceName {
+  display: block;
+  font-weight: 600;
+  color: #111827;
+  font-size: 0.85rem;
+}
+
+.rowKind {
+  display: block;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 1px;
+}
+
+.td {
+  padding: 0.5rem 0.9rem;
+  color: #374151;
+  white-space: nowrap;
+  border-right: 1px solid #f3f4f6;
+}
+
+.tdBold {
+  font-weight: 600;
+  color: #111827;
+}
+
+.dash {
+  color: #d1d5db;
+}

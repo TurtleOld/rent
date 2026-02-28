@@ -53,6 +53,20 @@ class Invoice(models.Model):
         null=True,
         help_text="Итоговая сумма перерасчётов по счёту",
     )
+    amount_due_without_insurance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Итого к оплате без учёта добровольного страхования",
+    )
+    amount_due_with_insurance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Итого к оплате с учётом добровольного страхования",
+    )
 
     confidence = models.FloatField(blank=True, null=True)
     warnings = models.JSONField(default=list)

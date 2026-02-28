@@ -61,9 +61,11 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function load() {
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function load(isInitial = false) {
       try {
-        const [inv, pays] = await Promise.all([getInvoice(id), getPayments(id)]);
+        const inv = await getInvoice(id);
         setInvoice(inv);
         setEditData({
           provider_name: inv.provider_name,
@@ -72,14 +74,25 @@ export default function InvoiceDetailPage() {
           address: inv.address,
           amount_due: inv.amount_due,
         });
-        setPayments(pays);
+        if (isInitial) {
+          const pays = await getPayments(id);
+          setPayments(pays);
+        }
+        if (inv.status === "processing") {
+          pollTimer = setTimeout(() => void load(false), 3000);
+        }
       } catch {
         setError("Не удалось загрузить квитанцию");
       } finally {
-        setLoading(false);
+        if (isInitial) setLoading(false);
       }
     }
-    void load();
+
+    void load(true);
+
+    return () => {
+      if (pollTimer) clearTimeout(pollTimer);
+    };
   }, [id]);
 
   async function handleSaveEdit() {
@@ -210,8 +223,27 @@ export default function InvoiceDetailPage() {
                 <dd>{fmt(invoice.amount_recalculation)}</dd>
               </>
             )}
-            <dt>К оплате</dt>
-            <dd>{fmt(invoice.amount_due)}</dd>
+            {invoice.amount_due_without_insurance != null || invoice.amount_due_with_insurance != null ? (
+              <>
+                {invoice.amount_due_without_insurance != null && (
+                  <>
+                    <dt>К оплате (без страхования)</dt>
+                    <dd>{fmt(invoice.amount_due_without_insurance)}</dd>
+                  </>
+                )}
+                {invoice.amount_due_with_insurance != null && (
+                  <>
+                    <dt>К оплате (со страхованием)</dt>
+                    <dd>{fmt(invoice.amount_due_with_insurance)}</dd>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <dt>К оплате</dt>
+                <dd>{fmt(invoice.amount_due)}</dd>
+              </>
+            )}
             <dt>Статус оплаты</dt>
             <dd>{PAYMENT_STATUS_LABELS[invoice.payment_status]}</dd>
             <dt>Оплачено (пользователь)</dt>
