@@ -135,6 +135,7 @@ CELERY_TIMEZONE = "Europe/Moscow"
 # AI API
 AI_API_URL = config("AI_API_URL", default="")
 AI_API_TOKEN = config("AI_API_TOKEN", default="")
+AI_API_MODEL = config("AI_API_MODEL", default="")
 AI_API_TIMEOUT = config("AI_API_TIMEOUT", default=60, cast=int)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
