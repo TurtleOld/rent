@@ -19,7 +19,7 @@ interface Point {
   value: number;
 }
 
-function LineChart({ points, color = "#3b82f6" }: { points: Point[]; color?: string }) {
+function LineChart({ points, color = "#3b82f6", unit = "₽" }: { points: Point[]; color?: string; unit?: string }) {
   const W = 480;
   const H = 180;
   const PAD = { top: 16, right: 16, bottom: 36, left: 56 };
@@ -63,7 +63,7 @@ function LineChart({ points, color = "#3b82f6" }: { points: Point[]; color?: str
             textAnchor="end"
             className={styles.chartTick}
           >
-            {v.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}
+            {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}
           </text>
         </g>
       ))}
@@ -75,7 +75,7 @@ function LineChart({ points, color = "#3b82f6" }: { points: Point[]; color?: str
       {points.map((p, i) => (
         <g key={i}>
           <circle cx={toX(i)} cy={toY(p.value)} r="4" fill={color} />
-          <title>{`${p.label}: ${p.value.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`}</title>
+          <title>{`${p.label}: ${p.value.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ${unit}`}</title>
           <text
             x={toX(i)}
             y={H - PAD.bottom + 16}
@@ -87,6 +87,71 @@ function LineChart({ points, color = "#3b82f6" }: { points: Point[]; color?: str
         </g>
       ))}
     </svg>
+  );
+}
+
+// ── Multi-series service chart ────────────────────────────────────────────────
+
+const VOLUME_UNITS_EXCLUDE = new Set(["кв.м.", "кв.м", "чел.", "чел", "абонент", "абон."]);
+
+function showVolume(unit: string | null): boolean {
+  if (!unit) return false;
+  return !VOLUME_UNITS_EXCLUDE.has(unit.trim().toLowerCase());
+}
+
+interface ServiceRow {
+  period: string;
+  tariff: number | null;
+  amount: number | null;
+  quantity: number | null;
+  unit: string | null;
+}
+
+function ServiceChart({ service, rows }: { service: string; rows: ServiceRow[] }) {
+  const hasVolume = rows.some((r) => r.quantity != null && showVolume(rows[0]?.unit ?? null));
+  const unit = rows[0]?.unit ?? null;
+
+  const tariffPoints: Point[] = rows
+    .map((r, i) => ({ x: i, y: 0, label: r.period, value: r.tariff ?? 0 }))
+    .filter((_, i) => rows[i].tariff != null);
+
+  const amountPoints: Point[] = rows
+    .map((r, i) => ({ x: i, y: 0, label: r.period, value: r.amount ?? 0 }))
+    .filter((_, i) => rows[i].amount != null);
+
+  const volumePoints: Point[] = hasVolume
+    ? rows
+        .map((r, i) => ({ x: i, y: 0, label: r.period, value: r.quantity ?? 0 }))
+        .filter((_, i) => rows[i].quantity != null)
+    : [];
+
+  const series: { label: string; points: Point[]; color: string; unit: string }[] = [];
+  if (tariffPoints.length >= 2) series.push({ label: "Тариф", points: tariffPoints, color: "#f59e0b", unit: "₽" });
+  if (amountPoints.length >= 2) series.push({ label: "Сумма", points: amountPoints, color: "#3b82f6", unit: "₽" });
+  if (volumePoints.length >= 2) series.push({ label: "Объём", points: volumePoints, color: "#10b981", unit: unit ?? "" });
+
+  if (series.length === 0) return null;
+
+  return (
+    <div className={styles.chartCard}>
+      <h3 className={styles.chartTitle}>{service}</h3>
+      <div className={styles.multiChartGrid}>
+        {series.map(({ label, points, color, unit: u }) => (
+          <div key={label} className={styles.miniChartWrap}>
+            <div className={styles.miniChartLabel} style={{ color }}>{label}</div>
+            <LineChart points={points} color={color} unit={u} />
+          </div>
+        ))}
+      </div>
+      <div className={styles.chartLegend}>
+        {series.map(({ label, color }) => (
+          <span key={label} className={styles.legendItem}>
+            <span className={styles.legendDot} style={{ background: color }} />
+            {label}{label !== "Объём" ? " (₽)" : unit ? ` (${unit})` : ""}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -176,10 +241,7 @@ export default function ReportsPage() {
   const serviceTrends = useMemo(() => {
     if (!selectedInvoices.length) return [];
 
-    const map = new Map<
-      string,
-      { period: string; tariff: number | null; amount: number | null }[]
-    >();
+    const map = new Map<string, ServiceRow[]>();
 
     for (const inv of selectedInvoices) {
       const period = periodLabel(inv);
@@ -190,6 +252,8 @@ export default function ReportsPage() {
           period,
           tariff: item.tariff != null ? parseFloat(item.tariff) : null,
           amount: item.amount != null ? parseFloat(item.amount) : null,
+          quantity: item.quantity != null ? parseFloat(item.quantity) : null,
+          unit: item.unit ?? null,
         });
         map.set(key, list);
       }
@@ -258,50 +322,10 @@ export default function ReportsPage() {
           {serviceTrends.length === 0 ? (
             <p className={styles.empty}>Нет строк услуг для выбранного счёта.</p>
           ) : (
-            <div className={styles.serviceTable}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th className={styles.th}>Услуга</th>
-                    {selectedInvoices.map((inv) => (
-                      <th key={inv.id} className={styles.th}>
-                        {periodLabel(inv)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {serviceTrends.map(({ service, rows }) => (
-                    <>
-                      <tr key={`${service}-tariff`} className={styles.trTariff}>
-                        <td className={styles.tdService}>
-                          <span className={styles.serviceName}>{service}</span>
-                          <span className={styles.rowKind}>тариф</span>
-                        </td>
-                        {rows.map((r, i) => (
-                          <td key={i} className={styles.td}>
-                            {r.tariff != null
-                              ? r.tariff.toLocaleString("ru-RU", { minimumFractionDigits: 2 })
-                              : <span className={styles.dash}>—</span>}
-                          </td>
-                        ))}
-                      </tr>
-                      <tr key={`${service}-amount`} className={styles.trAmount}>
-                        <td className={styles.tdService}>
-                          <span className={styles.rowKind}>итого</span>
-                        </td>
-                        {rows.map((r, i) => (
-                          <td key={i} className={`${styles.td} ${styles.tdBold}`}>
-                            {r.amount != null
-                              ? r.amount.toLocaleString("ru-RU", { minimumFractionDigits: 2 }) + " ₽"
-                              : <span className={styles.dash}>—</span>}
-                          </td>
-                        ))}
-                      </tr>
-                    </>
-                  ))}
-                </tbody>
-              </table>
+            <div className={styles.chartGrid}>
+              {serviceTrends.map(({ service, rows }) => (
+                <ServiceChart key={service} service={service} rows={rows} />
+              ))}
             </div>
           )}
         </section>

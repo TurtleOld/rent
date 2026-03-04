@@ -94,6 +94,14 @@ export default function DashboardPage() {
     void loadInvoices();
   }, []);
 
+  // Поллинг пока есть хотя бы один инвойс в статусе processing
+  useEffect(() => {
+    const hasProcessing = invoices.some((inv) => inv.status === "processing");
+    if (!hasProcessing) return;
+    const timer = setTimeout(() => void loadInvoices(), 3000);
+    return () => clearTimeout(timer);
+  }, [invoices]);
+
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;

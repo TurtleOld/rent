@@ -124,6 +124,32 @@
   flex-shrink: 0;
 }
 
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* ── Multi-series service chart ──────────────────────────────────────────── */
+
+.multiChartGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.miniChartWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.miniChartLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding-left: 0.25rem;
+}
+
 /* ── Account picker ──────────────────────────────────────────────────────── */
 
 .accountPicker {
