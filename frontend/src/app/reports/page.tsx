@@ -3,108 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Invoice, getInvoicesAll } from "@/lib/api";
+import { periodKey, periodLabel } from "@/lib/reports";
+import LineChart, { type ChartPoint } from "@/components/LineChart";
+import ServiceChart, { type ServiceRow } from "@/components/ServiceChart";
+import TariffDynamicsTable, { type TariffRow } from "@/components/TariffDynamicsTable";
 import styles from "./reports.module.css";
-
-const MONTH_SHORT = [
-  "Янв", "Фев", "Мар", "Апр", "Май", "Июн",
-  "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек",
-];
-
-// ── SVG Line Chart ────────────────────────────────────────────────────────────
-
-interface Point {
-  x: number;
-  y: number;
-  label: string;
-  value: number;
-}
-
-function LineChart({ points, color = "#3b82f6" }: { points: Point[]; color?: string }) {
-  const W = 480;
-  const H = 180;
-  const PAD = { top: 16, right: 16, bottom: 36, left: 56 };
-
-  if (points.length === 0) return null;
-
-  const values = points.map((p) => p.value);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
-  const range = maxVal - minVal || 1;
-
-  const toX = (i: number) =>
-    PAD.left + (i / Math.max(points.length - 1, 1)) * (W - PAD.left - PAD.right);
-  const toY = (v: number) =>
-    PAD.top + (1 - (v - minVal) / range) * (H - PAD.top - PAD.bottom);
-
-  const pathD = points
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(p.value).toFixed(1)}`)
-    .join(" ");
-
-  // Y-axis grid lines
-  const ticks = 4;
-  const yTicks = Array.from({ length: ticks + 1 }, (_, i) => minVal + (range * i) / ticks);
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={styles.chartSvg}>
-      {/* Grid lines */}
-      {yTicks.map((v, i) => (
-        <g key={i}>
-          <line
-            x1={PAD.left}
-            x2={W - PAD.right}
-            y1={toY(v)}
-            y2={toY(v)}
-            stroke="#e5e7eb"
-            strokeWidth="1"
-          />
-          <text
-            x={PAD.left - 6}
-            y={toY(v) + 4}
-            textAnchor="end"
-            className={styles.chartTick}
-          >
-            {v.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}
-          </text>
-        </g>
-      ))}
-
-      {/* Line */}
-      <path d={pathD} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" />
-
-      {/* Dots + X labels */}
-      {points.map((p, i) => (
-        <g key={i}>
-          <circle cx={toX(i)} cy={toY(p.value)} r="4" fill={color} />
-          <title>{`${p.label}: ${p.value.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽`}</title>
-          <text
-            x={toX(i)}
-            y={H - PAD.bottom + 16}
-            textAnchor="middle"
-            className={styles.chartTick}
-          >
-            {p.label}
-          </text>
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function periodLabel(inv: Invoice): string {
-  if (inv.period_month != null && inv.period_year != null) {
-    return `${MONTH_SHORT[inv.period_month - 1]} ${String(inv.period_year).slice(2)}`;
-  }
-  return new Date(inv.created_at).toLocaleDateString("ru-RU", { month: "short", year: "2-digit" });
-}
-
-function periodKey(inv: Invoice): string {
-  if (inv.period_month != null && inv.period_year != null) {
-    return `${inv.period_year}-${String(inv.period_month).padStart(2, "0")}`;
-  }
-  return inv.created_at.slice(0, 7);
-}
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -117,15 +20,11 @@ export default function ReportsPage() {
 
   useEffect(() => {
     getInvoicesAll()
-      .then((data) => {
-        const processed = data.filter((inv) => inv.status === "processed");
-        setInvoices(processed);
-      })
+      .then((data) => setInvoices(data.filter((inv) => inv.status === "processed")))
       .catch(() => setError("Не удалось загрузить данные"))
       .finally(() => setLoading(false));
   }, []);
 
-  // Group invoices by account_number
   const accounts = useMemo(() => {
     const map = new Map<string, Invoice[]>();
     for (const inv of invoices) {
@@ -134,7 +33,6 @@ export default function ReportsPage() {
       list.push(inv);
       map.set(key, list);
     }
-    // Sort each group by period ascending
     for (const [, list] of map) {
       list.sort((a, b) => periodKey(a).localeCompare(periodKey(b)));
     }
@@ -143,7 +41,6 @@ export default function ReportsPage() {
 
   const accountKeys = useMemo(() => Array.from(accounts.keys()), [accounts]);
 
-  // Set default selected account
   useEffect(() => {
     if (accountKeys.length > 0 && selectedAccount === null) {
       setSelectedAccount(accountKeys[0]);
@@ -155,11 +52,10 @@ export default function ReportsPage() {
     [accounts, selectedAccount],
   );
 
-  // Chart data for amount_due_without_insurance per account
   const chartDataByAccount = useMemo(() => {
-    const result: { account: string; points: Point[] }[] = [];
+    const result: { account: string; points: ChartPoint[] }[] = [];
     for (const [account, list] of accounts) {
-      const points: Point[] = list
+      const points: ChartPoint[] = list
         .filter((inv) => inv.amount_due_without_insurance != null || inv.amount_due != null)
         .map((inv, i) => ({
           x: i,
@@ -172,30 +68,50 @@ export default function ReportsPage() {
     return result;
   }, [accounts]);
 
-  // Tariff & amount trends per service for selected account
   const serviceTrends = useMemo(() => {
     if (!selectedInvoices.length) return [];
-
-    const map = new Map<
-      string,
-      { period: string; tariff: number | null; amount: number | null }[]
-    >();
-
+    const map = new Map<string, ServiceRow[]>();
     for (const inv of selectedInvoices) {
       const period = periodLabel(inv);
       for (const item of inv.line_items) {
-        const key = item.service_name;
-        const list = map.get(key) ?? [];
+        const list = map.get(item.service_name) ?? [];
         list.push({
           period,
           tariff: item.tariff != null ? parseFloat(item.tariff) : null,
           amount: item.amount != null ? parseFloat(item.amount) : null,
+          quantity: item.quantity != null ? parseFloat(item.quantity) : null,
+          unit: item.unit ?? null,
         });
-        map.set(key, list);
+        map.set(item.service_name, list);
       }
     }
-
     return Array.from(map.entries()).map(([service, rows]) => ({ service, rows }));
+  }, [selectedInvoices]);
+
+  // Тарифные строки из выбранного счёта: по каждой услуге берём последние два
+  // тарифа с ненулевым значением и вычисляем % изменения.
+  const tariffRows = useMemo((): TariffRow[] => {
+    if (!selectedInvoices.length) return [];
+    const map = new Map<string, { unit: string | null; tariffs: number[] }>();
+    for (const inv of selectedInvoices) {
+      for (const item of inv.line_items) {
+        if (item.tariff == null) continue;
+        const tariff = parseFloat(item.tariff);
+        if (!isFinite(tariff)) continue;
+        const entry = map.get(item.service_name) ?? { unit: item.unit ?? null, tariffs: [] };
+        entry.tariffs.push(tariff);
+        map.set(item.service_name, entry);
+      }
+    }
+    return Array.from(map.entries()).map(([serviceName, { unit, tariffs }]) => {
+      const last = tariffs[tariffs.length - 1] ?? null;
+      const prev = tariffs.length >= 2 ? tariffs[tariffs.length - 2] : null;
+      const changePct =
+        last != null && prev != null && prev !== 0
+          ? Math.round(((last - prev) / prev) * 10000) / 100
+          : null;
+      return { serviceName, unit, lastTariff: last, prevTariff: prev, changePct };
+    });
   }, [selectedInvoices]);
 
   if (loading) return <div className={styles.loading}>Загрузка...</div>;
@@ -215,7 +131,7 @@ export default function ReportsPage() {
         <p className={styles.empty}>Нет обработанных квитанций для построения отчётов.</p>
       )}
 
-      {/* ── Section 1: Amount without insurance per account ── */}
+      {/* ── Секция 1: Сумма к оплате по счетам ── */}
       {chartDataByAccount.length > 0 && (
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Сумма к оплате без страхования по лицевым счетам</h2>
@@ -234,77 +150,44 @@ export default function ReportsPage() {
         </section>
       )}
 
-      {/* ── Section 2: Tariff & amount per service ── */}
+      {/* ── Секции 2 и 3: привязаны к выбранному счёту ── */}
       {accountKeys.length > 0 && (
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Динамика тарифов и сумм по услугам</h2>
+        <>
+          <div className={styles.sectionHeader} style={{ marginBottom: "1.25rem" }}>
+            <h2 className={styles.sectionTitle} style={{ marginBottom: 0 }}>
+              Лицевой счёт:
+            </h2>
             <div className={styles.accountPicker}>
-              <label className={styles.pickerLabel}>Лицевой счёт:</label>
               <select
                 className={styles.pickerSelect}
                 value={selectedAccount ?? ""}
                 onChange={(e) => setSelectedAccount(e.target.value)}
               >
                 {accountKeys.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
+                  <option key={k} value={k}>{k}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {serviceTrends.length === 0 ? (
-            <p className={styles.empty}>Нет строк услуг для выбранного счёта.</p>
-          ) : (
-            <div className={styles.serviceTable}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th className={styles.th}>Услуга</th>
-                    {selectedInvoices.map((inv) => (
-                      <th key={inv.id} className={styles.th}>
-                        {periodLabel(inv)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {serviceTrends.map(({ service, rows }) => (
-                    <>
-                      <tr key={`${service}-tariff`} className={styles.trTariff}>
-                        <td className={styles.tdService}>
-                          <span className={styles.serviceName}>{service}</span>
-                          <span className={styles.rowKind}>тариф</span>
-                        </td>
-                        {rows.map((r, i) => (
-                          <td key={i} className={styles.td}>
-                            {r.tariff != null
-                              ? r.tariff.toLocaleString("ru-RU", { minimumFractionDigits: 2 })
-                              : <span className={styles.dash}>—</span>}
-                          </td>
-                        ))}
-                      </tr>
-                      <tr key={`${service}-amount`} className={styles.trAmount}>
-                        <td className={styles.tdService}>
-                          <span className={styles.rowKind}>итого</span>
-                        </td>
-                        {rows.map((r, i) => (
-                          <td key={i} className={`${styles.td} ${styles.tdBold}`}>
-                            {r.amount != null
-                              ? r.amount.toLocaleString("ru-RU", { minimumFractionDigits: 2 }) + " ₽"
-                              : <span className={styles.dash}>—</span>}
-                          </td>
-                        ))}
-                      </tr>
-                    </>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Динамика тарифов и сумм по услугам</h2>
+            {serviceTrends.length === 0 ? (
+              <p className={styles.empty}>Нет строк услуг для выбранного счёта.</p>
+            ) : (
+              <div className={styles.chartGrid}>
+                {serviceTrends.map(({ service, rows }) => (
+                  <ServiceChart key={service} service={service} rows={rows} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Динамика тарифов</h2>
+            <TariffDynamicsTable rows={tariffRows} />
+          </section>
+        </>
       )}
     </div>
   );
