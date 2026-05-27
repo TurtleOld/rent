@@ -327,3 +327,81 @@ class ServiceResolutionTest(TestCase):
         self._run_do_process([{"service_name": "ТЕСТ", "unit": "куб.м.", "amount": "10.00"}])
         li = LineItem.objects.get(invoice=self.invoice, service_name="ТЕСТ")
         self.assertEqual(li.unit, "куб.м")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceReadOnlyTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="readonly@example.com",
+            email="readonly@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+            provider_name="ТСЖ Тест",
+        )
+
+    def test_patch_invoice_returns_405(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.patch(
+            f"/api/invoices/{self.invoice.pk}/",
+            {"provider_name": "Изменённый поставщик"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceReparseTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="reparse@example.com",
+            email="reparse@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+            warnings=["старое предупреждение"],
+            error_message="старая ошибка",
+        )
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_reparse_resets_status_and_dispatches_task(self, mock_delay):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data["status"], "processing")
+        self.assertEqual(response.data["warnings"], [])
+        self.assertIsNone(response.data["error_message"])
+        mock_delay.assert_called_once_with(self.invoice.pk)
+
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSING)
+
+    def test_reparse_returns_409_if_already_processing(self):
+        self.invoice.status = Invoice.Status.PROCESSING
+        self.invoice.save()
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+
+    def test_reparse_requires_auth(self):
+        response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_reparse_forbidden_for_other_user(self):
+        other = User.objects.create_user(
+            username="other2@example.com",
+            email="other2@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=other)
+        response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
