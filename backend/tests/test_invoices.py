@@ -37,6 +37,18 @@ class InvoiceUploadTest(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_upload_rejects_non_pdf_by_magic_bytes(self):
+        self.client.force_authenticate(user=self.user)
+        fake_file = SimpleUploadedFile(
+            "evil.pdf", b"This is not a PDF file at all", content_type="application/pdf"
+        )
+        response = self.client.post(
+            "/api/invoices/upload/",
+            {"pdf_file": fake_file},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     @patch("apps.invoices.views.process_invoice.delay")
     def test_invoice_upload_authenticated(self, mock_delay):
         self.client.force_authenticate(user=self.user)

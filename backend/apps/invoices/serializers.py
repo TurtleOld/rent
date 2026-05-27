@@ -70,4 +70,10 @@ class InvoiceUploadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Допускаются только PDF-файлы.")
         if value.size > 20 * 1024 * 1024:
             raise serializers.ValidationError("Размер файла не должен превышать 20 МБ.")
+        header = value.read(5)
+        value.seek(0)
+        if header != b"%PDF-":
+            raise serializers.ValidationError(
+                "Файл не является валидным PDF (отсутствует сигнатура %PDF-)."
+            )
         return value

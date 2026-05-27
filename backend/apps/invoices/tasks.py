@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 
 from .models import Invoice, LineItem
 from .pdf_parser import parse_epd
@@ -65,6 +66,8 @@ def _validate_parsed_data(data: dict) -> list[str]:
     max_retries=3,
     default_retry_delay=30,
     name="invoices.process_invoice",
+    soft_time_limit=60,
+    time_limit=120,
 )
 def process_invoice(self, invoice_id: int) -> None:
     try:
@@ -97,7 +100,16 @@ def _do_process(invoice: Invoice) -> None:
         raise
 
     try:
+        import pdfplumber
+        with pdfplumber.open(invoice.pdf_file) as pdf:
+            if len(pdf.pages) > 50:
+                _fail(invoice, "PDF содержит слишком много страниц (>50).")
+                return
+        invoice.pdf_file.seek(0)
         parsed_data = parse_epd(invoice.pdf_file)
+    except SoftTimeLimitExceeded:
+        _fail(invoice, "PDF слишком большой или повреждён.")
+        return
     except Exception as exc:
         msg = f"Ошибка парсинга PDF: {exc}"
         logger.exception(msg)
