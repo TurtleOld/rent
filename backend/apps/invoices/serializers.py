@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Invoice, LineItem
+from .models import Invoice, LineItem, Service, ServiceAlias
 
 
 class LineItemSerializer(serializers.ModelSerializer):
@@ -58,6 +58,21 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class ServiceAliasSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ServiceAlias
+        fields = ("id", "raw_name")
+
+
+class ServiceSerializer(serializers.ModelSerializer):
+    aliases = ServiceAliasSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Service
+        fields = ("id", "canonical_name", "unit", "aliases", "created_at", "updated_at")
+        read_only_fields = ("id", "created_at", "updated_at", "aliases")
 
 
 class InvoiceUploadSerializer(serializers.ModelSerializer):

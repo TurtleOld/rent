@@ -6,8 +6,8 @@ from rest_framework.response import Response
 from apps.payments.models import Payment
 from apps.payments.serializers import PaymentSerializer
 
-from .models import Invoice
-from .serializers import InvoiceSerializer, InvoiceUploadSerializer
+from .models import Invoice, LineItem, Service
+from .serializers import InvoiceSerializer, InvoiceUploadSerializer, ServiceSerializer
 from .tasks import process_invoice
 
 
@@ -70,6 +70,67 @@ class InvoiceFileDownloadView(views.APIView):
         response["X-Accel-Redirect"] = f"/protected-media/{invoice.pdf_file.name}"
         response["Content-Disposition"] = f'inline; filename="invoice_{pk}.pdf"'
         return response
+
+
+class ServiceListView(generics.ListAPIView):
+    """Returns all services belonging to the authenticated user."""
+
+    serializer_class = ServiceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            Service.objects.filter(user=self.request.user)
+            .prefetch_related("aliases")
+            .order_by("canonical_name")
+        )
+
+
+class ServiceTariffHistoryView(views.APIView):
+    """Returns tariff history for a single service across all processed invoices.
+
+    Each point in the history represents one invoice period where this service
+    appeared. Points are ordered by period (year, month). Change percentage
+    is relative to the immediately preceding point.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk: int) -> Response:
+        service = get_object_or_404(Service, pk=pk, user=request.user)
+        qs = (
+            LineItem.objects
+            .filter(service=service, invoice__status="processed")
+            .select_related("invoice")
+            .order_by("invoice__period_year", "invoice__period_month")
+            .values(
+                "invoice__period_year",
+                "invoice__period_month",
+                "tariff",
+                "invoice__id",
+            )
+        )
+        points = []
+        prev_tariff = None
+        for row in qs:
+            tariff = row["tariff"]
+            change_pct = None
+            if tariff is not None and prev_tariff is not None and prev_tariff != 0:
+                change_pct = round(
+                    float((tariff - prev_tariff) / prev_tariff * 100), 2
+                )
+            points.append(
+                {
+                    "invoice_id": row["invoice__id"],
+                    "year": row["invoice__period_year"],
+                    "month": row["invoice__period_month"],
+                    "tariff": tariff,
+                    "change_pct": change_pct,
+                }
+            )
+            if tariff is not None:
+                prev_tariff = tariff
+        return Response({"service": ServiceSerializer(service).data, "points": points})
 
 
 class InvoicePaymentListCreateView(generics.ListCreateAPIView):
