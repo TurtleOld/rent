@@ -1,5 +1,6 @@
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, parsers, permissions, status
+from rest_framework import generics, parsers, permissions, status, views
 from rest_framework.response import Response
 
 from apps.payments.models import Payment
@@ -52,6 +53,23 @@ class InvoiceDetailView(generics.RetrieveUpdateDestroyAPIView):
             Invoice.objects.filter(user=self.request.user)
             .prefetch_related("line_items", "payments")
         )
+
+
+class InvoiceFileDownloadView(views.APIView):
+    """Serves an invoice PDF via X-Accel-Redirect (nginx internal redirect).
+
+    Only the authenticated owner of the invoice can download it.
+    The response body is empty; nginx replaces it with the actual file.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk: int) -> HttpResponse:
+        invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
+        response = HttpResponse(status=200, content_type="application/pdf")
+        response["X-Accel-Redirect"] = f"/protected-media/{invoice.pdf_file.name}"
+        response["Content-Disposition"] = f'inline; filename="invoice_{pk}.pdf"'
+        return response
 
 
 class InvoicePaymentListCreateView(generics.ListCreateAPIView):

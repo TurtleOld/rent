@@ -148,3 +148,39 @@ class PaymentTest(TestCase):
             amount=Decimal("4296.90"),
         )
         self.assertEqual(item.amount_charged + item.recalculation, item.amount)
+
+
+class InvoiceFileDownloadTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="owner@example.com",
+            email="owner@example.com",
+            password="testpassword",
+        )
+        self.other_user = User.objects.create_user(
+            username="stranger@example.com",
+            email="stranger@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+
+    def test_file_download_requires_auth(self):
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/file/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_file_download_forbidden_for_other_user(self):
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/file/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_file_download_returns_x_accel_redirect_header(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/file/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("X-Accel-Redirect", response)
+        self.assertIn("invoices/test.pdf", response["X-Accel-Redirect"])

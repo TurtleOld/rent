@@ -197,6 +197,10 @@ export async function getPayments(invoiceId: number): Promise<Payment[]> {
   return (result as PaginatedResponse<Payment>).results;
 }
 
+export function invoiceFileUrl(id: number): string {
+  return `/api/invoices/${id}/file/`;
+}
+
 export async function createPayment(
   invoiceId: number,
   data: { amount: string; payment_date: string; note?: string },
