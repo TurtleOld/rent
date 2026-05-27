@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -14,6 +14,7 @@ User = get_user_model()
 FAKE_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceUploadTest(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -78,6 +79,7 @@ class InvoiceUploadTest(TestCase):
         self.assertIn("unknown", str(invoice))
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class PaymentTest(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -150,6 +152,7 @@ class PaymentTest(TestCase):
         self.assertEqual(item.amount_charged + item.recalculation, item.amount)
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceFileDownloadTest(TestCase):
     def setUp(self):
         self.client = APIClient()

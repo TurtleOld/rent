@@ -14,5 +14,5 @@ export async function setTokens(access: string, refresh: string): Promise<void> 
 }
 
 export async function clearTokens(): Promise<void> {
-  await fetch("/auth-cookie/clear", { method: "POST" });
+  await fetch("/auth-cookie/logout", { method: "POST" });
 }

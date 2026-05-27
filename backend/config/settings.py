@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     # Third party
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     # Local
     "apps.accounts",
@@ -111,7 +112,7 @@ SIMPLE_JWT = {
         days=config("REFRESH_TOKEN_LIFETIME_DAYS", default=7, cast=int)
     ),
     "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 

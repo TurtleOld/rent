@@ -1,11 +1,12 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
 User = get_user_model()
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class UserRegistrationTest(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -54,3 +55,30 @@ class UserRegistrationTest(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_logout_blacklists_refresh_token(self):
+        User.objects.create_user(
+            username="logout@example.com",
+            email="logout@example.com",
+            password="mypassword",
+        )
+        login_res = self.client.post(
+            "/api/auth/login/",
+            {"email": "logout@example.com", "password": "mypassword"},
+            format="json",
+        )
+        refresh_token = login_res.data["refresh"]
+
+        logout_res = self.client.post(
+            "/api/auth/logout/",
+            {"refresh": refresh_token},
+            format="json",
+        )
+        self.assertEqual(logout_res.status_code, status.HTTP_200_OK)
+
+        refresh_res = self.client.post(
+            "/api/auth/refresh/",
+            {"refresh": refresh_token},
+            format="json",
+        )
+        self.assertEqual(refresh_res.status_code, status.HTTP_401_UNAUTHORIZED)
