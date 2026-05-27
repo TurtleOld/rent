@@ -10,6 +10,7 @@ from django.db import transaction
 from .models import Invoice, LineItem, Service, ServiceAlias
 from .pdf_parser import parse_epd
 from .units import normalize_unit
+from .validators import run_all_checks
 
 
 def _json_serializable(obj: dict) -> dict:
@@ -188,6 +189,11 @@ def _do_process(invoice: Invoice) -> None:
             normalized_unit = normalize_unit(li.unit) or li.unit
             li.service = _resolve_service(invoice.user_id, li.service_name, normalized_unit)
         LineItem.objects.bulk_update(saved_items, ["service"])
+
+        extra_warnings = run_all_checks(invoice, saved_items)
+        if extra_warnings:
+            invoice.warnings = (invoice.warnings or []) + extra_warnings
+            invoice.save(update_fields=["warnings", "updated_at"])
 
     logger.info(
         "Invoice %s processed successfully. %d line items saved.",
