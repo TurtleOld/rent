@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.invoices.models import Invoice, LineItem
+from apps.invoices.models import Invoice, LineItem, Service, ServiceAlias
 
 User = get_user_model()
 
@@ -265,3 +265,65 @@ class InvoiceFileDownloadTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("X-Accel-Redirect", response)
         self.assertIn("invoices/test.pdf", response["X-Accel-Redirect"])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ServiceResolutionTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="svc@example.com",
+            email="svc@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _run_do_process(self, line_items_data: list[dict]) -> None:
+        from django.core.files.base import ContentFile
+        from apps.invoices.tasks import _do_process
+
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        self.invoice.status = Invoice.Status.PROCESSING
+        self.invoice.save()
+
+        mock_parsed = {
+            "document_type": "utility_bill",
+            "provider_name": "Тест",
+            "account_number": "123",
+            "payer_name": None,
+            "address": None,
+            "period": {"month": 1, "year": 2026, "start_date": None, "end_date": None},
+            "totals": {},
+            "line_items": line_items_data,
+            "confidence": 0.9,
+            "warnings": [],
+        }
+        with patch("apps.invoices.tasks.parse_epd", return_value=mock_parsed), \
+             patch("pdfplumber.open") as mock_open:
+            mock_open.return_value.__enter__.return_value.pages = [None]
+            _do_process(self.invoice)
+
+    def test_parsing_creates_service_for_new_name(self):
+        self._run_do_process([{"service_name": "НОВАЯ УСЛУГА", "unit": "кВт·ч", "amount": "100.00"}])
+        self.assertTrue(Service.objects.filter(user=self.user, canonical_name="НОВАЯ УСЛУГА").exists())
+        self.assertTrue(ServiceAlias.objects.filter(raw_name="НОВАЯ УСЛУГА").exists())
+        li = LineItem.objects.get(invoice=self.invoice, service_name="НОВАЯ УСЛУГА")
+        self.assertIsNotNone(li.service)
+
+    def test_parsing_reuses_existing_service_via_alias(self):
+        existing = Service.objects.create(user=self.user, canonical_name="ХВС")
+        ServiceAlias.objects.create(service=existing, raw_name="ХОЛОДНОЕ ВОДОСНАБЖЕНИЕ")
+
+        self._run_do_process([{"service_name": "ХОЛОДНОЕ ВОДОСНАБЖЕНИЕ", "unit": "куб.м", "amount": "50.00"}])
+
+        li = LineItem.objects.get(invoice=self.invoice, service_name="ХОЛОДНОЕ ВОДОСНАБЖЕНИЕ")
+        self.assertEqual(li.service, existing)
+        self.assertEqual(Service.objects.filter(user=self.user).count(), 1)
+
+    def test_parsing_normalizes_units(self):
+        self._run_do_process([{"service_name": "ТЕСТ", "unit": "куб.м.", "amount": "10.00"}])
+        li = LineItem.objects.get(invoice=self.invoice, service_name="ТЕСТ")
+        self.assertEqual(li.unit, "куб.м")
