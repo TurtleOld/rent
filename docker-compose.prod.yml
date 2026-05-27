@@ -64,12 +64,11 @@ services:
       - backend
 
   nginx:
-    image: nginx:1.25-alpine
+    image: ghcr.io/turtleold/rent-nginx:${IMAGE_TAG:-main}
     restart: unless-stopped
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - media_files:/app/media:ro
     depends_on:
       - backend
