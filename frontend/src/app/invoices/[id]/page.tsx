@@ -9,7 +9,7 @@ import {
   deleteInvoice,
   getInvoice,
   getPayments,
-  patchInvoice,
+  reparseInvoice,
 } from "@/lib/api";
 import styles from "./invoice.module.css";
 
@@ -25,19 +25,6 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   paid: "Оплачен",
 };
 
-type EditableFields = Pick<
-  Invoice,
-  "provider_name" | "account_number" | "payer_name" | "address" | "amount_due"
->;
-
-const EDITABLE_LABELS: { field: keyof EditableFields; label: string }[] = [
-  { field: "provider_name", label: "Поставщик" },
-  { field: "account_number", label: "Лицевой счёт" },
-  { field: "payer_name", label: "Плательщик" },
-  { field: "address", label: "Адрес" },
-  { field: "amount_due", label: "К оплате (₽)" },
-];
-
 export default function InvoiceDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -46,14 +33,6 @@ export default function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState<EditableFields>({
-    provider_name: null,
-    account_number: null,
-    payer_name: null,
-    address: null,
-    amount_due: null,
-  });
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState(new Date().toISOString().split("T")[0]);
   const [payNote, setPayNote] = useState("");
@@ -67,13 +46,6 @@ export default function InvoiceDetailPage() {
       try {
         const inv = await getInvoice(id);
         setInvoice(inv);
-        setEditData({
-          provider_name: inv.provider_name,
-          account_number: inv.account_number,
-          payer_name: inv.payer_name,
-          address: inv.address,
-          amount_due: inv.amount_due,
-        });
         if (isInitial) {
           const pays = await getPayments(id);
           setPayments(pays);
@@ -94,20 +66,6 @@ export default function InvoiceDetailPage() {
       if (pollTimer) clearTimeout(pollTimer);
     };
   }, [id]);
-
-  async function handleSaveEdit() {
-    setSaving(true);
-    setError(null);
-    try {
-      const updated = await patchInvoice(id, editData);
-      setInvoice(updated);
-      setEditing(false);
-    } catch {
-      setError("Ошибка при сохранении");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleAddPayment() {
     if (!payAmount) return;
@@ -144,6 +102,18 @@ export default function InvoiceDetailPage() {
     }
   }
 
+  async function handleReparse() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await reparseInvoice(id);
+      setInvoice(updated);
+    } catch {
+      setError("Ошибка при запуске перепарсинга");
+      setSaving(false);
+    }
+  }
+
   if (loading) return <div className={styles.loading}>Загрузка...</div>;
   if (!invoice) return <div className={styles.loading}>{error ?? "Квитанция не найдена"}</div>;
 
@@ -163,9 +133,9 @@ export default function InvoiceDetailPage() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Данные квитанции</h2>
           <div className={styles.headerActions}>
-            {invoice.status === "processed" && !editing && (
-              <button onClick={() => setEditing(true)} className={styles.editBtn}>
-                Редактировать
+            {(invoice.status === "processed" || invoice.status === "failed") && (
+              <button onClick={handleReparse} disabled={saving} className={styles.editBtn}>
+                Перепарсить PDF
               </button>
             )}
             <button onClick={handleDelete} disabled={saving} className={styles.deleteBtn}>
@@ -174,106 +144,81 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
 
-        {editing ? (
-          <div className={styles.editForm}>
-            {EDITABLE_LABELS.map(({ field, label }) => (
-              <label key={field} className={styles.editLabel}>
-                {label}
-                <input
-                  value={(editData[field] as string) ?? ""}
-                  onChange={(e) =>
-                    setEditData((prev) => ({ ...prev, [field]: e.target.value || null }))
-                  }
-                  className={styles.editInput}
-                />
-              </label>
-            ))}
-            <div className={styles.editActions}>
-              <button onClick={handleSaveEdit} disabled={saving} className={styles.saveBtn}>
-                {saving ? "Сохранение..." : "Сохранить"}
-              </button>
-              <button onClick={() => setEditing(false)} className={styles.cancelBtn}>
-                Отмена
-              </button>
-            </div>
-          </div>
-        ) : (
-          <dl className={styles.details}>
-            <dt>Статус</dt>
-            <dd>{STATUS_LABELS[invoice.status]}</dd>
-            <dt>Поставщик</dt>
-            <dd>{invoice.provider_name ?? "—"}</dd>
-            <dt>Лицевой счёт</dt>
-            <dd>{invoice.account_number ?? "—"}</dd>
-            <dt>Плательщик</dt>
-            <dd>{invoice.payer_name ?? "—"}</dd>
-            <dt>Адрес</dt>
-            <dd>{invoice.address ?? "—"}</dd>
-            <dt>Период</dt>
-            <dd>
-              {invoice.period_month != null && invoice.period_year != null
-                ? `${invoice.period_month}/${invoice.period_year}`
-                : "—"}
-            </dd>
-            <dt>Начислено</dt>
-            <dd>{fmt(invoice.amount_charged)}</dd>
-            {invoice.amount_recalculation && (
-              <>
-                <dt>Перерасчёт</dt>
-                <dd>{fmt(invoice.amount_recalculation)}</dd>
-              </>
-            )}
-            {invoice.amount_due_without_insurance != null || invoice.amount_due_with_insurance != null ? (
-              <>
-                {invoice.amount_due_without_insurance != null && (
-                  <>
-                    <dt>К оплате (без страхования)</dt>
-                    <dd>{fmt(invoice.amount_due_without_insurance)}</dd>
-                  </>
-                )}
-                {invoice.amount_due_with_insurance != null && (
-                  <>
-                    <dt>К оплате (со страхованием)</dt>
-                    <dd>{fmt(invoice.amount_due_with_insurance)}</dd>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                <dt>К оплате</dt>
-                <dd>{fmt(invoice.amount_due)}</dd>
-              </>
-            )}
-            <dt>Статус оплаты</dt>
-            <dd>{PAYMENT_STATUS_LABELS[invoice.payment_status]}</dd>
-            <dt>Оплачено (пользователь)</dt>
-            <dd>{fmt(invoice.total_paid)}</dd>
-            {invoice.confidence != null && (
-              <>
-                <dt>Уверенность AI</dt>
-                <dd>{Math.round(invoice.confidence * 100)}%</dd>
-              </>
-            )}
-            {invoice.warnings.length > 0 && (
-              <>
-                <dt>Предупреждения</dt>
-                <dd>
-                  <ul className={styles.warnings}>
-                    {invoice.warnings.map((w, i) => (
-                      <li key={i}>{w}</li>
-                    ))}
-                  </ul>
-                </dd>
-              </>
-            )}
-            {invoice.status === "failed" && invoice.error_message && (
-              <>
-                <dt>Ошибка обработки</dt>
-                <dd className={styles.errorText}>{invoice.error_message}</dd>
-              </>
-            )}
-          </dl>
-        )}
+        <dl className={styles.details}>
+          <dt>Статус</dt>
+          <dd>{STATUS_LABELS[invoice.status]}</dd>
+          <dt>Поставщик</dt>
+          <dd>{invoice.provider_name ?? "—"}</dd>
+          <dt>Лицевой счёт</dt>
+          <dd>{invoice.account_number ?? "—"}</dd>
+          <dt>Плательщик</dt>
+          <dd>{invoice.payer_name ?? "—"}</dd>
+          <dt>Адрес</dt>
+          <dd>{invoice.address ?? "—"}</dd>
+          <dt>Период</dt>
+          <dd>
+            {invoice.period_month != null && invoice.period_year != null
+              ? `${invoice.period_month}/${invoice.period_year}`
+              : "—"}
+          </dd>
+          <dt>Начислено</dt>
+          <dd>{fmt(invoice.amount_charged)}</dd>
+          {invoice.amount_recalculation && (
+            <>
+              <dt>Перерасчёт</dt>
+              <dd>{fmt(invoice.amount_recalculation)}</dd>
+            </>
+          )}
+          {invoice.amount_due_without_insurance != null || invoice.amount_due_with_insurance != null ? (
+            <>
+              {invoice.amount_due_without_insurance != null && (
+                <>
+                  <dt>К оплате (без страхования)</dt>
+                  <dd>{fmt(invoice.amount_due_without_insurance)}</dd>
+                </>
+              )}
+              {invoice.amount_due_with_insurance != null && (
+                <>
+                  <dt>К оплате (со страхованием)</dt>
+                  <dd>{fmt(invoice.amount_due_with_insurance)}</dd>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <dt>К оплате</dt>
+              <dd>{fmt(invoice.amount_due)}</dd>
+            </>
+          )}
+          <dt>Статус оплаты</dt>
+          <dd>{PAYMENT_STATUS_LABELS[invoice.payment_status]}</dd>
+          <dt>Оплачено (пользователь)</dt>
+          <dd>{fmt(invoice.total_paid)}</dd>
+          {invoice.confidence != null && (
+            <>
+              <dt>Уверенность AI</dt>
+              <dd>{Math.round(invoice.confidence * 100)}%</dd>
+            </>
+          )}
+          {invoice.warnings.length > 0 && (
+            <>
+              <dt>Предупреждения</dt>
+              <dd>
+                <ul className={styles.warnings}>
+                  {invoice.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </dd>
+            </>
+          )}
+          {invoice.status === "failed" && invoice.error_message && (
+            <>
+              <dt>Ошибка обработки</dt>
+              <dd className={styles.errorText}>{invoice.error_message}</dd>
+            </>
+          )}
+        </dl>
       </div>
 
       {/* Line items */}

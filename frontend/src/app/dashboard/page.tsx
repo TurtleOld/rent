@@ -118,8 +118,8 @@ export default function DashboardPage() {
     }
   }
 
-  function handleLogout() {
-    clearTokens();
+  async function handleLogout() {
+    await clearTokens();
     router.push("/login");
   }
 

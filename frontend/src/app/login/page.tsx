@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError(null);
     try {
       const tokens = await login(email, password);
-      setTokens(tokens.access, tokens.refresh);
+      await setTokens(tokens.access, tokens.refresh);
       router.push("/dashboard");
     } catch {
       setError("Неверный email или пароль");

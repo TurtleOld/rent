@@ -4,9 +4,13 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
+from django.db import transaction
 
-from .models import Invoice, LineItem
+from .models import Invoice, LineItem, Service, ServiceAlias
 from .pdf_parser import parse_epd
+from .units import normalize_unit
+from .validators import run_all_checks
 
 
 def _json_serializable(obj: dict) -> dict:
@@ -65,6 +69,8 @@ def _validate_parsed_data(data: dict) -> list[str]:
     max_retries=3,
     default_retry_delay=30,
     name="invoices.process_invoice",
+    soft_time_limit=60,
+    time_limit=120,
 )
 def process_invoice(self, invoice_id: int) -> None:
     try:
@@ -97,7 +103,16 @@ def _do_process(invoice: Invoice) -> None:
         raise
 
     try:
+        import pdfplumber
+        with pdfplumber.open(invoice.pdf_file) as pdf:
+            if len(pdf.pages) > 50:
+                _fail(invoice, "PDF содержит слишком много страниц (>50).")
+                return
+        invoice.pdf_file.seek(0)
         parsed_data = parse_epd(invoice.pdf_file)
+    except SoftTimeLimitExceeded:
+        _fail(invoice, "PDF слишком большой или повреждён.")
+        return
     except Exception as exc:
         msg = f"Ошибка парсинга PDF: {exc}"
         logger.exception(msg)
@@ -133,15 +148,23 @@ def _do_process(invoice: Invoice) -> None:
     invoice.warnings = parsed_data.get("warnings") or []
     invoice.status = Invoice.Status.PROCESSED
     invoice.error_message = None
-    invoice.save()
 
-    LineItem.objects.filter(invoice=invoice).delete()
     line_items_data = parsed_data.get("line_items") or []
-    line_items = [
-        LineItem(
+    unit_warnings: list[str] = []
+    line_items = []
+    for item in line_items_data:
+        raw_name = item.get("service_name", "")
+        if not raw_name:
+            continue
+        raw_unit = item.get("unit")
+        normalized = normalize_unit(raw_unit)
+        if raw_unit and normalized is None:
+            unit_warnings.append(f"Неизвестная единица «{raw_unit}» у «{raw_name}».")
+        unit = normalized or raw_unit
+        line_items.append(LineItem(
             invoice=invoice,
-            service_name=item.get("service_name", ""),
-            unit=item.get("unit"),
+            service_name=raw_name,
+            unit=unit,
             quantity=_to_decimal(item.get("quantity"), 4),
             tariff=_to_decimal(item.get("tariff"), 4),
             amount_charged=_to_decimal(item.get("amount_charged")),
@@ -152,17 +175,60 @@ def _do_process(invoice: Invoice) -> None:
             meter_id=item.get("meter_id"),
             previous_reading=_to_decimal(item.get("previous_reading"), 4),
             current_reading=_to_decimal(item.get("current_reading"), 4),
-        )
-        for item in line_items_data
-        if item.get("service_name")
-    ]
-    LineItem.objects.bulk_create(line_items)
+        ))
+
+    if unit_warnings:
+        invoice.warnings = (invoice.warnings or []) + unit_warnings
+
+    with transaction.atomic():
+        invoice.save()
+        LineItem.objects.filter(invoice=invoice).delete()
+        saved_items = LineItem.objects.bulk_create(line_items)
+
+        for li in saved_items:
+            normalized_unit = normalize_unit(li.unit) or li.unit
+            li.service = _resolve_service(invoice.user_id, li.service_name, normalized_unit)
+        LineItem.objects.bulk_update(saved_items, ["service"])
+
+        extra_warnings = run_all_checks(invoice, saved_items)
+        if extra_warnings:
+            invoice.warnings = (invoice.warnings or []) + extra_warnings
+            invoice.save(update_fields=["warnings", "updated_at"])
 
     logger.info(
         "Invoice %s processed successfully. %d line items saved.",
         invoice.pk,
         len(line_items),
     )
+
+
+def _resolve_service(user_id: int, raw_name: str, normalized_unit: str | None) -> Service:
+    """Находит или создаёт Service для данного пользователя и raw_name.
+
+    Args:
+        user_id: ID пользователя.
+        raw_name: Сырое название услуги из PDF.
+        normalized_unit: Нормализованная единица измерения.
+
+    Returns:
+        Существующий или только что созданный Service.
+    """
+    alias = (
+        ServiceAlias.objects
+        .select_related("service")
+        .filter(service__user_id=user_id, raw_name=raw_name)
+        .first()
+    )
+    if alias:
+        return alias.service
+
+    service, created = Service.objects.get_or_create(
+        user_id=user_id,
+        canonical_name=raw_name,
+        defaults={"unit": normalized_unit},
+    )
+    ServiceAlias.objects.get_or_create(service=service, raw_name=raw_name)
+    return service
 
 
 def _fail(invoice: Invoice, message: str, raw: dict | None = None) -> None:

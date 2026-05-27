@@ -15,13 +15,14 @@ cp .env.example .env
 | Переменная | Описание |
 |---|---|
 | `SECRET_KEY` | Секретный ключ Django (50+ случайных символов) |
-| `AI_API_URL` | URL вашего AI-провайдера |
-| `AI_API_TOKEN` | Токен доступа к AI API |
+| `POSTGRES_PASSWORD` | Пароль БД — **обязательно сгенерировать в prod** |
 
-Сгенерировать SECRET_KEY:
+Сгенерировать SECRET_KEY и пароль БД:
 ```bash
 python -c "import secrets; print(secrets.token_hex(50))"
 ```
+
+> **Важно**: никогда не оставляйте `POSTGRES_PASSWORD=changeme_in_prod` в production.
 
 ### 2. Запустить
 
@@ -48,10 +49,10 @@ docker compose exec backend python manage.py createsuperuser
 | `SECRET_KEY` | — | Секретный ключ Django (обязательно) |
 | `DEBUG` | `False` | Режим отладки |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Разрешённые хосты |
-| `DATABASE_URL` | `postgresql://rent:rent@postgres:5432/rent` | URL базы данных |
-| `AI_API_URL` | — | URL AI-провайдера для извлечения данных из PDF |
-| `AI_API_TOKEN` | — | Токен AI API |
-| `AI_API_TIMEOUT` | `60` | Таймаут запроса к AI API (секунды) |
+| `POSTGRES_USER` | `rent` | Пользователь PostgreSQL |
+| `POSTGRES_PASSWORD` | — | Пароль PostgreSQL (**сгенерировать в prod**) |
+| `POSTGRES_DB` | `rent` | Имя базы данных PostgreSQL |
+| `DATABASE_URL` | — | URL базы данных (dj-database-url формат) |
 | `REDIS_URL` | `redis://redis:6379/0` | URL Redis (Celery broker) |
 | `MEDIA_ROOT` | `/app/media` | Путь для хранения PDF-файлов |
 | `ACCESS_TOKEN_LIFETIME_MINUTES` | `60` | Время жизни JWT access-токена |

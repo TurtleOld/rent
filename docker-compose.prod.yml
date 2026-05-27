@@ -23,9 +23,7 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./backend
-      target: production
+    image: ghcr.io/turtleold/rent-backend:${IMAGE_TAG:-main}
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -44,9 +42,7 @@ services:
         gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120 --access-logfile -
 
   celery:
-    build:
-      context: ./backend
-      target: production
+    image: ghcr.io/turtleold/rent-backend:${IMAGE_TAG:-main}
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -59,9 +55,7 @@ services:
     command: celery -A config worker -l info -c 2
 
   frontend:
-    build:
-      context: ./frontend
-      target: runner
+    image: ghcr.io/turtleold/rent-frontend:${IMAGE_TAG:-main}
     restart: unless-stopped
     env_file: .env
     environment:
