@@ -248,3 +248,63 @@
 .dash {
   color: #d1d5db;
 }
+
+/* ── Tariff dynamics table ───────────────────────────────────────────────── */
+
+.tariffTable {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.tariffTable .table {
+  min-width: 520px;
+}
+
+.tariffTable .th {
+  padding: 0.65rem 0.9rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.tariffTable .td {
+  padding: 0.55rem 0.9rem;
+  color: #374151;
+  white-space: nowrap;
+  border-right: 1px solid #f3f4f6;
+}
+
+.tariffRow {
+  border-top: 1px solid #f3f4f6;
+}
+
+.tariffRow:first-child {
+  border-top: none;
+}
+
+.rowWarn {
+  background: #fef2f2;
+}
+
+.rowDanger {
+  background: #fee2e2;
+}
+
+.changeUp {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.changeDown {
+  color: #16a34a;
+}
+
+.changeNeutral {
+  color: #6b7280;
+}
