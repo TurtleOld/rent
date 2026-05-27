@@ -67,6 +67,8 @@ services:
       target: runner
     restart: unless-stopped
     env_file: .env
+    environment:
+      BACKEND_URL: http://backend:8000
     depends_on:
       - backend
 

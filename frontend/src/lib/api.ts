@@ -11,17 +11,6 @@ export class ApiError extends Error {
   }
 }
 
-function getAccessToken(): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|; )access_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-function authHeaders(): HeadersInit {
-  const token = getAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -33,6 +22,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     let data: unknown = null;
     try {
       data = await res.json();
@@ -121,9 +113,7 @@ export interface PaginatedResponse<T> {
 }
 
 export async function getInvoices(page = 1): Promise<PaginatedResponse<Invoice>> {
-  return request<PaginatedResponse<Invoice>>(`/invoices/?page=${page}`, {
-    headers: authHeaders(),
-  });
+  return request<PaginatedResponse<Invoice>>(`/invoices/?page=${page}`);
 }
 
 export async function getInvoicesAll(): Promise<Invoice[]> {
@@ -143,11 +133,13 @@ export async function uploadInvoice(file: File): Promise<Invoice> {
   formData.append("pdf_file", file);
   const res = await fetch(`${API_BASE}/invoices/upload/`, {
     method: "POST",
-    headers: authHeaders(),
     body: formData,
     credentials: "include",
   });
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     const data = await res.json().catch(() => null);
     throw new ApiError(res.status, "Upload failed", data);
   }
@@ -155,25 +147,19 @@ export async function uploadInvoice(file: File): Promise<Invoice> {
 }
 
 export async function getInvoice(id: number): Promise<Invoice> {
-  return request<Invoice>(`/invoices/${id}/`, { headers: authHeaders() });
-}
-
-export async function patchInvoice(
-  id: number,
-  data: Partial<Invoice>,
-): Promise<Invoice> {
-  return request<Invoice>(`/invoices/${id}/`, {
-    method: "PATCH",
-    headers: authHeaders(),
-    body: JSON.stringify(data),
-  });
+  return request<Invoice>(`/invoices/${id}/`);
 }
 
 export async function deleteInvoice(id: number): Promise<void> {
-  return request<void>(`/invoices/${id}/`, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
+  return request<void>(`/invoices/${id}/`, { method: "DELETE" });
+}
+
+export function invoiceFileUrl(id: number): string {
+  return `/api/invoices/${id}/file/`;
+}
+
+export async function reparseInvoice(id: number): Promise<Invoice> {
+  return request<Invoice>(`/invoices/${id}/reparse/`, { method: "POST" });
 }
 
 // ── Payment types ─────────────────────────────────────────────────────────────
@@ -191,14 +177,9 @@ export interface Payment {
 export async function getPayments(invoiceId: number): Promise<Payment[]> {
   const result = await request<PaginatedResponse<Payment> | Payment[]>(
     `/invoices/${invoiceId}/payments/`,
-    { headers: authHeaders() },
   );
   if (Array.isArray(result)) return result;
   return (result as PaginatedResponse<Payment>).results;
-}
-
-export function invoiceFileUrl(id: number): string {
-  return `/api/invoices/${id}/file/`;
 }
 
 export async function createPayment(
@@ -207,7 +188,6 @@ export async function createPayment(
 ): Promise<Payment> {
   return request<Payment>(`/invoices/${invoiceId}/payments/`, {
     method: "POST",
-    headers: authHeaders(),
     body: JSON.stringify(data),
   });
 }
