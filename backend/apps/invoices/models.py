@@ -4,6 +4,67 @@ from django.conf import settings
 from django.db import models
 
 
+class Service(models.Model):
+    """Канонический справочник услуг ЖКХ.
+
+    Уникален в рамках пары (user, canonical_name) — у каждого
+    пользователя свой каталог, потому что состав услуг и поставщики
+    различаются.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="services",
+    )
+    canonical_name = models.CharField(max_length=255)
+    unit = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Каноническая единица измерения (кв.м, куб.м, кВт·ч...).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "canonical_name"],
+                name="uniq_user_service_canonical",
+            ),
+        ]
+        ordering = ["canonical_name"]
+
+    def __str__(self) -> str:
+        return f"{self.canonical_name} ({self.user_id})"
+
+
+class ServiceAlias(models.Model):
+    """Связывает разные написания названия услуги из PDF с одной Service.
+
+    Пример: «ХОЛОДНОЕ В/С», «ХОЛОДНОЕ ВОДОСНАБЖЕНИЕ», «ХВС» -> Service «ХВС».
+    """
+
+    service = models.ForeignKey(
+        Service,
+        on_delete=models.CASCADE,
+        related_name="aliases",
+    )
+    raw_name = models.CharField(max_length=255)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service", "raw_name"],
+                name="uniq_service_alias_raw",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.raw_name} -> {self.service.canonical_name}"
+
+
 class Invoice(models.Model):
     class Status(models.TextChoices):
         PROCESSING = "processing", "Обрабатывается"
@@ -112,6 +173,13 @@ class LineItem(models.Model):
     debt = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     # amount = итого по строке
     amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    service = models.ForeignKey(
+        "invoices.Service",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="line_items",
+    )
     provider = models.CharField(max_length=255, blank=True, null=True)
     meter_id = models.CharField(max_length=100, blank=True, null=True)
     previous_reading = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
