@@ -45,13 +45,6 @@ export interface AuthTokens {
   refresh: string;
 }
 
-export async function register(email: string, password: string): Promise<void> {
-  await request("/auth/register/", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
 export async function login(email: string, password: string): Promise<AuthTokens> {
   return request<AuthTokens>("/auth/login/", {
     method: "POST",

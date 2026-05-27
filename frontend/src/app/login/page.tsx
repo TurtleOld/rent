@@ -58,9 +58,6 @@ export default function LoginPage() {
         <button type="submit" disabled={loading} className={styles.button}>
           {loading ? "Загрузка..." : "Войти"}
         </button>
-        <a href="/register" className={styles.link}>
-          Нет аккаунта? Зарегистрироваться
-        </a>
       </form>
     </div>
   );
