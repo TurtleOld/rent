@@ -5,9 +5,10 @@ const BACKEND_URL = process.env.BACKEND_URL ?? "http://backend:8000";
 const SKIPPED_REQUEST_HEADERS = new Set(["host", "cookie"]);
 
 async function proxy(request: NextRequest, params: { path: string[] }): Promise<NextResponse> {
-  const { path } = await params;
+  const { path } = params;
   const search = request.nextUrl.search;
-  const url = `${BACKEND_URL}/api/${path.join("/")}${search}`;
+  const joined = path.join("/");
+  const url = `${BACKEND_URL}/api/${joined}/${search}`;
 
   const accessToken = request.cookies.get("access_token")?.value;
 
@@ -41,7 +42,7 @@ async function proxy(request: NextRequest, params: { path: string[] }): Promise<
 
   const backendRes = await fetch(url, fetchOptions);
 
-  if (backendRes.status === 401) {
+  if (backendRes.status === 401 && !joined.startsWith("auth/")) {
     const response = NextResponse.json(
       { detail: "Unauthorized" },
       { status: 401 },
