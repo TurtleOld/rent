@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import DatabaseError
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -162,6 +163,71 @@ class PaymentTest(TestCase):
             amount=Decimal("4296.90"),
         )
         self.assertEqual(item.amount_charged + item.recalculation, item.amount)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceAtomicProcessingTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="atomic@example.com",
+            email="atomic@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+        LineItem.objects.create(
+            invoice=self.invoice,
+            service_name="СТАРАЯ УСЛУГА",
+            amount=Decimal("100.00"),
+        )
+
+    def test_reparse_does_not_leave_partial_state(self):
+        """Если bulk_create падает, старые LineItem должны остаться."""
+        from io import BytesIO
+
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import _do_process
+
+        self.invoice.pdf_file.save(
+            "test.pdf",
+            ContentFile(FAKE_PDF),
+            save=True,
+        )
+
+        original_count = LineItem.objects.filter(invoice=self.invoice).count()
+        self.assertEqual(original_count, 1)
+
+        mock_parsed = {
+            "document_type": "utility_bill",
+            "provider_name": "Тест",
+            "account_number": "123",
+            "payer_name": None,
+            "address": None,
+            "period": {"month": 1, "year": 2026, "start_date": None, "end_date": None},
+            "totals": {},
+            "line_items": [{"service_name": "НОВАЯ УСЛУГА", "amount": "200.00"}],
+            "confidence": 0.9,
+            "warnings": [],
+        }
+
+        with patch("apps.invoices.tasks.parse_epd", return_value=mock_parsed), \
+             patch("pdfplumber.open") as mock_open, \
+             patch(
+                 "apps.invoices.tasks.LineItem.objects.bulk_create",
+                 side_effect=DatabaseError("simulated failure"),
+             ):
+            mock_open.return_value.__enter__.return_value.pages = [None]
+            try:
+                _do_process(self.invoice)
+            except DatabaseError:
+                pass
+
+        count_after = LineItem.objects.filter(invoice=self.invoice).count()
+        self.assertEqual(count_after, original_count)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

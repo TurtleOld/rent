@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
+from django.db import transaction
 
 from .models import Invoice, LineItem
 from .pdf_parser import parse_epd
@@ -145,9 +146,7 @@ def _do_process(invoice: Invoice) -> None:
     invoice.warnings = parsed_data.get("warnings") or []
     invoice.status = Invoice.Status.PROCESSED
     invoice.error_message = None
-    invoice.save()
 
-    LineItem.objects.filter(invoice=invoice).delete()
     line_items_data = parsed_data.get("line_items") or []
     line_items = [
         LineItem(
@@ -168,7 +167,11 @@ def _do_process(invoice: Invoice) -> None:
         for item in line_items_data
         if item.get("service_name")
     ]
-    LineItem.objects.bulk_create(line_items)
+
+    with transaction.atomic():
+        invoice.save()
+        LineItem.objects.filter(invoice=invoice).delete()
+        LineItem.objects.bulk_create(line_items)
 
     logger.info(
         "Invoice %s processed successfully. %d line items saved.",
