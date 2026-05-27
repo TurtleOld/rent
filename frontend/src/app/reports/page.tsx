@@ -2,14 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  type Invoice,
-  type Service,
-  type TariffPoint,
-  getInvoicesAll,
-  getServiceTariffHistory,
-  getServices,
-} from "@/lib/api";
+import { type Invoice, getInvoicesAll } from "@/lib/api";
 import { periodKey, periodLabel } from "@/lib/reports";
 import LineChart, { type ChartPoint } from "@/components/LineChart";
 import ServiceChart, { type ServiceRow } from "@/components/ServiceChart";
@@ -21,45 +14,15 @@ import styles from "./reports.module.css";
 export default function ReportsPage() {
   const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [tariffRows, setTariffRows] = useState<TariffRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [allInvoices, services] = await Promise.all([
-          getInvoicesAll(),
-          getServices(),
-        ]);
-
-        const processed = allInvoices.filter((inv) => inv.status === "processed");
-        setInvoices(processed);
-
-        const histories = await Promise.all(
-          services.map((svc) =>
-            getServiceTariffHistory(svc.id).then((h) => ({ service: svc, points: h.points }))
-          )
-        );
-
-        const rows: TariffRow[] = histories.map(({ service, points }) => {
-          const withTariff = points.filter((p): p is TariffPoint & { tariff: string } => p.tariff != null);
-          const last = withTariff[withTariff.length - 1] ?? null;
-          return {
-            service,
-            lastTariff: last?.tariff ?? null,
-            changePct: last?.change_pct ?? null,
-          };
-        });
-        setTariffRows(rows);
-      } catch {
-        setError("Не удалось загрузить данные");
-      } finally {
-        setLoading(false);
-      }
-    }
-    void load();
+    getInvoicesAll()
+      .then((data) => setInvoices(data.filter((inv) => inv.status === "processed")))
+      .catch(() => setError("Не удалось загрузить данные"))
+      .finally(() => setLoading(false));
   }, []);
 
   const accounts = useMemo(() => {
@@ -125,6 +88,32 @@ export default function ReportsPage() {
     return Array.from(map.entries()).map(([service, rows]) => ({ service, rows }));
   }, [selectedInvoices]);
 
+  // Тарифные строки из выбранного счёта: по каждой услуге берём последние два
+  // тарифа с ненулевым значением и вычисляем % изменения.
+  const tariffRows = useMemo((): TariffRow[] => {
+    if (!selectedInvoices.length) return [];
+    const map = new Map<string, { unit: string | null; tariffs: number[] }>();
+    for (const inv of selectedInvoices) {
+      for (const item of inv.line_items) {
+        if (item.tariff == null) continue;
+        const tariff = parseFloat(item.tariff);
+        if (!isFinite(tariff)) continue;
+        const entry = map.get(item.service_name) ?? { unit: item.unit ?? null, tariffs: [] };
+        entry.tariffs.push(tariff);
+        map.set(item.service_name, entry);
+      }
+    }
+    return Array.from(map.entries()).map(([serviceName, { unit, tariffs }]) => {
+      const last = tariffs[tariffs.length - 1] ?? null;
+      const prev = tariffs.length >= 2 ? tariffs[tariffs.length - 2] : null;
+      const changePct =
+        last != null && prev != null && prev !== 0
+          ? Math.round(((last - prev) / prev) * 10000) / 100
+          : null;
+      return { serviceName, unit, lastTariff: last, prevTariff: prev, changePct };
+    });
+  }, [selectedInvoices]);
+
   if (loading) return <div className={styles.loading}>Загрузка...</div>;
 
   return (
@@ -161,13 +150,14 @@ export default function ReportsPage() {
         </section>
       )}
 
-      {/* ── Секция 2: Динамика тарифов и сумм по услугам ── */}
+      {/* ── Секции 2 и 3: привязаны к выбранному счёту ── */}
       {accountKeys.length > 0 && (
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>Динамика тарифов и сумм по услугам</h2>
+        <>
+          <div className={styles.sectionHeader} style={{ marginBottom: "1.25rem" }}>
+            <h2 className={styles.sectionTitle} style={{ marginBottom: 0 }}>
+              Лицевой счёт:
+            </h2>
             <div className={styles.accountPicker}>
-              <label className={styles.pickerLabel}>Лицевой счёт:</label>
               <select
                 className={styles.pickerSelect}
                 value={selectedAccount ?? ""}
@@ -179,23 +169,26 @@ export default function ReportsPage() {
               </select>
             </div>
           </div>
-          {serviceTrends.length === 0 ? (
-            <p className={styles.empty}>Нет строк услуг для выбранного счёта.</p>
-          ) : (
-            <div className={styles.chartGrid}>
-              {serviceTrends.map(({ service, rows }) => (
-                <ServiceChart key={service} service={service} rows={rows} />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
 
-      {/* ── Секция 3: Динамика тарифов — таблица ── */}
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Динамика тарифов</h2>
-        <TariffDynamicsTable rows={tariffRows} />
-      </section>
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Динамика тарифов и сумм по услугам</h2>
+            {serviceTrends.length === 0 ? (
+              <p className={styles.empty}>Нет строк услуг для выбранного счёта.</p>
+            ) : (
+              <div className={styles.chartGrid}>
+                {serviceTrends.map(({ service, rows }) => (
+                  <ServiceChart key={service} service={service} rows={rows} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Динамика тарифов</h2>
+            <TariffDynamicsTable rows={tariffRows} />
+          </section>
+        </>
+      )}
     </div>
   );
 }

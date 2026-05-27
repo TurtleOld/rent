@@ -1,9 +1,10 @@
-import { type Service } from "@/lib/api";
 import styles from "@/app/reports/reports.module.css";
 
 export interface TariffRow {
-  service: Service;
-  lastTariff: string | null;
+  serviceName: string;
+  unit: string | null;
+  prevTariff: number | null;
+  lastTariff: number | null;
   changePct: number | null;
 }
 
@@ -31,6 +32,11 @@ function fmtChange(pct: number | null): string {
   return `${sign}${pct.toFixed(2)}%`;
 }
 
+function fmtTariff(v: number | null): string {
+  if (v == null) return "—";
+  return v.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
 export default function TariffDynamicsTable({ rows }: Props) {
   if (rows.length === 0) return <p className={styles.empty}>Нет данных о тарифах.</p>;
 
@@ -43,16 +49,18 @@ export default function TariffDynamicsTable({ rows }: Props) {
           <tr>
             <th className={styles.th}>Услуга</th>
             <th className={styles.th}>Ед.</th>
-            <th className={styles.th}>Тариф (текущий)</th>
-            <th className={styles.th}>Изменение от пред. месяца</th>
+            <th className={styles.th}>Тариф (тек.)</th>
+            <th className={styles.th}>Тариф (пред. мес.)</th>
+            <th className={styles.th}>Изменение</th>
           </tr>
         </thead>
         <tbody>
-          {sorted.map(({ service, lastTariff, changePct }) => (
-            <tr key={service.id} className={rowClass(changePct)}>
-              <td className={styles.td}>{service.canonical_name}</td>
-              <td className={styles.td}>{service.unit ?? "—"}</td>
-              <td className={styles.td}>{lastTariff ?? "—"}</td>
+          {sorted.map(({ serviceName, unit, lastTariff, prevTariff, changePct }) => (
+            <tr key={serviceName} className={rowClass(changePct)}>
+              <td className={styles.td}>{serviceName}</td>
+              <td className={styles.td}>{unit ?? "—"}</td>
+              <td className={styles.td}>{fmtTariff(lastTariff)}</td>
+              <td className={styles.td}>{fmtTariff(prevTariff)}</td>
               <td className={`${styles.td} ${changeClass(changePct)}`}>{fmtChange(changePct)}</td>
             </tr>
           ))}
