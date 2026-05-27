@@ -142,17 +142,20 @@ class Invoice(models.Model):
         return f"Invoice #{self.pk} — {self.provider_name or 'unknown'} ({self.status})"
 
     @property
-    def payment_status(self) -> str:
-        total_paid = sum(p.amount for p in self.payments.all())
-        if total_paid == 0:
-            return "unpaid"
-        if self.amount_due and total_paid >= self.amount_due:
-            return "paid"
-        return "partially_paid"
+    def total_paid(self) -> Decimal:
+        annotated = getattr(self, "_total_paid", None)
+        if annotated is not None:
+            return annotated
+        return sum((p.amount for p in self.payments.all()), Decimal("0"))
 
     @property
-    def total_paid(self) -> Decimal:
-        return sum((p.amount for p in self.payments.all()), Decimal("0"))
+    def payment_status(self) -> str:
+        paid = self.total_paid
+        if paid == 0:
+            return "unpaid"
+        if self.amount_due and paid >= self.amount_due:
+            return "paid"
+        return "partially_paid"
 
 
 class LineItem(models.Model):

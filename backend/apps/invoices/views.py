@@ -1,3 +1,7 @@
+from decimal import Decimal
+
+from django.db.models import DecimalField, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, parsers, permissions, status, views
@@ -11,15 +15,27 @@ from .serializers import InvoiceSerializer, InvoiceUploadSerializer, ServiceSeri
 from .tasks import process_invoice
 
 
+def _invoice_queryset(user):
+    return (
+        Invoice.objects.filter(user=user)
+        .prefetch_related("line_items")
+        .annotate(
+            _total_paid=Coalesce(
+                Sum("payments__amount"),
+                Value(Decimal("0")),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )
+        .order_by("-created_at")
+    )
+
+
 class InvoiceListView(generics.ListAPIView):
     serializer_class = InvoiceSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return (
-            Invoice.objects.filter(user=self.request.user)
-            .prefetch_related("line_items", "payments")
-        )
+        return _invoice_queryset(self.request.user)
 
 
 class InvoiceUploadView(generics.CreateAPIView):
@@ -48,10 +64,7 @@ class InvoiceDetailView(generics.RetrieveDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return (
-            Invoice.objects.filter(user=self.request.user)
-            .prefetch_related("line_items", "payments")
-        )
+        return _invoice_queryset(self.request.user)
 
 
 class InvoiceFileDownloadView(views.APIView):

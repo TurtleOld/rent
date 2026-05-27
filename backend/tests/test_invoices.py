@@ -405,3 +405,34 @@ class InvoiceReparseTest(TestCase):
         self.client.force_authenticate(user=other)
         response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceListQueryCountTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="numqueries@example.com",
+            email="numqueries@example.com",
+            password="testpassword",
+        )
+        from apps.payments.models import Payment
+        for i in range(3):
+            inv = Invoice.objects.create(
+                user=self.user,
+                pdf_file=f"invoices/test{i}.pdf",
+                status=Invoice.Status.PROCESSED,
+                amount_due=Decimal("1000.00"),
+            )
+            Payment.objects.create(
+                invoice=inv,
+                user=self.user,
+                amount=Decimal("500.00"),
+                payment_date="2026-01-01",
+            )
+
+    def test_invoice_list_does_not_query_payments_per_invoice(self):
+        self.client.force_authenticate(user=self.user)
+        with self.assertNumQueries(3):
+            response = self.client.get("/api/invoices/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
