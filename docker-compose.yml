@@ -2,14 +2,11 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: rent
-      POSTGRES_PASSWORD: rent
-      POSTGRES_DB: rent
+    env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rent"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rent}"]
       interval: 5s
       timeout: 5s
       retries: 5
