@@ -43,10 +43,9 @@ class InvoiceUploadView(generics.CreateAPIView):
         )
 
 
-class InvoiceDetailView(generics.RetrieveUpdateDestroyAPIView):
+class InvoiceDetailView(generics.RetrieveDestroyAPIView):
     serializer_class = InvoiceSerializer
     permission_classes = [permissions.IsAuthenticated]
-    http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         return (
@@ -131,6 +130,33 @@ class ServiceTariffHistoryView(views.APIView):
             if tariff is not None:
                 prev_tariff = tariff
         return Response({"service": ServiceSerializer(service).data, "points": points})
+
+
+class InvoiceReparseView(views.APIView):
+    """Resets invoice status to PROCESSING and re-queues the parsing task.
+
+    Only available when invoice is in 'processed' or 'failed' state.
+    Clears error_message and warnings; line_items are rebuilt by the task.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk: int) -> Response:
+        invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
+        if invoice.status == Invoice.Status.PROCESSING:
+            return Response(
+                {"detail": "Инвойс уже обрабатывается."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        invoice.status = Invoice.Status.PROCESSING
+        invoice.error_message = None
+        invoice.warnings = []
+        invoice.save(update_fields=["status", "error_message", "warnings", "updated_at"])
+        process_invoice.delay(invoice.pk)
+        return Response(
+            InvoiceSerializer(invoice).data,
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class InvoicePaymentListCreateView(generics.ListCreateAPIView):
