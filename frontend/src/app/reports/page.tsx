@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Invoice, getInvoicesAll } from "@/lib/api";
-import { periodKey, periodLabel } from "@/lib/reports";
+import { periodKey, periodLabel, serviceKey } from "@/lib/reports";
 import LineChart, { type ChartPoint } from "@/components/LineChart";
 import ServiceChart, { type ServiceRow } from "@/components/ServiceChart";
 import TariffDynamicsTable, { type TariffRow } from "@/components/TariffDynamicsTable";
@@ -70,40 +70,44 @@ export default function ReportsPage() {
 
   const serviceTrends = useMemo(() => {
     if (!selectedInvoices.length) return [];
-    const map = new Map<string, ServiceRow[]>();
+    const map = new Map<string, { service: string; rows: ServiceRow[] }>();
     for (const inv of selectedInvoices) {
       const period = periodLabel(inv);
       for (const item of inv.line_items) {
-        const list = map.get(item.service_name) ?? [];
-        list.push({
+        const key = serviceKey(item);
+        const entry = map.get(key) ?? { service: item.service_name, rows: [] };
+        entry.service = item.service_name; // invoices go oldest → newest: keep the latest name
+        entry.rows.push({
           period,
           tariff: item.tariff != null ? parseFloat(item.tariff) : null,
           amount: item.amount != null ? parseFloat(item.amount) : null,
           quantity: item.quantity != null ? parseFloat(item.quantity) : null,
           unit: item.unit ?? null,
         });
-        map.set(item.service_name, list);
+        map.set(key, entry);
       }
     }
-    return Array.from(map.entries()).map(([service, rows]) => ({ service, rows }));
+    return Array.from(map.entries()).map(([key, { service, rows }]) => ({ key, service, rows }));
   }, [selectedInvoices]);
 
   // Тарифные строки из выбранного счёта: по каждой услуге берём последние два
   // тарифа с ненулевым значением и вычисляем % изменения.
   const tariffRows = useMemo((): TariffRow[] => {
     if (!selectedInvoices.length) return [];
-    const map = new Map<string, { unit: string | null; tariffs: number[] }>();
+    const map = new Map<string, { serviceName: string; unit: string | null; tariffs: number[] }>();
     for (const inv of selectedInvoices) {
       for (const item of inv.line_items) {
         if (item.tariff == null) continue;
         const tariff = parseFloat(item.tariff);
         if (!isFinite(tariff)) continue;
-        const entry = map.get(item.service_name) ?? { unit: item.unit ?? null, tariffs: [] };
+        const key = serviceKey(item);
+        const entry = map.get(key) ?? { serviceName: item.service_name, unit: item.unit ?? null, tariffs: [] };
+        entry.serviceName = item.service_name;
         entry.tariffs.push(tariff);
-        map.set(item.service_name, entry);
+        map.set(key, entry);
       }
     }
-    return Array.from(map.entries()).map(([serviceName, { unit, tariffs }]) => {
+    return Array.from(map.values()).map(({ serviceName, unit, tariffs }) => {
       const last = tariffs[tariffs.length - 1] ?? null;
       const prev = tariffs.length >= 2 ? tariffs[tariffs.length - 2] : null;
       const changePct =
@@ -176,8 +180,8 @@ export default function ReportsPage() {
               <p className={styles.empty}>Нет строк услуг для выбранного счёта.</p>
             ) : (
               <div className={styles.chartGrid}>
-                {serviceTrends.map(({ service, rows }) => (
-                  <ServiceChart key={service} service={service} rows={rows} />
+                {serviceTrends.map(({ key, service, rows }) => (
+                  <ServiceChart key={key} service={service} rows={rows} />
                 ))}
               </div>
             )}

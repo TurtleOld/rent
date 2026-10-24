@@ -57,6 +57,7 @@ export async function login(email: string, password: string): Promise<AuthTokens
 export interface LineItem {
   id: number;
   service_name: string;
+  service: number | null;
   unit: string | null;
   quantity: string | null;
   tariff: string | null;
@@ -153,45 +154,6 @@ export function invoiceFileUrl(id: number): string {
 
 export async function reparseInvoice(id: number): Promise<Invoice> {
   return request<Invoice>(`/invoices/${id}/reparse/`, { method: "POST" });
-}
-
-// ── Service types ─────────────────────────────────────────────────────────────
-
-export interface ServiceAlias {
-  id: number;
-  raw_name: string;
-}
-
-export interface Service {
-  id: number;
-  canonical_name: string;
-  unit: string | null;
-  aliases: ServiceAlias[];
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TariffPoint {
-  invoice_id: number;
-  year: number | null;
-  month: number | null;
-  tariff: string | null;
-  change_pct: number | null;
-}
-
-export interface TariffHistoryResponse {
-  service: Service;
-  points: TariffPoint[];
-}
-
-export async function getServices(): Promise<Service[]> {
-  const result = await request<PaginatedResponse<Service> | Service[]>("/services/");
-  if (Array.isArray(result)) return result;
-  return (result as PaginatedResponse<Service>).results;
-}
-
-export async function getServiceTariffHistory(id: number): Promise<TariffHistoryResponse> {
-  return request<TariffHistoryResponse>(`/services/${id}/history/`);
 }
 
 // ── Payment types ─────────────────────────────────────────────────────────────
