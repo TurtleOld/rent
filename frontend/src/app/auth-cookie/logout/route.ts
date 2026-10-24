@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { forgetRefresh } from "@/lib/tokenRefresh";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://backend:8000";
 
@@ -6,6 +7,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const refreshToken = request.cookies.get("refresh_token")?.value;
 
   if (refreshToken) {
+    forgetRefresh(refreshToken);
     try {
       await fetch(`${BACKEND_URL}/api/auth/logout/`, {
         method: "POST",
