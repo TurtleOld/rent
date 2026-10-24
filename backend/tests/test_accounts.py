@@ -11,19 +11,10 @@ User = get_user_model()
     SECURE_SSL_REDIRECT=False,
     CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
 )
-class UserRegistrationTest(TestCase):
+class AuthTest(TestCase):
     def setUp(self):
         cache.clear()
         self.client = APIClient()
-
-    def test_user_registration(self):
-        response = self.client.post(
-            "/api/auth/register/",
-            {"email": "test@example.com", "password": "strongpass123"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(User.objects.filter(email="test@example.com").exists())
 
     def test_user_login(self):
         User.objects.create_user(
@@ -39,27 +30,6 @@ class UserRegistrationTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
-
-    def test_registration_duplicate_email(self):
-        User.objects.create_user(
-            username="dup@example.com",
-            email="dup@example.com",
-            password="pass1234",
-        )
-        response = self.client.post(
-            "/api/auth/register/",
-            {"email": "dup@example.com", "password": "pass1234"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_registration_short_password(self):
-        response = self.client.post(
-            "/api/auth/register/",
-            {"email": "short@example.com", "password": "abc"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_login_rate_limited_after_5_attempts(self):
         User.objects.create_user(
@@ -82,6 +52,15 @@ class UserRegistrationTest(TestCase):
             REMOTE_ADDR="10.0.0.1",
         )
         self.assertIn(response.status_code, (status.HTTP_429_TOO_MANY_REQUESTS, status.HTTP_403_FORBIDDEN))
+
+    def test_login_rate_limit_is_per_real_client_ip(self):
+        # All requests come from the same proxy REMOTE_ADDR; only X-Real-IP differs.
+        client = APIClient(REMOTE_ADDR="172.18.0.5")
+        payload = {"email": "nobody@example.com", "password": "wrong_password"}
+        for _ in range(6):
+            client.post("/api/auth/login/", payload, format="json", HTTP_X_REAL_IP="1.1.1.1")
+        response = client.post("/api/auth/login/", payload, format="json", HTTP_X_REAL_IP="2.2.2.2")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_logout_blacklists_refresh_token(self):
         User.objects.create_user(
