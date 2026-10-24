@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type Invoice, getInvoices, uploadInvoice } from "@/lib/api";
+import { type Invoice, getInvoicesAll, uploadInvoice } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
 import styles from "./dashboard.module.css";
 
@@ -81,8 +81,7 @@ export default function DashboardPage() {
 
   async function loadInvoices() {
     try {
-      const data = await getInvoices();
-      setInvoices(data.results);
+      setInvoices(await getInvoicesAll());
     } catch {
       setError("Не удалось загрузить квитанции");
     } finally {
