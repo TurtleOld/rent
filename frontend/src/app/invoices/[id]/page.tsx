@@ -34,10 +34,12 @@ export default function InvoiceDetailPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [payAmount, setPayAmount] = useState("");
-  const [payDate, setPayDate] = useState(new Date().toISOString().split("T")[0]);
+  // sv-SE gives local YYYY-MM-DD; toISOString() would give the UTC date.
+  const [payDate, setPayDate] = useState(new Date().toLocaleDateString("sv-SE"));
   const [payNote, setPayNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -65,7 +67,7 @@ export default function InvoiceDetailPage() {
     return () => {
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [id]);
+  }, [id, reloadKey]);
 
   async function handleAddPayment() {
     if (!payAmount) return;
@@ -108,8 +110,10 @@ export default function InvoiceDetailPage() {
     try {
       const updated = await reparseInvoice(id);
       setInvoice(updated);
+      setReloadKey((k) => k + 1); // restart status polling
     } catch {
       setError("Ошибка при запуске перепарсинга");
+    } finally {
       setSaving(false);
     }
   }

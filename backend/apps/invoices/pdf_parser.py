@@ -13,6 +13,8 @@ import pdfplumber
 
 logger = logging.getLogger(__name__)
 
+MAX_PAGES = 50
+
 RUSSIAN_MONTHS: dict[str, int] = {
     "январь": 1, "января": 1, "январе": 1,
     "февраль": 2, "февраля": 2, "феврале": 2,
@@ -90,6 +92,11 @@ def parse_russian_number(text: str | None) -> Decimal | None:
         return Decimal(cleaned)
     except (InvalidOperation, ValueError):
         return None
+
+
+def _first_not_none(a: Decimal | None, b: Decimal | None) -> Decimal | None:
+    """`a or b`, но Decimal("0.00") — валидная сумма, а не «пусто»."""
+    return a if a is not None else b
 
 
 def _extract_period(text: str) -> dict[str, Any]:
@@ -253,7 +260,6 @@ def _parse_summary_totals(text: str) -> dict[str, Any]:
     for m in _SUMMARY_RE.finditer(text):
         label = m.group("label").lower()
         charged = parse_russian_number(m.group("charged"))
-        debt = parse_russian_number(m.group("debt"))
         paid = parse_russian_number(m.group("paid"))
         total = parse_russian_number(m.group("total"))
 
@@ -263,7 +269,6 @@ def _parse_summary_totals(text: str) -> dict[str, Any]:
         if is_without:
             totals["amount_due_without_insurance"] = total
             totals["amount_charged"] = charged
-            totals["amount_recalculation"] = debt
             totals["amount_paid"] = paid
         elif is_with:
             totals["amount_due_with_insurance"] = total
@@ -276,9 +281,8 @@ def _parse_summary_totals(text: str) -> dict[str, Any]:
         elif "с учет" in full_match and "страхован" in full_match:
             totals["amount_due_with_insurance"] = amount
 
-    totals["amount_due"] = (
-        totals["amount_due_without_insurance"]
-        or totals["amount_due_with_insurance"]
+    totals["amount_due"] = _first_not_none(
+        totals["amount_due_without_insurance"], totals["amount_due_with_insurance"]
     )
     return totals
 
@@ -489,7 +493,6 @@ def _parse_summary_from_table(table: list[list[str | None]], ncols: int) -> dict
         if ncols >= 7:
             charged = parse_russian_number((row[3] or "").strip() if len(row) > 3 else None)
             rekalc = parse_russian_number((row[4] or "").strip() if len(row) > 4 else None)
-            debt = parse_russian_number((row[5] or "").strip() if len(row) > 5 else None)
             paid_raw, total_raw = _split_last_col_pair(
                 row[6] if len(row) > 6 else None,
                 row[7] if len(row) > 7 else None,
@@ -501,9 +504,9 @@ def _parse_summary_from_table(table: list[list[str | None]], ncols: int) -> dict
             col3 = (row[3] or "").strip() if len(row) > 3 else ""
             total = parse_russian_number((row[4] or "").strip() if len(row) > 4 else None)
             nums = re.findall(r"-?[\d\s]+,\d{2}", col3)
-            rekalc = parse_russian_number(nums[0].strip()) if nums else None
+            # В 5-колоночном формате колонки перерасчёта нет: nums[0] — долг, nums[1] — оплачено.
+            rekalc = None
             paid = parse_russian_number(nums[1].strip()) if len(nums) > 1 else None
-            debt = None
 
         if is_without:
             totals["amount_charged"] = charged
@@ -672,6 +675,8 @@ def parse_epd(pdf_file) -> dict[str, Any]:
     }
 
     with pdfplumber.open(pdf_file) as pdf:
+        if len(pdf.pages) > MAX_PAGES:
+            raise ValueError(f"PDF содержит слишком много страниц (>{MAX_PAGES}).")
         if not pdf.pages:
             warnings.append("PDF не содержит страниц")
             result["confidence"] = 0.0
@@ -722,9 +727,9 @@ def parse_epd(pdf_file) -> dict[str, Any]:
                 result["totals"][key] = header_totals[key]
 
         if result["totals"]["amount_due"] is None:
-            result["totals"]["amount_due"] = (
-                result["totals"]["amount_due_without_insurance"]
-                or result["totals"]["amount_due_with_insurance"]
+            result["totals"]["amount_due"] = _first_not_none(
+                result["totals"]["amount_due_without_insurance"],
+                result["totals"]["amount_due_with_insurance"],
             )
 
         # === Счётчики из таблицы "Справочная информация" ===

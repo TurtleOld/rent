@@ -118,6 +118,17 @@ class PaymentTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["amount"], "750.00")
 
+    def test_payment_rejects_non_positive_amount(self):
+        self.client.force_authenticate(user=self.user)
+        for amount in ("-500.00", "0.00"):
+            response = self.client.post(
+                f"/api/invoices/{self.invoice.pk}/payments/",
+                {"amount": amount, "payment_date": "2026-02-01"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(self.invoice.payments.exists())
+
     def test_payment_status_partially_paid(self):
         self.client.force_authenticate(user=self.user)
         self.client.post(
@@ -392,6 +403,21 @@ class InvoiceReparseTest(TestCase):
         response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
 
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_reparse_allowed_if_processing_is_stuck(self, mock_delay):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING,
+            updated_at=timezone.now() - timedelta(minutes=10),
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        mock_delay.assert_called_once_with(self.invoice.pk)
+
     def test_reparse_requires_auth(self):
         response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -436,3 +462,38 @@ class InvoiceListQueryCountTest(TestCase):
         with self.assertNumQueries(3):
             response = self.client.get("/api/invoices/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class ProcessInvoiceFailureTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="fail@example.com",
+            email="fail@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _run(self, **patch_kwargs):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        with patch("apps.invoices.tasks.parse_epd", **patch_kwargs):
+            process_invoice(self.invoice.pk)
+        self.invoice.refresh_from_db()
+
+    def test_parse_error_marks_failed(self):
+        self._run(side_effect=ValueError("broken"))
+        self.assertEqual(self.invoice.status, Invoice.Status.FAILED)
+        self.assertIn("broken", self.invoice.error_message)
+
+    def test_db_error_marks_failed_instead_of_staying_processing(self):
+        parsed = {"period": {}, "totals": {}, "line_items": [], "warnings": []}
+        with patch("apps.invoices.tasks.transaction.atomic", side_effect=DatabaseError("db down")):
+            self._run(return_value=parsed)
+        self.assertEqual(self.invoice.status, Invoice.Status.FAILED)

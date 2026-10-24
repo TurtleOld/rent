@@ -12,8 +12,32 @@ env:
   OWNER: ${{ github.repository_owner }}
 
 jobs:
+  test-backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-only-secret
+      DEBUG: "True"
+      DATABASE_URL: sqlite:////tmp/ci.sqlite3
+      MEDIA_ROOT: /tmp/media
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          python manage.py test tests
+
   build-backend:
     name: Backend
+    needs: test-backend
     runs-on: ubuntu-latest
     permissions:
       contents: read

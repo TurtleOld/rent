@@ -1,4 +1,9 @@
-import { type Invoice } from "./api";
+import { type Invoice, type LineItem } from "./api";
+
+// Group by Service so aliases merged in the admin show as one line.
+export function serviceKey(item: LineItem): string {
+  return item.service != null ? `id:${item.service}` : `name:${item.service_name}`;
+}
 
 export const MONTH_SHORT = [
   "Янв", "Фев", "Мар", "Апр", "Май", "Июн",

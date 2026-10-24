@@ -141,6 +141,10 @@ CACHES = {
     }
 }
 
+# Requests reach Django via nginx -> Next proxy, so REMOTE_ADDR is the frontend container.
+# nginx overwrites X-Real-IP with the real client address.
+RATELIMIT_IP_META_KEY = lambda r: r.META.get("HTTP_X_REAL_IP") or r.META["REMOTE_ADDR"]  # noqa: E731
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LANGUAGE_CODE = "ru-ru"
 TIME_ZONE = "Europe/Moscow"

@@ -61,7 +61,11 @@ def check_invoice_totals(invoice: Invoice, line_items: Iterable[LineItem]) -> li
         Список текстовых предупреждений (пустой, если ошибок нет).
     """
     total = sum((li.amount or Decimal("0") for li in line_items), Decimal("0"))
-    reference = invoice.amount_due_without_insurance or invoice.amount_due
+    reference = (
+        invoice.amount_due_without_insurance
+        if invoice.amount_due_without_insurance is not None
+        else invoice.amount_due
+    )
     if reference is not None and not _close(total, reference):
         return [
             f"Сумма по строкам ({total}) ≠ итог квитанции ({reference})."

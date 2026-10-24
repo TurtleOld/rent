@@ -39,40 +39,12 @@ def _to_decimal(value, decimal_places: int = 2) -> Decimal | None:
         return None
 
 
-def _validate_parsed_data(data: dict) -> list[str]:
-    """Валидация структуры распарсенных данных."""
-    errors: list[str] = []
-    if data.get("document_type") != "utility_bill":
-        errors.append("document_type должен быть 'utility_bill'")
-    if not isinstance(data.get("line_items"), list):
-        errors.append("line_items должен быть массивом")
-    confidence = data.get("confidence")
-    if confidence is not None:
-        try:
-            if not (0 <= float(confidence) <= 1):
-                errors.append("confidence должен быть от 0 до 1")
-        except (TypeError, ValueError):
-            errors.append(f"confidence невалидное значение: {confidence}")
-    period = data.get("period") or {}
-    for date_field in ("start_date", "end_date"):
-        val = period.get(date_field)
-        if val is not None:
-            try:
-                date.fromisoformat(val)
-            except (ValueError, TypeError):
-                errors.append(f"period.{date_field} — невалидная дата: {val}")
-    return errors
-
-
 @shared_task(
-    bind=True,
-    max_retries=3,
-    default_retry_delay=30,
     name="invoices.process_invoice",
     soft_time_limit=60,
     time_limit=120,
 )
-def process_invoice(self, invoice_id: int) -> None:
+def process_invoice(invoice_id: int) -> None:
     try:
         invoice = Invoice.objects.get(pk=invoice_id)
     except Invoice.DoesNotExist:
@@ -83,47 +55,24 @@ def process_invoice(self, invoice_id: int) -> None:
         logger.info("Invoice %s already in status %s, skipping", invoice_id, invoice.status)
         return
 
+    # Ошибки разбора PDF не временные: повторять бесполезно, есть кнопка «Перепарсить».
     try:
         _do_process(invoice)
     except Exception as exc:
         logger.exception("Unhandled error processing invoice %s", invoice_id)
-        try:
-            raise self.retry(exc=exc)
-        except self.MaxRetriesExceededError:
-            invoice.status = Invoice.Status.FAILED
-            invoice.error_message = f"Превышено количество попыток: {exc}"
-            invoice.save(update_fields=["status", "error_message", "updated_at"])
+        _fail(invoice, f"Ошибка обработки: {exc}")
 
 
 def _do_process(invoice: Invoice) -> None:
     try:
-        invoice.pdf_file.seek(0)
-    except Exception as exc:
-        _fail(invoice, f"Не удалось прочитать PDF: {exc}")
-        raise
-
-    try:
-        import pdfplumber
-        with pdfplumber.open(invoice.pdf_file) as pdf:
-            if len(pdf.pages) > 50:
-                _fail(invoice, "PDF содержит слишком много страниц (>50).")
-                return
         invoice.pdf_file.seek(0)
         parsed_data = parse_epd(invoice.pdf_file)
     except SoftTimeLimitExceeded:
         _fail(invoice, "PDF слишком большой или повреждён.")
         return
     except Exception as exc:
-        msg = f"Ошибка парсинга PDF: {exc}"
-        logger.exception(msg)
-        _fail(invoice, msg)
-        raise
-
-    errors = _validate_parsed_data(parsed_data)
-    if errors:
-        msg = "Валидация не пройдена: " + "; ".join(errors)
-        invoice.raw_ai_response = parsed_data
-        _fail(invoice, msg, raw=parsed_data)
+        logger.exception("PDF parsing failed for invoice %s", invoice.pk)
+        _fail(invoice, f"Ошибка парсинга PDF: {exc}")
         return
 
     period = parsed_data.get("period") or {}
@@ -186,8 +135,7 @@ def _do_process(invoice: Invoice) -> None:
         saved_items = LineItem.objects.bulk_create(line_items)
 
         for li in saved_items:
-            normalized_unit = normalize_unit(li.unit) or li.unit
-            li.service = _resolve_service(invoice.user_id, li.service_name, normalized_unit)
+            li.service = _resolve_service(invoice.user_id, li.service_name, li.unit)
         LineItem.objects.bulk_update(saved_items, ["service"])
 
         extra_warnings = run_all_checks(invoice, saved_items)
@@ -231,12 +179,7 @@ def _resolve_service(user_id: int, raw_name: str, normalized_unit: str | None) -
     return service
 
 
-def _fail(invoice: Invoice, message: str, raw: dict | None = None) -> None:
+def _fail(invoice: Invoice, message: str) -> None:
     invoice.status = Invoice.Status.FAILED
     invoice.error_message = message
-    if raw is not None:
-        invoice.raw_ai_response = raw
-    fields = ["status", "error_message", "updated_at"]
-    if raw is not None:
-        fields.append("raw_ai_response")
-    invoice.save(update_fields=fields)
+    invoice.save(update_fields=["status", "error_message", "updated_at"])
