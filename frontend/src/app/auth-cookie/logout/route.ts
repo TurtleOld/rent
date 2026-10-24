@@ -9,7 +9,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     try {
       await fetch(`${BACKEND_URL}/api/auth/logout/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Without it Django's SECURE_SSL_REDIRECT answers 301 and the token is never blacklisted.
+        headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },
         body: JSON.stringify({ refresh: refreshToken }),
       });
     } catch {
