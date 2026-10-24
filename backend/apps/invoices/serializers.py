@@ -44,33 +44,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = (
-            "id",
-            "pdf_file",
-            "status",
-            "error_message",
-            "provider_name",
-            "account_number",
-            "payer_name",
-            "address",
-            "period_start",
-            "period_end",
-            "period_month",
-            "period_year",
-            "amount_due",
-            "amount_due_without_insurance",
-            "amount_due_with_insurance",
-            "amount_charged",
-            "amount_paid_ai",
-            "amount_recalculation",
-            "confidence",
-            "warnings",
-            "payment_status",
-            "total_paid",
-            "line_items",
-            "created_at",
-            "updated_at",
-        )
+        read_only_fields = fields
 
 
 class ServiceAliasSerializer(serializers.ModelSerializer):

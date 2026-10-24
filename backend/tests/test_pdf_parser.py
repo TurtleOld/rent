@@ -8,6 +8,7 @@ from apps.invoices.pdf_parser import (
     _extract_payer_name,
     _extract_period,
     _extract_provider_name,
+    _parse_summary_totals,
     parse_epd,
     parse_russian_number,
 )
@@ -221,10 +222,9 @@ class TestParseEpdIntegration(unittest.TestCase):
             self.result["totals"]["amount_paid"], Decimal("150.00")
         )
 
-    def test_totals_recalculation(self):
-        self.assertEqual(
-            self.result["totals"]["amount_recalculation"], Decimal("51.70")
-        )
+    def test_totals_debt_is_not_recalculation(self):
+        # 51,70 в фикстуре — колонка «Задолженность/Переплата», а не перерасчёт.
+        self.assertIsNone(self.result["totals"]["amount_recalculation"])
 
     def test_totals_currency(self):
         self.assertEqual(self.result["totals"]["currency"], "RUB")
@@ -248,3 +248,13 @@ class TestParseEpdIntegration(unittest.TestCase):
 
     def test_no_warnings(self):
         self.assertEqual(self.result["warnings"], [])
+
+
+class TestZeroAmountDue(unittest.TestCase):
+    def test_zero_without_insurance_is_not_replaced(self):
+        text = (
+            "Итого к оплате за январь 2026 без учета добровольного страхования: 0,00\n"
+            "Итого к оплате за январь 2026 с учетом добровольного страхования: 45,00"
+        )
+        totals = _parse_summary_totals(text)
+        self.assertEqual(totals["amount_due"], Decimal("0.00"))

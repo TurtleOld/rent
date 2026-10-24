@@ -1,9 +1,11 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db.models import DecimalField, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, parsers, permissions, status, views
 from rest_framework.response import Response
 
@@ -148,15 +150,20 @@ class ServiceTariffHistoryView(views.APIView):
 class InvoiceReparseView(views.APIView):
     """Resets invoice status to PROCESSING and re-queues the parsing task.
 
-    Only available when invoice is in 'processed' or 'failed' state.
+    Available in 'processed' or 'failed' state, or when 'processing' is stuck
+    (worker died mid-task) for longer than STUCK_AFTER.
     Clears error_message and warnings; line_items are rebuilt by the task.
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    STUCK_AFTER = timedelta(minutes=5)  # task hard time_limit is 120s
 
     def post(self, request, pk: int) -> Response:
         invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
-        if invoice.status == Invoice.Status.PROCESSING:
+        if (
+            invoice.status == Invoice.Status.PROCESSING
+            and invoice.updated_at > timezone.now() - self.STUCK_AFTER
+        ):
             return Response(
                 {"detail": "Инвойс уже обрабатывается."},
                 status=status.HTTP_409_CONFLICT,
