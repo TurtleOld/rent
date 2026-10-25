@@ -56,12 +56,12 @@ export default function ReportsPage() {
     const result: { account: string; points: ChartPoint[]; unknownNote: string | null }[] = [];
     for (const [account, list] of accounts) {
       const points: ChartPoint[] = list
-        .filter((inv) => inv.amount_due_without_insurance != null || inv.amount_due != null)
+        .filter((inv) => inv.amount_due != null)
         .map((inv, i) => ({
           x: i,
           y: 0,
           label: periodLabel(inv),
-          value: parseFloat(inv.amount_due_without_insurance ?? inv.amount_due ?? "0"),
+          value: parseFloat(inv.amount_due ?? "0"),
         }));
       if (points.length >= 2) result.push({ account, points, unknownNote: unknownAmountNote(list) });
     }
@@ -138,7 +138,7 @@ export default function ReportsPage() {
       {/* ── Секция 1: Сумма к оплате по счетам ── */}
       {chartDataByAccount.length > 0 && (
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Сумма к оплате без страхования по лицевым счетам</h2>
+          <h2 className={styles.sectionTitle}>Сумма к оплате по лицевым счетам</h2>
           <div className={styles.chartGrid}>
             {chartDataByAccount.map(({ account, points, unknownNote }) => (
               <div key={account} className={styles.chartCard}>
@@ -146,7 +146,7 @@ export default function ReportsPage() {
                 <LineChart points={points} />
                 <div className={styles.chartLegend}>
                   <span className={styles.legendDot} style={{ background: "#3b82f6" }} />
-                  Сумма без страх. (₽)
+                  Сумма к оплате (₽)
                 </div>
                 {unknownNote && <p className={styles.chartLegend}>{unknownNote}</p>}
               </div>

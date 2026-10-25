@@ -54,8 +54,7 @@ function groupByPeriod(invoices: Invoice[]): InvoiceGroup[] {
     const month = parseInt(monthStr, 10);
     const label = `${MONTH_NAMES[month - 1]} ${year}`;
     const totalDue = items.reduce((sum, i) => {
-      const v = i.amount_due_without_insurance ?? i.amount_due;
-      return sum + (v ? parseFloat(v) : 0);
+      return sum + (i.amount_due ? parseFloat(i.amount_due) : 0);
     }, 0);
     groups.push({ key, label, totalDue, unknownNote: unknownAmountNote(items), invoices: items });
   }
@@ -181,7 +180,14 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <div className={styles.cardBody}>
-                      {inv.amount_due_without_insurance != null || inv.amount_due_with_insurance != null ? (
+                      {inv.manual_amount_due != null ? (
+                        <p className={styles.amount}>
+                          {parseFloat(inv.manual_amount_due).toLocaleString("ru-RU", {
+                            minimumFractionDigits: 2,
+                          })}{" "}
+                          ₽ <span className={styles.amountLabel}>введено вручную</span>
+                        </p>
+                      ) : inv.amount_due_without_insurance != null || inv.amount_due_with_insurance != null ? (
                         <>
                           {inv.amount_due_without_insurance != null && (
                             <p className={styles.amount}>

@@ -89,6 +89,7 @@ export interface Invoice {
   period_month: number | null;
   period_year: number | null;
   amount_due: string | null;
+  manual_amount_due: string | null;
   amount_due_without_insurance: string | null;
   amount_due_with_insurance: string | null;
   amount_charged: string | null;
@@ -146,6 +147,25 @@ export function invoiceFileUrl(id: number): string {
 
 export async function reparseInvoice(id: number): Promise<Invoice> {
   return request<Invoice>(`/invoices/${id}/reparse/`, { method: "POST" });
+}
+
+export async function setManualAmountDue(id: number, value: string | null): Promise<Invoice> {
+  return request<Invoice>(`/invoices/${id}/manual-amount-due/`, {
+    method: "PUT",
+    body: JSON.stringify({ manual_amount_due: value }),
+  });
+}
+
+// Бэкенд отвечает по-русски: 409 с detail, 400 с ошибкой поля.
+export function manualAmountDueErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.data && typeof err.data === "object") {
+    const data = err.data as { detail?: unknown; manual_amount_due?: unknown };
+    if (typeof data.detail === "string") return data.detail;
+    if (Array.isArray(data.manual_amount_due) && typeof data.manual_amount_due[0] === "string") {
+      return data.manual_amount_due[0];
+    }
+  }
+  return "Не удалось сохранить сумму к оплате";
 }
 
 // ── Payment types ─────────────────────────────────────────────────────────────
