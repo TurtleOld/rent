@@ -7,7 +7,7 @@ Utility-bill tracker for Russian ЖКХ (ЕПД). Django REST + Celery parse upl
 Every change ships as one PR that closes one GitHub issue. Steps, in order:
 
 1. **Claim.** The issue is open, labelled `ready-for-agent`, has no `in-progress` label, and every issue it is blocked by is closed (`gh api repos/TurtleOld/rent/issues/<n> --jq .issue_dependencies_summary`). Add `in-progress` as your first write: all agents share one GitHub account, so the label, not the assignee, marks ownership. Done when the label is on.
-2. **Branch** from fresh `origin/main`: `<type>/<issue>-<slug>`, e.g. `fix/34-login-csrf`.
+2. **Branch** from fresh `origin/main`: `<type>/<slug>`, e.g. `fix/login-csrf`. The slug names the change in words; the issue link lives in the PR body.
 3. **Build** exactly the issue's acceptance criteria. Anything else you notice goes into a new issue labelled `needs-triage`, linked from your PR. New or changed logic (parser, money, auth, data writes) gets a test that goes red without your change.
 4. **Verify** with the commands below. Done when backend tests and the frontend build are green on your branch and every acceptance criterion has evidence (a test name, command output, or a manual check you actually ran).
 5. **Open the PR.** Title is a Conventional Commit; it becomes the squash commit on `main`. Body: `Closes #<n>`, the acceptance criteria as a checklist with evidence per item, and a "Not verified" line naming anything you could not check. A human reviews and merges: leave auto-merge off.
@@ -40,7 +40,21 @@ Test PDFs are synthetic and come from `backend/tests/generate_fixtures.py` (need
 
 - **Money and quantities** are `Decimal` end to end; parse Russian numbers with the parser's existing helper.
 - **Schema changes** come with a new migration; applied migrations stay as they are.
-- **User-facing text** (UI, API error messages, invoice warnings) is Russian; code, comments and commit messages are English.
+- **User-facing text** (UI, API error messages, invoice warnings), docstrings and comments are Russian; identifiers and commit messages are English.
+- **Comments** carry only the why the code cannot show: a domain rule, a PDF quirk, a non-obvious limit. Self-explanatory code stands without them.
+- **Docstrings** follow Google style in Russian, with the section headers (`Args:`, `Returns:`, `Raises:`) as Google writes them:
+
+  ```python
+  def normalize_unit(raw: str | None) -> str | None:
+      """Приводит запись единицы из PDF к канонической форме.
+
+      Args:
+          raw: Сырая строка единицы измерения из PDF.
+
+      Returns:
+          Каноническая форма единицы или None, если строка не распознана.
+      """
+  ```
 - **Secrets** live in `.env`, which is gitignored; new settings go through `decouple.config` with a safe default and a line in `.env.example` and the README env table.
 - **Commits** follow the history's Conventional Commits style (`fix(invoices): ...`, `chore(deps): ...`) and describe only the code change. Commit messages and PR bodies carry no AI attribution: no `Co-Authored-By` for an AI, no "Generated with", no session links.
 
