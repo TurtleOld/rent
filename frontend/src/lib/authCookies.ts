@@ -16,11 +16,11 @@ function envPositiveInt(name: string, fallback: number): number {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-export function accessCookieMaxAge(): number {
+function accessCookieMaxAge(): number {
   return envPositiveInt("ACCESS_TOKEN_LIFETIME_MINUTES", DEFAULT_ACCESS_MINUTES) * 60;
 }
 
-export function refreshCookieMaxAge(): number {
+function refreshCookieMaxAge(): number {
   return envPositiveInt("REFRESH_TOKEN_LIFETIME_DAYS", DEFAULT_REFRESH_DAYS) * 60 * 60 * 24;
 }
 
