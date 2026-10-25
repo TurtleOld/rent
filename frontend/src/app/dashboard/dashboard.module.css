@@ -217,6 +217,11 @@
   color: #92400e;
 }
 
+.pay__amount_unknown {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .pay__paid {
   background: #d1fae5;
   color: #065f46;

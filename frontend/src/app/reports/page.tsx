@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Invoice, getInvoicesAll } from "@/lib/api";
-import { periodKey, periodLabel, serviceKey } from "@/lib/reports";
+import { periodKey, periodLabel, serviceKey, unknownAmountNote } from "@/lib/reports";
 import LineChart, { type ChartPoint } from "@/components/LineChart";
 import ServiceChart, { type ServiceRow } from "@/components/ServiceChart";
 import TariffDynamicsTable, { type TariffRow } from "@/components/TariffDynamicsTable";
@@ -53,7 +53,7 @@ export default function ReportsPage() {
   );
 
   const chartDataByAccount = useMemo(() => {
-    const result: { account: string; points: ChartPoint[] }[] = [];
+    const result: { account: string; points: ChartPoint[]; unknownNote: string | null }[] = [];
     for (const [account, list] of accounts) {
       const points: ChartPoint[] = list
         .filter((inv) => inv.amount_due_without_insurance != null || inv.amount_due != null)
@@ -63,7 +63,7 @@ export default function ReportsPage() {
           label: periodLabel(inv),
           value: parseFloat(inv.amount_due_without_insurance ?? inv.amount_due ?? "0"),
         }));
-      if (points.length >= 2) result.push({ account, points });
+      if (points.length >= 2) result.push({ account, points, unknownNote: unknownAmountNote(list) });
     }
     return result;
   }, [accounts]);
@@ -140,7 +140,7 @@ export default function ReportsPage() {
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Сумма к оплате без страхования по лицевым счетам</h2>
           <div className={styles.chartGrid}>
-            {chartDataByAccount.map(({ account, points }) => (
+            {chartDataByAccount.map(({ account, points, unknownNote }) => (
               <div key={account} className={styles.chartCard}>
                 <h3 className={styles.chartTitle}>Л/с {account}</h3>
                 <LineChart points={points} />
@@ -148,6 +148,7 @@ export default function ReportsPage() {
                   <span className={styles.legendDot} style={{ background: "#3b82f6" }} />
                   Сумма без страх. (₽)
                 </div>
+                {unknownNote && <p className={styles.chartLegend}>{unknownNote}</p>}
               </div>
             ))}
           </div>
