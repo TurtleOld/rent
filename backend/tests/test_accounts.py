@@ -51,7 +51,8 @@ class AuthTest(TestCase):
             format="json",
             REMOTE_ADDR="10.0.0.1",
         )
-        self.assertIn(response.status_code, (status.HTTP_429_TOO_MANY_REQUESTS, status.HTTP_403_FORBIDDEN))
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.json()["detail"], "Слишком много попыток входа. Попробуйте позже.")
 
     def test_login_rate_limit_is_per_real_client_ip(self):
         # All requests come from the same proxy REMOTE_ADDR; only X-Real-IP differs.

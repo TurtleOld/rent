@@ -1,4 +1,5 @@
 const API_BASE = "/api";
+const LOGIN_ENDPOINT = "/auth/login/";
 
 export class ApiError extends Error {
   constructor(
@@ -15,14 +16,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      // Для FormData браузер сам ставит multipart/form-data с boundary.
+      ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...options.headers,
     },
     credentials: "include",
   });
 
   if (!res.ok) {
-    if (res.status === 401 && typeof window !== "undefined") {
+    // Неверный пароль тоже 401: редирект на /login стёр бы сообщение об ошибке.
+    if (res.status === 401 && path !== LOGIN_ENDPOINT && typeof window !== "undefined") {
       window.location.href = "/login";
     }
     let data: unknown = null;
@@ -41,10 +44,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export async function login(email: string, password: string): Promise<void> {
-  await request("/auth/login/", {
+  await request(LOGIN_ENDPOINT, {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+}
+
+export function loginErrorMessage(err: unknown): string {
+  return err instanceof ApiError && err.status === 429
+    ? "Слишком много попыток входа. Попробуйте позже."
+    : "Неверный email или пароль";
 }
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
@@ -120,19 +129,7 @@ export async function getInvoicesAll(): Promise<Invoice[]> {
 export async function uploadInvoice(file: File): Promise<Invoice> {
   const formData = new FormData();
   formData.append("pdf_file", file);
-  const res = await fetch(`${API_BASE}/invoices/upload/`, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  if (!res.ok) {
-    if (res.status === 401 && typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-    const data = await res.json().catch(() => null);
-    throw new ApiError(res.status, "Upload failed", data);
-  }
-  return res.json() as Promise<Invoice>;
+  return request<Invoice>("/invoices/upload/", { method: "POST", body: formData });
 }
 
 export async function getInvoice(id: number): Promise<Invoice> {
