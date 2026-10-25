@@ -157,16 +157,13 @@ def _extract_header_totals(text: str) -> dict[str, Decimal | None]:
         "amount_due_with_insurance": None,
         "amount_due_without_insurance": None,
     }
-    rub_kop = r"(\d[\d\s]*)\s*руб\.\s*(\d{1,2})\s*коп\."
-    all_matches = re.findall(rub_kop, text)
-    if len(all_matches) >= 2:
-        rub1 = all_matches[0][0].replace(" ", "")
-        totals["amount_due_with_insurance"] = Decimal(f"{rub1}.{all_matches[0][1]}")
-        rub2 = all_matches[1][0].replace(" ", "")
-        totals["amount_due_without_insurance"] = Decimal(f"{rub2}.{all_matches[1][1]}")
-    elif len(all_matches) == 1:
-        rub = all_matches[0][0].replace(" ", "")
-        totals["amount_due_without_insurance"] = Decimal(f"{rub}.{all_matches[0][1]}")
+    rub_kop = r"(-?\d[\d\s]*)\s*руб\.\s*(\d{1,2})\s*коп\."
+    amounts = [parse_russian_number(f"{rub},{kop:0>2}") for rub, kop in re.findall(rub_kop, text)]
+    if len(amounts) >= 2:
+        totals["amount_due_with_insurance"] = amounts[0]
+        totals["amount_due_without_insurance"] = amounts[1]
+    elif len(amounts) == 1:
+        totals["amount_due_without_insurance"] = amounts[0]
     return totals
 
 
@@ -314,14 +311,25 @@ _METER_IPU_RE = re.compile(
 )
 
 
+_FULL_AMOUNT_RE = re.compile(r"-?[\d\s]+,\d{2}")
+
+
 def _split_last_col_pair(col6: str | None, col7: str | None) -> tuple[str | None, str | None]:
     """
     В 8-колоночном PDF колонки «Оплачено» и «ИТОГО» слипаются:
     col[6]='2,9'  col[7]='6 81,59'  → paid='2,96', total='81,59'
     Восстанавливаем: к col[6] прибавляем первый «кусочек» col[7].
+    Если в col[6] полная сумма или прочерк либо col[6] пуст, а в col[7] одно
+    число, колонки пришли раздельно.
     """
-    if col7 is None:
-        return col6, None
+    paid_cell = (col6 or "").strip()
+    separate = (
+        paid_cell == "-"
+        or _FULL_AMOUNT_RE.fullmatch(paid_cell)
+        or (not paid_cell and (col7 or "").count(",") < 2)
+    )
+    if col7 is None or separate:
+        return col6, col7
     parts = (col7 or "").strip().split(None, 1)
     paid = ((col6 or "").strip() + parts[0]) if parts else col6
     total = parts[1] if len(parts) > 1 else None
