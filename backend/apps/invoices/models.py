@@ -156,13 +156,16 @@ class Invoice(models.Model):
     @property
     def payment_status(self) -> str:
         amount_due = self.amount_due
+        # Без суммы к оплате нельзя сказать, хватает ли платежей.
+        if amount_due is None:
+            return "amount_unknown"
         # Ноль или переплата в квитанции — платить нечего, даже без платежей.
-        if amount_due is not None and amount_due <= 0:
+        if amount_due <= 0:
             return "paid"
         paid = self.total_paid
         if paid == 0:
             return "unpaid"
-        if amount_due is not None and paid >= amount_due:
+        if paid >= amount_due:
             return "paid"
         return "partially_paid"
 

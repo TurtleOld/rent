@@ -20,9 +20,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  unpaid: "Не оплачен",
-  partially_paid: "Частично оплачен",
-  paid: "Оплачен",
+  unpaid: "Не оплачена",
+  partially_paid: "Частично оплачена",
+  paid: "Оплачена",
+  amount_unknown: "Сумма не распознана",
 };
 
 export default function InvoiceDetailPage() {

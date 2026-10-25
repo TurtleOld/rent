@@ -96,7 +96,7 @@ export interface Invoice {
   amount_recalculation: string | null;
   confidence: number | null;
   warnings: string[];
-  payment_status: "unpaid" | "partially_paid" | "paid";
+  payment_status: "unpaid" | "partially_paid" | "paid" | "amount_unknown";
   total_paid: string;
   line_items: LineItem[];
   created_at: string;
