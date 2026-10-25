@@ -85,9 +85,13 @@ class InvoicePdfCleanupTest(TestCase):
     def test_storage_error_does_not_break_delete(self):
         invoice = self._invoice()
 
-        with patch.object(default_storage, "delete", side_effect=OSError("диск")):
-            with self.captureOnCommitCallbacks(execute=True):
-                response = self.client.delete(f"/api/invoices/{invoice.pk}/")
+        with (
+            patch.object(default_storage, "delete", side_effect=OSError("диск")),
+            self.assertLogs("apps.invoices.models", "ERROR") as logs,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.client.delete(f"/api/invoices/{invoice.pk}/")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertIn(str(invoice.pk), logs.output[0])
         self.assertFalse(Invoice.objects.filter(pk=invoice.pk).exists())
