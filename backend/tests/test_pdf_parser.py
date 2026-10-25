@@ -1,6 +1,7 @@
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pdfplumber
 
@@ -15,6 +16,7 @@ from apps.invoices.pdf_parser import (
     _insurance_total_key,
     _is_billing_table,
     _parse_line_items_from_tables,
+    _parse_line_items_from_text,
     _parse_merge_totals_from_tables,
     _parse_meter_readings_from_tables,
     _parse_summary_from_table,
@@ -22,6 +24,7 @@ from apps.invoices.pdf_parser import (
     parse_epd,
     parse_russian_number,
 )
+from apps.invoices.validators import check_invoice_totals
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SAMPLE_PDF = FIXTURES_DIR / "sample_epd.pdf"
@@ -538,3 +541,133 @@ class TestExtractHeaderTotals(unittest.TestCase):
     def test_single_amount_is_without_insurance(self):
         totals = _extract_header_totals("К оплате 1234 руб. 5 коп.")
         self.assertEqual(totals["amount_due_without_insurance"], Decimal("1234.05"))
+
+
+# Синтетический текст ЕПД с колонкой «Перерасчёты» (5 сумм в строке услуги).
+RECALC_TEXT = """Начисления за жилищные услуги
+ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ
+50.00 кв.м. 20.00 1 000,00 0,00 1 000,00 1 000,00 1 000,00
+ВОДООТВЕДЕНИЕ ОДН 0.00 куб.м. 40.00 0,00 70,00 40,00 40,00 70,00
+ЭЛЕКТРОСНАБЖЕНИЕ ОДН 20.5 Квт/ч 6.00 123,00 0,00 200,00 200,00 123,00
+Начисления за коммунальные услуги
+ВОДООТВЕДЕНИЕ_ 10.000 куб. м. 40.00 400,00 0,00 380,00 380,00 400,00
+ОБРАЩЕНИЕ С ТКО 50.00 кв.м. 10.500000 525,00 0,00 525,00 525,00 525,00
+ЭЛЕКТРИЧЕСТВО ОДНОТАРИФНЫЙ
+300 кВт*ч 6.5 1 950,00 0,00 1 800,00 1 800,00 1 950,00
+ПУ (Д1)
+Начисления за иные услуги
+Всего за август 2026 без учета добровольного страхования: 3 998,00 70,00 3 945,00 3 945,00 4 068,00
+"""
+
+
+class TestTextRecalculationColumn(unittest.TestCase):
+    """Текстовый разбор ЕПД, где в строке услуги 5 сумм (с перерасчётами)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.items = _parse_line_items_from_text(RECALC_TEXT)
+        cls.by_name = {i["service_name"]: i for i in cls.items}
+
+    def test_line_items_count(self):
+        self.assertEqual(len(self.items), 6)
+
+    def test_service_names(self):
+        self.assertEqual(
+            [i["service_name"] for i in self.items],
+            [
+                "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ",
+                "ВОДООТВЕДЕНИЕ ОДН",
+                "ЭЛЕКТРОСНАБЖЕНИЕ ОДН",
+                "ВОДООТВЕДЕНИЕ",
+                "ОБРАЩЕНИЕ С ТКО",
+                "ЭЛЕКТРИЧЕСТВО ОДНОТАРИФНЫЙ ПУ (Д1)",
+            ],
+        )
+
+    def test_row_values(self):
+        # name: (quantity, unit, tariff, charged, recalc, debt, total)
+        expected = {
+            "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ": (
+                "50.00", "кв.м", "20.00", "1000.00", "0.00", "1000.00", "1000.00",
+            ),
+            "ВОДООТВЕДЕНИЕ ОДН": (
+                "0.00", "куб.м", "40.00", "0.00", "70.00", "40.00", "70.00",
+            ),
+            "ЭЛЕКТРОСНАБЖЕНИЕ ОДН": (
+                "20.5", "кВт·ч", "6.00", "123.00", "0.00", "200.00", "123.00",
+            ),
+            "ВОДООТВЕДЕНИЕ": (
+                "10.000", "куб.м", "40.00", "400.00", "0.00", "380.00", "400.00",
+            ),
+            "ОБРАЩЕНИЕ С ТКО": (
+                "50.00", "кв.м", "10.500000", "525.00", "0.00", "525.00", "525.00",
+            ),
+            "ЭЛЕКТРИЧЕСТВО ОДНОТАРИФНЫЙ ПУ (Д1)": (
+                "300", "кВт·ч", "6.5", "1950.00", "0.00", "1800.00", "1950.00",
+            ),
+        }
+        for name, values in expected.items():
+            with self.subTest(service=name):
+                item = self.by_name[name]
+                actual = (
+                    item["quantity"], item["unit"], item["tariff"],
+                    item["amount_charged"], item["recalculation"], item["debt"],
+                    item["amount"],
+                )
+                self.assertEqual(actual, tuple(Decimal(v) if i != 1 else v
+                                               for i, v in enumerate(values)))
+
+    def test_wrapped_name_does_not_add_item(self):
+        # «ПУ (Д1)» — хвост названия, а не отдельная услуга.
+        self.assertNotIn("ПУ (Д1)", self.by_name)
+
+    def test_summary_totals_with_recalculation(self):
+        totals = _parse_summary_totals(RECALC_TEXT)
+        self.assertEqual(totals["amount_charged"], Decimal("3998.00"))
+        self.assertEqual(totals["amount_recalculation"], Decimal("70.00"))
+        self.assertEqual(totals["amount_paid"], Decimal("3945.00"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("4068.00"))
+        self.assertEqual(totals["amount_due"], Decimal("4068.00"))
+
+    def test_rows_sum_matches_invoice_total(self):
+        totals = _parse_summary_totals(RECALC_TEXT)
+        invoice = SimpleNamespace(
+            amount_due_without_insurance=totals["amount_due_without_insurance"],
+            amount_due=totals["amount_due"],
+        )
+        line_items = [SimpleNamespace(amount=i["amount"]) for i in self.items]
+        self.assertEqual(sum(i["amount"] for i in self.items), Decimal("4068.00"))
+        self.assertEqual(check_invoice_totals(invoice, line_items), [])
+
+
+class TestTextFourAmountFormat(unittest.TestCase):
+    """Формат без перерасчётов (4 суммы) продолжает разбираться по-старому."""
+
+    def test_single_line(self):
+        items = _parse_line_items_from_text(
+            "ГАЗОСНАБЖЕНИЕ 3 чел. 90.00 270,00 150,00 150,00 270,00"
+        )
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertEqual(item["service_name"], "ГАЗОСНАБЖЕНИЕ")
+        self.assertEqual(item["quantity"], Decimal("3"))
+        self.assertEqual(item["tariff"], Decimal("90.00"))
+        self.assertEqual(item["amount_charged"], Decimal("270.00"))
+        self.assertIsNone(item["recalculation"])
+        self.assertEqual(item["debt"], Decimal("150.00"))
+        self.assertEqual(item["amount"], Decimal("270.00"))
+
+    def test_two_lines(self):
+        items = _parse_line_items_from_text(
+            "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ\n"
+            "50.00 кв.м. 20.00 1 000,00 0,00 1 000,00 1 000,00"
+        )
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertEqual(item["service_name"], "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ")
+        self.assertEqual(item["quantity"], Decimal("50.00"))
+        self.assertEqual(item["amount_charged"], Decimal("1000.00"))
+        self.assertIsNone(item["recalculation"])
+        self.assertEqual(item["debt"], Decimal("0.00"))
+        self.assertEqual(item["amount"], Decimal("1000.00"))

@@ -11,6 +11,8 @@ from typing import Any
 
 import pdfplumber
 
+from .units import normalize_unit
+
 logger = logging.getLogger(__name__)
 
 MAX_PAGES = 50
@@ -37,38 +39,38 @@ SECTION_HEADERS = {
     "начисления за иные услуги",
 }
 
+# Полная денежная сумма в русском формате: '1 000,00', '-98,30'
+_FULL_AMOUNT_RE = re.compile(r"-?[\d\s]+,\d{2}")
+
+# Суммы в хвосте строки услуги: 4 (без перерасчётов) или 5 (с колонкой
+# «Перерасчёты»): начислено [перерасчёт] долг оплачено итого.
+_AMOUNTS_RE = r'(?P<amounts>-?[\d\s]+,\d{2}(?:\s+-?[\d\s]+,\d{2}){3,4})'
+
 # Однострочная строка услуги:
-# SERVICE_NAME QUANTITY UNIT TARIFF AMOUNT_CHARGED DEBT PAID TOTAL
+# SERVICE_NAME QUANTITY UNIT TARIFF SUMS
 _SINGLE_LINE_RE = re.compile(
-    r'^(?P<service>[А-ЯЁа-яё][А-ЯЁа-яё\s/().]+?)'
+    r'^(?P<service>[А-ЯЁа-яё][А-ЯЁа-яё\s/()._]+?)'
     r'\s+(?P<quantity>\d+(?:\.\d+)?)'
-    r'\s+(?P<unit>[А-Яа-яЁё][А-Яа-яЁё./ ]*?\.?)'
-    r'\s+(?P<tariff>\d+(?:\.\d+)?)'
-    r'\s+(?P<charged>-?[\d\s]+,\d{2})'
-    r'\s+(?P<debt>-?[\d\s]+,\d{2})'
-    r'\s+(?P<paid>-?[\d\s]+,\d{2})'
-    r'\s+(?P<total>-?[\d\s]+,\d{2})$',
+    r'\s+(?P<unit>[А-Яа-яЁё][А-Яа-яЁё./ *]*?\.?)'
+    r'\s+(?P<tariff>\d+(?:[.,]\d+)?)'
+    r'\s+' + _AMOUNTS_RE + r'$',
 )
 
 # Числовая строка-продолжение (когда service name на предыдущей строке):
-# QUANTITY UNIT TARIFF AMOUNT_CHARGED DEBT PAID TOTAL
+# QUANTITY UNIT TARIFF SUMS
 _CONTINUATION_RE = re.compile(
     r'^(?P<quantity>\d+(?:\.\d+)?)'
-    r'\s+(?P<unit>[А-Яа-яЁё][А-Яа-яЁё./ ]*?\.?)'
-    r'\s+(?P<tariff>\d+(?:\.\d+)?)'
-    r'\s+(?P<charged>-?[\d\s]+,\d{2})'
-    r'\s+(?P<debt>-?[\d\s]+,\d{2})'
-    r'\s+(?P<paid>-?[\d\s]+,\d{2})'
-    r'\s+(?P<total>-?[\d\s]+,\d{2})$',
+    r'\s+(?P<unit>[А-Яа-яЁё][А-Яа-яЁё./ *]*?\.?)'
+    r'\s+(?P<tariff>\d+(?:[.,]\d+)?)'
+    r'\s+' + _AMOUNTS_RE + r'$',
 )
+
+# Строка, состоящая только из названия услуги (возможно с номером помещения).
+_SERVICE_NAME_ONLY_RE = re.compile(r'^[А-ЯЁ][А-ЯЁа-яё0-9\s/()._]+$')
 
 # Строка "Всего за ... :" с итогами
 _SUMMARY_RE = re.compile(
-    r'^(?P<label>Всего за .+?:)\s+'
-    r'(?P<charged>-?[\d\s]+,\d{2})\s+'
-    r'(?P<debt>-?[\d\s]+,\d{2})\s+'
-    r'(?P<paid>-?[\d\s]+,\d{2})\s+'
-    r'(?P<total>-?[\d\s]+,\d{2})$',
+    r'^(?P<label>Всего за .+?:)\s+' + _AMOUNTS_RE + r'$',
     re.MULTILINE,
 )
 
@@ -168,16 +170,36 @@ def _extract_header_totals(text: str) -> dict[str, Decimal | None]:
 
 
 def _make_item(service: str, m_dict: dict[str, str]) -> dict[str, Any]:
-    """Создаёт dict line_item из названия услуги и regex-групп."""
+    """Создаёт dict line_item из названия услуги и regex-групп.
+
+    Args:
+        service: Название услуги.
+        m_dict: Группы regex с quantity, unit, tariff и amounts.
+
+    Returns:
+        Строка услуги. В хвосте может быть 5 сумм (начислено, перерасчёт,
+        долг, оплачено, итого) или 4 — тогда колонки «Перерасчёты» нет.
+    """
+    amounts = [parse_russian_number(n) for n in _FULL_AMOUNT_RE.findall(m_dict["amounts"])]
+    unit_raw = m_dict["unit"].strip()
+    if len(amounts) == 5:
+        charged, recalculation, debt, _paid, total = amounts
+        # Формат с перерасчётами появился позже; его единицы сразу приводим
+        # к канонической форме, чтобы счётчики и услуги сопоставлялись.
+        unit = normalize_unit(unit_raw) or unit_raw
+    else:
+        charged, debt, _paid, total = amounts
+        recalculation = None
+        unit = unit_raw
     return {
         "service_name": service,
-        "unit": m_dict["unit"].strip(),
+        "unit": unit,
         "quantity": Decimal(m_dict["quantity"]),
-        "tariff": Decimal(m_dict["tariff"]),
-        "amount_charged": parse_russian_number(m_dict["charged"]),
-        "recalculation": None,
-        "debt": parse_russian_number(m_dict["debt"]),
-        "amount": parse_russian_number(m_dict["total"]),
+        "tariff": Decimal(m_dict["tariff"].replace(",", ".")),
+        "amount_charged": charged,
+        "recalculation": recalculation,
+        "debt": debt,
+        "amount": total,
         "provider": None,
         "meter_id": None,
         "previous_reading": None,
@@ -185,20 +207,92 @@ def _make_item(service: str, m_dict: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _clean_service_name(name: str) -> str:
+    """Убирает артефакты PDF из названия услуги (подчёркивание в конце)."""
+    return name.rstrip("_").strip()
+
+
+def _is_service_name_line(line: str) -> bool:
+    """Проверяет, что строка — только название услуги, без чисел и сумм."""
+    return len(line) > 3 and bool(_SERVICE_NAME_ONLY_RE.match(line))
+
+
+def _collect_name_lines(lines: list[str], start: int) -> tuple[list[str], int]:
+    """Собирает подряд идущие строки-названия начиная с индекса start.
+
+    Args:
+        lines: Строки текста PDF.
+        start: Индекс строки, с которой начинается поиск.
+
+    Returns:
+        Собранные названия и индекс следующей значимой строки.
+    """
+    names: list[str] = []
+    i = start
+    while i < len(lines):
+        candidate = lines[i].strip()
+        # Пустая строка разделяет блоки текста: хвост названия так далеко не тянется.
+        if not candidate:
+            break
+        lower = candidate.lower()
+        if (
+            lower in SECTION_HEADERS
+            or lower.startswith("всего")
+            or lower.startswith("итого")
+            or not _is_service_name_line(candidate)
+        ):
+            break
+        names.append(_clean_service_name(candidate))
+        i += 1
+    return names, i
+
+
+def _take_name_tail(
+    lines: list[str], start: int, item: dict[str, Any]
+) -> tuple[str | None, int]:
+    """Забирает строки-продолжения названия после строки с числами.
+
+    Хвост названия (например, «ПУ (Д1)») дописывается к разобранной услуге.
+    Если за собранными строками идёт строка с числами, это название
+    следующей услуги — оно возвращается как ожидающее разбора.
+
+    Args:
+        lines: Строки текста PDF.
+        start: Индекс строки сразу после строки с числами.
+        item: Только что разобранная строка услуги.
+
+    Returns:
+        Название следующей услуги (или None) и индекс следующей
+        неразобранной строки.
+    """
+    names, i = _collect_name_lines(lines, start)
+    if not names:
+        return None, i
+    if i < len(lines) and _CONTINUATION_RE.match(lines[i].strip()):
+        return " ".join(names), i
+    item["service_name"] = f'{item["service_name"]} {" ".join(names)}'
+    return None, i
+
+
 def _parse_line_items_from_text(text: str) -> list[dict[str, Any]]:
     """
     Парсит строки услуг из текста PDF.
 
     Обрабатывает два формата:
-    1. Однострочный: SERVICE QUANTITY UNIT TARIFF CHARGED DEBT PAID TOTAL
-    2. Двухстрочный: SERVICE (строка 1) + QUANTITY UNIT TARIFF CHARGED DEBT PAID TOTAL (строка 2)
+    1. Однострочный: SERVICE QUANTITY UNIT TARIFF SUMS
+    2. Двухстрочный: SERVICE (строка 1) + QUANTITY UNIT TARIFF SUMS (строка 2)
+    SUMS — 4 суммы (без перерасчётов) или 5 (с колонкой «Перерасчёты»).
+    Хвост названия после строки с числами дописывается к предыдущей услуге,
+    если за ним нет строки с числами.
     """
     items: list[dict[str, Any]] = []
     lines = text.split("\n")
     pending_service: str | None = None
+    i = 0
 
-    for line in lines:
-        stripped = line.strip()
+    while i < len(lines):
+        stripped = lines[i].strip()
+        i += 1
         if not stripped:
             pending_service = None
             continue
@@ -217,10 +311,12 @@ def _parse_line_items_from_text(text: str) -> list[dict[str, Any]]:
         # Пробуем однострочный формат
         m = _SINGLE_LINE_RE.match(stripped)
         if m:
-            service = m.group("service").strip()
-            if service.lower() not in SECTION_HEADERS:
-                items.append(_make_item(service, m.groupdict()))
-            pending_service = None
+            service = _clean_service_name(m.group("service"))
+            if service.lower() in SECTION_HEADERS:
+                pending_service = None
+                continue
+            items.append(_make_item(service, m.groupdict()))
+            pending_service, i = _take_name_tail(lines, i, items[-1])
             continue
 
         # Пробуем числовую строку-продолжение (данные для предыдущего service name)
@@ -228,13 +324,14 @@ def _parse_line_items_from_text(text: str) -> list[dict[str, Any]]:
             m = _CONTINUATION_RE.match(stripped)
             if m:
                 items.append(_make_item(pending_service, m.groupdict()))
-                pending_service = None
+                pending_service, i = _take_name_tail(lines, i, items[-1])
                 continue
 
         # Строка только с кириллическим текстом — потенциальное название услуги
         # (для двухстрочного формата: ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ / СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ)
-        if re.match(r'^[А-ЯЁ][А-ЯЁа-яё\s/().]+$', stripped) and len(stripped) > 3:
-            pending_service = stripped
+        if _is_service_name_line(stripped):
+            name = _clean_service_name(stripped)
+            pending_service = f"{pending_service} {name}" if pending_service else name
             continue
 
         pending_service = None
@@ -275,15 +372,21 @@ def _parse_summary_totals(text: str) -> dict[str, Any]:
 
     for m in _SUMMARY_RE.finditer(text):
         label = m.group("label").lower()
-        charged = parse_russian_number(m.group("charged"))
-        paid = parse_russian_number(m.group("paid"))
-        total = parse_russian_number(m.group("total"))
+        amounts = [
+            parse_russian_number(n) for n in _FULL_AMOUNT_RE.findall(m.group("amounts"))
+        ]
+        if len(amounts) == 5:
+            charged, recalculation, _debt, paid, total = amounts
+        else:
+            charged, _debt, paid, total = amounts
+            recalculation = None
 
         key = _insurance_total_key(label)
         if key:
             totals[key] = total
         if key == "amount_due_without_insurance":
             totals["amount_charged"] = charged
+            totals["amount_recalculation"] = recalculation
             totals["amount_paid"] = paid
 
     for m in _ITOGO_RE.finditer(text):
@@ -309,9 +412,6 @@ _METER_IPU_RE = re.compile(
     r'[ \t]+(?P<curr>\d+\.\d+)',
     re.MULTILINE,
 )
-
-
-_FULL_AMOUNT_RE = re.compile(r"-?[\d\s]+,\d{2}")
 
 
 def _split_last_col_pair(col6: str | None, col7: str | None) -> tuple[str | None, str | None]:
