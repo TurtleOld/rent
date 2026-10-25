@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, login } from "@/lib/api";
+import { login, loginErrorMessage } from "@/lib/api";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -20,11 +20,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push("/dashboard");
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 429
-          ? "Слишком много попыток входа. Попробуйте позже"
-          : "Неверный email или пароль",
-      );
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }

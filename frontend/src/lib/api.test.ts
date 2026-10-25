@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getInvoice, login, uploadInvoice } from "./api";
+import { ApiError, getInvoice, login, loginErrorMessage, uploadInvoice } from "./api";
 
 function backendAnswers(status: number, body: unknown) {
   const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => Response.json(body, { status }));
@@ -7,8 +7,8 @@ function backendAnswers(status: number, body: unknown) {
   return fetchMock;
 }
 
-function stubWindow() {
-  const win = { location: { href: "/login" } };
+function stubWindow(href: string) {
+  const win = { location: { href } };
   vi.stubGlobal("window", win);
   return win;
 }
@@ -20,17 +20,21 @@ afterEach(() => {
 describe("общий клиент API", () => {
   it.each([401, 429])("ошибка входа %i не перезагружает страницу входа", async (status) => {
     backendAnswers(status, { detail: "x" });
-    const win = stubWindow();
-    win.location.href = "/login?keep";
+    const win = stubWindow("/login?keep");
 
     await expect(login("a@b.ru", "wrong")).rejects.toMatchObject({ status });
     expect(win.location.href).toBe("/login?keep");
   });
 
+  it("429 при входе даёт сообщение о лимите попыток, остальное — о неверных данных", () => {
+    expect(loginErrorMessage(new ApiError(429, "x"))).toBe("Слишком много попыток входа. Попробуйте позже");
+    expect(loginErrorMessage(new ApiError(401, "x"))).toBe("Неверный email или пароль");
+    expect(loginErrorMessage(new TypeError("Failed to fetch"))).toBe("Неверный email или пароль");
+  });
+
   it("401 на остальных запросах ведёт на страницу входа", async () => {
     backendAnswers(401, { detail: "Unauthorized" });
-    const win = stubWindow();
-    win.location.href = "/dashboard";
+    const win = stubWindow("/dashboard");
 
     await expect(getInvoice(1)).rejects.toBeInstanceOf(ApiError);
     expect(win.location.href).toBe("/login");
