@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from apps.invoices.models import Invoice, LineItem, Service, ServiceAlias
+from apps.invoices.validators import check_line_item
 
 User = get_user_model()
 
@@ -242,6 +243,77 @@ class InvoiceAtomicProcessingTest(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False)
+class LineItemQuantityPrecisionTest(TestCase):
+    """Количество из ЕПД сохраняется с точностью до 6 знаков."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="precision@example.com",
+            email="precision@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _process(self):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import _do_process
+
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        mock_parsed = {
+            "document_type": "utility_bill",
+            "provider_name": "Тест",
+            "account_number": "123",
+            "payer_name": None,
+            "address": None,
+            "period": {"month": 1, "year": 2026, "start_date": None, "end_date": None},
+            "totals": {},
+            "line_items": [
+                {
+                    "service_name": "ОТОПЛЕНИЕ",
+                    "unit": "Гкал",
+                    "quantity": "0.954318",
+                    "tariff": "2850.12",
+                    "amount_charged": "2719.92",
+                    "amount": "2719.92",
+                }
+            ],
+            "confidence": 0.9,
+            "warnings": [],
+        }
+        with patch("apps.invoices.tasks.parse_epd", return_value=mock_parsed), \
+             patch("pdfplumber.open") as mock_open:
+            mock_open.return_value.__enter__.return_value.pages = [None]
+            _do_process(self.invoice)
+
+    def test_quantity_saved_with_six_decimals(self):
+        self._process()
+        li = LineItem.objects.get(invoice=self.invoice)
+        self.assertEqual(li.quantity, Decimal("0.954318"))
+
+    def test_exact_quantity_gives_no_product_warning(self):
+        self._process()
+        self.invoice.refresh_from_db()
+        li = LineItem.objects.get(invoice=self.invoice)
+        self.assertEqual(check_line_item(li), [])
+        self.assertFalse(
+            any("количество × тариф" in w for w in self.invoice.warnings)
+        )
+
+    def test_api_returns_full_quantity(self):
+        self._process()
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["line_items"][0]["quantity"], "0.954318")
+
+
 class InvoiceFileDownloadTest(TestCase):
     def setUp(self):
         self.client = APIClient()
