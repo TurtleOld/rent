@@ -5,8 +5,10 @@ from pathlib import Path
 import pdfplumber
 
 from apps.invoices.pdf_parser import (
+    _billing_table_to_items,
     _extract_account_number,
     _extract_address,
+    _extract_header_totals,
     _extract_payer_name,
     _extract_period,
     _extract_provider_name,
@@ -15,6 +17,7 @@ from apps.invoices.pdf_parser import (
     _parse_line_items_from_tables,
     _parse_merge_totals_from_tables,
     _parse_meter_readings_from_tables,
+    _parse_summary_from_table,
     _parse_summary_totals,
     parse_epd,
     parse_russian_number,
@@ -468,3 +471,56 @@ class TestTable8Format(_TableFixtureMixin, unittest.TestCase):
 
     def test_amount_due(self):
         self.assertEqual(self.result["totals"]["amount_due"], Decimal("5968.20"))
+
+
+class TestPaidAndTotalColumns(unittest.TestCase):
+    """«Оплачено» и «ИТОГО» в 8-колоночной таблице: слипшиеся и раздельные ячейки."""
+
+    def table(self, paid_cell, total_cell):
+        return [
+            ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ УСЛУГИ"] + [None] * 7,
+            ["ХОЛОДНОЕ В/С", "2.0", "куб.м. 40.73", "81,46", "0,00", "2,96", paid_cell, total_cell],
+            ["Всего за январь 2026 без учета добровольного страхования",
+             None, None, "81,46", "0,00", "2,96", paid_cell, total_cell],
+        ]
+
+    def test_separate_service_row(self):
+        items = _billing_table_to_items(self.table("2,96", "81,59"))
+        self.assertEqual(items[0]["amount"], Decimal("81.59"))
+
+    def test_glued_service_row(self):
+        items = _billing_table_to_items(self.table("2,9", "6 81,59"))
+        self.assertEqual(items[0]["amount"], Decimal("81.59"))
+
+    def test_separate_summary_row(self):
+        totals = _parse_summary_from_table(self.table("2,96", "81,59"), 8)
+        self.assertEqual(totals["amount_paid"], Decimal("2.96"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("81.59"))
+
+    def test_glued_summary_row(self):
+        totals = _parse_summary_from_table(self.table("2,9", "6 81,59"), 8)
+        self.assertEqual(totals["amount_paid"], Decimal("2.96"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("81.59"))
+
+
+class TestExtractHeaderTotals(unittest.TestCase):
+    def amounts(self, rub_kop):
+        # Одна и та же сумма в обоих полях шапки: правило должно быть общим.
+        totals = _extract_header_totals(f"К оплате {rub_kop} Без страхования {rub_kop}")
+        return totals["amount_due_with_insurance"], totals["amount_due_without_insurance"]
+
+    def test_single_digit_kopecks(self):
+        self.assertEqual(self.amounts("1234 руб. 5 коп."), (Decimal("1234.05"),) * 2)
+
+    def test_two_digit_kopecks(self):
+        self.assertEqual(self.amounts("1234 руб. 05 коп."), (Decimal("1234.05"),) * 2)
+
+    def test_rubles_with_spaces(self):
+        self.assertEqual(self.amounts("5 432 руб. 10 коп."), (Decimal("5432.10"),) * 2)
+
+    def test_negative_overpayment(self):
+        self.assertEqual(self.amounts("-5 172 руб. 20 коп."), (Decimal("-5172.20"),) * 2)
+
+    def test_single_amount_is_without_insurance(self):
+        totals = _extract_header_totals("К оплате 1234 руб. 5 коп.")
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("1234.05"))
