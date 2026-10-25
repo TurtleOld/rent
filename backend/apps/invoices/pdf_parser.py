@@ -480,7 +480,8 @@ def _is_billing_table(table: list[list[str | None]]) -> bool:
         table: Таблица pdfplumber.
 
     Returns:
-        True, если заголовок таблицы — «Расчет размера платы за ... услуги».
+        True, если в таблице не меньше трёх строк, а в заголовке есть «расчет»
+        и «услуги» или «жилищно».
     """
     if not table or len(table) < 3:
         return False
@@ -491,7 +492,7 @@ def _is_billing_table(table: list[list[str | None]]) -> bool:
 def _parse_line_items_from_tables(tables: list[list[list[str | None]]]) -> list[dict[str, Any]]:
     """
     Находит основную таблицу начислений среди всех таблиц страницы и парсит её.
-    Основная таблица содержит колонку «Начислено по тарифу» или «ИТОГО».
+    Таблица начислений определяется по _is_billing_table.
     """
     for table in tables:
         if _is_billing_table(table):
