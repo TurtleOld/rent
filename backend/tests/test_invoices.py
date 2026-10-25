@@ -170,6 +170,26 @@ class PaymentTest(TestCase):
         detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
         self.assertEqual(detail.data["payment_status"], "paid")
 
+    def test_payment_status_amount_unknown_without_payments(self):
+        self.invoice.amount_due = None
+        self.invoice.save(update_fields=["amount_due"])
+        self.client.force_authenticate(user=self.user)
+        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(detail.data["payment_status"], "amount_unknown")
+
+    def test_payment_status_amount_unknown_with_payments(self):
+        self.invoice.amount_due = None
+        self.invoice.save(update_fields=["amount_due"])
+        self.client.force_authenticate(user=self.user)
+        self.client.post(
+            f"/api/invoices/{self.invoice.pk}/payments/",
+            {"amount": "750.00", "payment_date": "2026-02-01"},
+            format="json",
+        )
+        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(detail.data["payment_status"], "amount_unknown")
+        self.assertEqual(detail.data["total_paid"], Decimal("750.00"))
+
     def test_cannot_see_other_users_invoice(self):
         other = User.objects.create_user(
             username="other@example.com",
@@ -583,3 +603,37 @@ class ProcessInvoiceFailureTest(TestCase):
         with patch("apps.invoices.tasks.transaction.atomic", side_effect=DatabaseError("db down")):
             self._run(return_value=parsed)
         self.assertEqual(self.invoice.status, Invoice.Status.FAILED)
+
+
+class AmountDueWarningTest(TestCase):
+    def setUp(self):
+        user = User.objects.create_user(
+            username="nosum@example.com",
+            email="nosum@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _process(self, totals: dict) -> None:
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        parsed = {"period": {}, "totals": totals, "line_items": [], "warnings": []}
+        with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
+            process_invoice(self.invoice.pk)
+        self.invoice.refresh_from_db()
+
+    def test_missing_amount_due_adds_warning(self):
+        self._process({"amount_due": None})
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSED)
+        self.assertIn("Сумма к оплате не распознана", self.invoice.warnings)
+
+    def test_known_amount_due_adds_no_warning(self):
+        self._process({"amount_due": "1500.00"})
+        self.assertNotIn("Сумма к оплате не распознана", self.invoice.warnings)
