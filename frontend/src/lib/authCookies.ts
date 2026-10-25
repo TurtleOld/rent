@@ -12,7 +12,8 @@ const DEFAULT_REFRESH_DAYS = 7;
 
 // Значение читается при каждом вызове: имена и значения те же, что в Django SimpleJWT.
 function envPositiveInt(name: string, fallback: number): number {
-  const value = Number.parseInt(process.env[name] ?? "", 10);
+  const raw = process.env[name];
+  const value = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 

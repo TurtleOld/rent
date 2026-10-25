@@ -53,7 +53,7 @@ describe("срок жизни cookie", () => {
   });
 
   it("при некорректном значении возвращается к значению по умолчанию", () => {
-    vi.stubEnv("ACCESS_TOKEN_LIFETIME_MINUTES", "abc");
+    vi.stubEnv("ACCESS_TOKEN_LIFETIME_MINUTES", "15abc");
     vi.stubEnv("REFRESH_TOKEN_LIFETIME_DAYS", "0");
 
     expect(accessMaxAge()).toBe(60 * 60);
