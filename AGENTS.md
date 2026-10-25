@@ -22,7 +22,7 @@ Backend tests, same as CI. Use Python 3.12: on 3.13 `psycopg2-binary` 2.9.9 fail
 ```bash
 cd backend
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-SECRET_KEY=ci-only-secret DEBUG=True DATABASE_URL=sqlite:////tmp/rent-ci.sqlite3 MEDIA_ROOT=/tmp/rent-media \
+SECRET_KEY=ci-only-secret DEBUG=False DATABASE_URL=sqlite:////tmp/ci.sqlite3 MEDIA_ROOT=/tmp/media \
   .venv/bin/python manage.py test tests
 ```
 
