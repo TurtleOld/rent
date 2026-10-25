@@ -114,7 +114,7 @@ def _do_process(invoice: Invoice) -> None:
             invoice=invoice,
             service_name=raw_name,
             unit=unit,
-            quantity=_to_decimal(item.get("quantity"), 4),
+            quantity=_to_decimal(item.get("quantity"), 6),
             tariff=_to_decimal(item.get("tariff"), 4),
             amount_charged=_to_decimal(item.get("amount_charged")),
             recalculation=_to_decimal(item.get("recalculation")),

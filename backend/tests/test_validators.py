@@ -53,6 +53,16 @@ class CheckLineItemTest(TestCase):
         )
         self.assertEqual(check_line_item(li), [])
 
+    def test_six_decimal_quantity_no_warning(self):
+        """Количество из ЕПД (6 знаков) не даёт ложного предупреждения."""
+        li = _make_line_item(
+            service_name="ОТОПЛЕНИЕ",
+            quantity=Decimal("0.954318"),
+            tariff=Decimal("2850.12"),
+            amount_charged=Decimal("2719.92"),
+        )
+        self.assertEqual(check_line_item(li), [])
+
     def test_quantity_times_tariff_off_emits_warning(self):
         li = _make_line_item(
             service_name="Вода",
