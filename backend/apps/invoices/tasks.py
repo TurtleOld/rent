@@ -7,7 +7,7 @@ from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from django.db import transaction
 
-from .models import Invoice, LineItem, Service, ServiceAlias
+from .models import AMOUNT_DUE_UNKNOWN_WARNING, Invoice, LineItem, Service, ServiceAlias
 from .pdf_parser import parse_epd
 from .units import normalize_unit
 from .validators import run_all_checks
@@ -96,7 +96,7 @@ def _do_process(invoice: Invoice) -> None:
     invoice.confidence = parsed_data.get("confidence")
     invoice.warnings = parsed_data.get("warnings") or []
     if invoice.amount_due is None:
-        invoice.warnings.append("Сумма к оплате не распознана")
+        invoice.warnings.append(AMOUNT_DUE_UNKNOWN_WARNING)
     invoice.status = Invoice.Status.PROCESSED
     invoice.error_message = None
 
