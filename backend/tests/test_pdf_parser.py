@@ -10,6 +10,8 @@ from apps.invoices.pdf_parser import (
     _extract_payer_name,
     _extract_period,
     _extract_provider_name,
+    _insurance_total_key,
+    _is_billing_table,
     _parse_line_items_from_tables,
     _parse_merge_totals_from_tables,
     _parse_meter_readings_from_tables,
@@ -273,6 +275,35 @@ class TestZeroAmountDue(unittest.TestCase):
         )
         totals = _parse_summary_totals(text)
         self.assertEqual(totals["amount_due"], Decimal("-1234.56"))
+
+
+class TestInsuranceTotalKey(unittest.TestCase):
+    def test_without_insurance(self):
+        self.assertEqual(
+            _insurance_total_key("всего за январь 2026 без учета добровольного страхования"),
+            "amount_due_without_insurance",
+        )
+
+    def test_with_insurance(self):
+        self.assertEqual(
+            _insurance_total_key("итого к оплате с учетом добровольного страхования"),
+            "amount_due_with_insurance",
+        )
+
+    def test_unrelated_label(self):
+        self.assertIsNone(_insurance_total_key("всего за январь 2026"))
+
+
+class TestIsBillingTable(unittest.TestCase):
+    def test_billing_header(self):
+        table = [["Расчет размера платы за жилищно-коммунальные услуги"], ["a"], ["b"]]
+        self.assertTrue(_is_billing_table(table))
+
+    def test_other_header(self):
+        self.assertFalse(_is_billing_table([["Показания приборов учета"], ["a"], ["b"]]))
+
+    def test_too_short(self):
+        self.assertFalse(_is_billing_table([["Расчет платы за услуги"], ["a"]]))
 
 
 class _TableFixtureMixin:
