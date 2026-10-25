@@ -258,3 +258,11 @@ class TestZeroAmountDue(unittest.TestCase):
         )
         totals = _parse_summary_totals(text)
         self.assertEqual(totals["amount_due"], Decimal("0.00"))
+
+    def test_negative_without_insurance_is_parsed(self):
+        text = (
+            "Итого к оплате за январь 2026 без учета добровольного страхования: -1 234,56\n"
+            "Итого к оплате за январь 2026 с учетом добровольного страхования: 45,00"
+        )
+        totals = _parse_summary_totals(text)
+        self.assertEqual(totals["amount_due"], Decimal("-1234.56"))

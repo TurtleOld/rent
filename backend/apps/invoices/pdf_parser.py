@@ -74,7 +74,7 @@ _SUMMARY_RE = re.compile(
 
 # "Итого к оплате за ... : AMOUNT"
 _ITOGO_RE = re.compile(
-    r'^Итого к оплате за .+?:\s+(?P<amount>[\d\s]+,\d{2})$',
+    r'^Итого к оплате за .+?:\s+(?P<amount>-?[\d\s]+,\d{2})$',
     re.MULTILINE,
 )
 
