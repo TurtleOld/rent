@@ -617,13 +617,19 @@ def _ordered_summary_amounts(row: list[str | None]) -> list[Decimal | None]:
     и «Перерасчёты» оказываются в одной ячейке, остальные колонки съезжают.
     Позиции колонок тогда недостоверны, а порядок сумм сохраняется.
 
+    Первая цифра первой суммы может остаться в ячейке подписи после двоеточия,
+    а её остаток — слипнуться с перерасчётом. Такие цифры возвращаем на место.
+
     Args:
         row: Строка таблицы начислений.
 
     Returns:
         Суммы в порядке слева направо (без учёта ячейки с подписью).
     """
-    joined = " ".join((cell or "") for cell in row[1:])
+    label = (row[0] or "").rstrip()
+    tail = re.search(r":\s*(?P<digits>\d[\d\s]*)$", label)
+    leading = tail.group("digits").strip() if tail else ""
+    joined = " ".join(filter(None, [leading, *(cell or "" for cell in row[1:])]))
     return [parse_russian_number(n) for n in _FULL_AMOUNT_RE.findall(joined)]
 
 

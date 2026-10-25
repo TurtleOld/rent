@@ -15,6 +15,7 @@ from apps.invoices.pdf_parser import (
     _extract_provider_name,
     _insurance_total_key,
     _is_billing_table,
+    _ordered_summary_amounts,
     _parse_line_items_from_tables,
     _parse_line_items_from_text,
     _parse_merge_totals_from_tables,
@@ -571,6 +572,36 @@ class TestSummaryRowWithRecalculation(unittest.TestCase):
         _parse_merge_totals_from_tables([self._table(summary)], totals)
         self.assertEqual(totals["amount_recalculation"], Decimal("70.00"))
         self.assertEqual(totals["amount_paid"], Decimal("3945.00"))
+
+    def test_leading_digit_after_colon_in_label(self):
+        # pdfplumber оставляет первую цифру первой суммы в ячейке подписи,
+        # а остаток суммы склеивает с перерасчётом.
+        summary_without = [
+            "Всего за август 2026 без учета добровольного страхования: 1",
+            "", "", "0 722,64 326,82", "10 842,42", "10 842,42", "11 049,46",
+        ]
+        summary_with = [
+            "Всего за август 2026 с учетом добровольного страхования : 1",
+            "", "", "1 039,58 326,82", "10 842,42", "10 842,42", "11 366,40",
+        ]
+        table = [self.HEADER, self.SERVICE, summary_without, summary_with]
+        self.assertEqual(max(len(row) for row in table), 7)
+
+        totals = _parse_summary_from_table(table, 7)
+        self.assertEqual(totals["amount_charged"], Decimal("10722.64"))
+        self.assertEqual(totals["amount_recalculation"], Decimal("326.82"))
+        self.assertEqual(totals["amount_paid"], Decimal("10842.42"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("11049.46"))
+        self.assertEqual(totals["amount_due_with_insurance"], Decimal("11366.40"))
+
+        self.assertEqual(
+            _ordered_summary_amounts(summary_without)[:2],
+            [Decimal("10722.64"), Decimal("326.82")],
+        )
+        self.assertEqual(
+            _ordered_summary_amounts(summary_with)[:2],
+            [Decimal("11039.58"), Decimal("326.82")],
+        )
 
 
 class TestExtractHeaderTotals(unittest.TestCase):
