@@ -8,10 +8,14 @@ Every change ships as one PR that closes one GitHub issue. Steps, in order:
 
 1. **Claim.** The issue is open, labelled `ready-for-agent`, has no `in-progress` label, and every issue it is blocked by is closed (`gh api repos/TurtleOld/rent/issues/<n> --jq .issue_dependencies_summary`). Add `in-progress` as your first write: all agents share one GitHub account, so the label, not the assignee, marks ownership. Done when the label is on.
 2. **Branch** from fresh `origin/main`: `<type>/<slug>`, e.g. `fix/login-csrf`. The slug names the change in words; the issue link lives in the PR body.
-3. **Build** exactly the issue's acceptance criteria. Anything else you notice goes into a new issue labelled `needs-triage`, linked from your PR. New or changed logic (parser, money, auth, data writes) gets a test that goes red without your change.
-4. **Verify** with the commands below. Done when backend tests and the frontend build are green on your branch and every acceptance criterion has evidence (a test name, command output, or a manual check you actually ran).
-5. **Open the PR.** Title is an English Conventional Commit; it becomes the squash commit on `main`. Body is in Russian, written with the `pr` skill template (Кратко / Доказательства / Риск слияния), plus `Closes #<n>`, the acceptance criteria as a checklist with evidence per item, and a «Не проверено» line naming anything you could not check. A human reviews and merges: leave auto-merge off.
-6. **Blocked or unsure?** Under Orca supervision, ask through the preamble's `ask` command. Otherwise comment the question on the issue, swap `in-progress` for `needs-info`, and stop.
+3. **Build** exactly the issue's acceptance criteria with the `implement` skill. New or changed logic (parser, money, auth, data writes) gets a test that goes red without your change.
+4. **Review** your diff against `origin/main` with the `ponytail-review` skill and act on every finding that survives its verification:
+   - Must fix and Should fix: fix in this PR.
+   - Nice to have that is small (a few lines, no new dependency) and sits in a file your PR already changes: fix in this PR.
+   - Anything else, including problems in files your PR does not touch: a new issue labelled `needs-triage`, linked from your PR.
+5. **Verify** with the commands below. Done when backend tests, frontend tests and the frontend build are green on your branch and every acceptance criterion has evidence (a test name, command output, or a manual check you actually ran).
+6. **Open the PR.** Title is an English Conventional Commit; it becomes the squash commit on `main`. Body is in Russian, written with the `pr` skill template (Кратко / Доказательства / Риск слияния), plus `Closes #<n>`, the acceptance criteria as a checklist with evidence per item, a «Ревью» section (each finding: fixed, or the issue it went to), and a «Не проверено» line naming anything you could not check. A human reviews and merges: leave auto-merge off.
+7. **Blocked or unsure?** Under Orca supervision, ask through the preamble's `ask` command. Otherwise comment the question on the issue, swap `in-progress` for `needs-info`, and stop.
 
 Under Orca supervision the injected preamble owns the lifecycle (heartbeats, `ask`, `worker_done`); this file owns how the code change is made.
 
