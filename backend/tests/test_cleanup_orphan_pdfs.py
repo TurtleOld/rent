@@ -57,6 +57,7 @@ class CleanupOrphanPdfsTest(TestCase):
         self._age_file(orphan, hours=2)
         invoice = self._invoice()
         existing = invoice.pdf_file.name
+        self._age_file(existing, hours=2)
 
         stdout = StringIO()
         call_command("cleanup_orphan_pdfs", stdout=stdout)
@@ -72,6 +73,7 @@ class CleanupOrphanPdfsTest(TestCase):
         orphan = self._orphan()
         self._age_file(orphan, hours=2)
         existing = self._invoice().pdf_file.name
+        self._age_file(existing, hours=2)
 
         stdout = StringIO()
         call_command("cleanup_orphan_pdfs", "--delete", stdout=stdout)
@@ -99,6 +101,7 @@ class CleanupOrphanPdfsTest(TestCase):
 
     def test_other_user_invoice_file_is_not_orphan(self):
         existing = self._invoice(user=self.other_user).pdf_file.name
+        self._age_file(existing, hours=2)
 
         stdout = StringIO()
         call_command("cleanup_orphan_pdfs", "--delete", stdout=stdout)
