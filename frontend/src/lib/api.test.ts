@@ -27,7 +27,7 @@ describe("общий клиент API", () => {
   });
 
   it("429 при входе даёт сообщение о лимите попыток, остальное — о неверных данных", () => {
-    expect(loginErrorMessage(new ApiError(429, "x"))).toBe("Слишком много попыток входа. Попробуйте позже");
+    expect(loginErrorMessage(new ApiError(429, "x"))).toBe("Слишком много попыток входа. Попробуйте позже.");
     expect(loginErrorMessage(new ApiError(401, "x"))).toBe("Неверный email или пароль");
     expect(loginErrorMessage(new TypeError("Failed to fetch"))).toBe("Неверный email или пароль");
   });

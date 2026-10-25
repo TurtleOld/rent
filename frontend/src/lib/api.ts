@@ -52,7 +52,7 @@ export async function login(email: string, password: string): Promise<void> {
 
 export function loginErrorMessage(err: unknown): string {
   return err instanceof ApiError && err.status === 429
-    ? "Слишком много попыток входа. Попробуйте позже"
+    ? "Слишком много попыток входа. Попробуйте позже."
     : "Неверный email или пароль";
 }
 
