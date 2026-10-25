@@ -1,9 +1,12 @@
+import logging
 from decimal import Decimal
 
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
+
+logger = logging.getLogger(__name__)
 
 
 class Service(models.Model):
@@ -205,7 +208,7 @@ def delete_invoice_pdf(sender, instance: Invoice, using: str, **kwargs) -> None:
     Django не удаляет файлы FileField сам, а в PDF лежат персональные
     данные. Сигнал срабатывает и при каскадном удалении пользователя.
     Файл удаляется только после коммита, чтобы откат не оставил запись
-    без файла; ошибка удаления файла лишь логируется (robust=True).
+    без файла; ошибка удаления файла лишь логируется.
 
     Args:
         sender: Класс модели Invoice.
@@ -215,5 +218,13 @@ def delete_invoice_pdf(sender, instance: Invoice, using: str, **kwargs) -> None:
     """
     if not instance.pdf_file:
         return
-    storage, name = instance.pdf_file.storage, instance.pdf_file.name
-    transaction.on_commit(lambda: storage.delete(name), using=using, robust=True)
+    storage, name, pk = instance.pdf_file.storage, instance.pdf_file.name, instance.pk
+
+    def delete_file() -> None:
+        # Не robust=True: Django пишет его ошибки в логгер django.*, который при DEBUG=False молчит.
+        try:
+            storage.delete(name)
+        except Exception:
+            logger.exception("Не удалось удалить PDF квитанции %s", pk)
+
+    transaction.on_commit(delete_file, using=using)
