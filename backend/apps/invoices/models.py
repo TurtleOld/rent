@@ -1,7 +1,9 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 
 
 class Service(models.Model):
@@ -190,3 +192,24 @@ class LineItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.service_name} — {self.amount}"
+
+
+@receiver(post_delete, sender=Invoice)
+def delete_invoice_pdf(sender, instance: Invoice, using: str, **kwargs) -> None:
+    """Удаляет PDF квитанции с диска после удаления записи.
+
+    Django не удаляет файлы FileField сам, а в PDF лежат персональные
+    данные. Сигнал срабатывает и при каскадном удалении пользователя.
+    Файл удаляется только после коммита, чтобы откат не оставил запись
+    без файла; ошибка удаления файла лишь логируется (robust=True).
+
+    Args:
+        sender: Класс модели Invoice.
+        instance: Удалённая квитанция.
+        using: Алиас базы данных, в которой шло удаление.
+        **kwargs: Прочие аргументы сигнала.
+    """
+    if not instance.pdf_file:
+        return
+    storage, name = instance.pdf_file.storage, instance.pdf_file.name
+    transaction.on_commit(lambda: storage.delete(name), using=using, robust=True)
