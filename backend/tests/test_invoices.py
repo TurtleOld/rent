@@ -605,6 +605,68 @@ class ProcessInvoiceFailureTest(TestCase):
         self.assertEqual(self.invoice.status, Invoice.Status.FAILED)
 
 
+class DeletedDuringProcessingTest(TestCase):
+    """Удалённая во время разбора квитанция не должна воскресать."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="deleted@example.com",
+            email="deleted@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _delete_invoice(self) -> None:
+        Invoice.objects.filter(pk=self.invoice.pk).delete()
+
+    def test_invoice_deleted_during_parse_is_not_resurrected(self):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        parsed = {
+            "period": {},
+            "totals": {"amount_due": "100.00"},
+            "line_items": [{"service_name": "ТЕСТ", "amount": "10.00"}],
+            "warnings": [],
+        }
+
+        def delete_then_parse(_pdf_file):
+            self._delete_invoice()
+            return parsed
+
+        with patch("apps.invoices.tasks.parse_epd", side_effect=delete_then_parse):
+            with self.assertLogs("apps.invoices.tasks", level="WARNING") as logs:
+                process_invoice(self.invoice.pk)
+
+        self.assertFalse(Invoice.objects.filter(pk=self.invoice.pk).exists())
+        self.assertFalse(LineItem.objects.filter(invoice_id=self.invoice.pk).exists())
+        self.assertTrue(any("удалена" in line for line in logs.output))
+
+    def test_deleted_invoice_parse_error_does_not_raise(self):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+
+        def delete_then_fail(_pdf_file):
+            self._delete_invoice()
+            raise ValueError("broken")
+
+        with patch("apps.invoices.tasks.parse_epd", side_effect=delete_then_fail):
+            with self.assertLogs("apps.invoices.tasks", level="WARNING") as logs:
+                process_invoice(self.invoice.pk)
+
+        self.assertFalse(Invoice.objects.filter(pk=self.invoice.pk).exists())
+        self.assertTrue(any("удалена" in line for line in logs.output))
+
+
 class AmountDueWarningTest(TestCase):
     def setUp(self):
         user = User.objects.create_user(

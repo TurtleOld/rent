@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from django.db import transaction
+from django.utils import timezone
 
 from .models import AMOUNT_DUE_UNKNOWN_WARNING, Invoice, LineItem, Service, ServiceAlias
 from .pdf_parser import parse_epd
@@ -14,10 +15,49 @@ from .validators import run_all_checks
 
 
 def _json_serializable(obj: dict) -> dict:
-    """Рекурсивно конвертирует Decimal → str для сохранения в JSON-поле."""
+    """Рекурсивно конвертирует Decimal → str для сохранения в JSON-поля."""
     return json.loads(json.dumps(obj, default=str))
 
 logger = logging.getLogger(__name__)
+
+# Поля, которые пишет разбор. Полный save() здесь недопустим: он воскрешает
+# квитанцию, удалённую во время разбора, вставкой строки с тем же pk.
+_PARSED_FIELDS = (
+    "raw_ai_response",
+    "provider_name",
+    "account_number",
+    "payer_name",
+    "address",
+    "period_start",
+    "period_end",
+    "period_month",
+    "period_year",
+    "amount_due",
+    "amount_due_without_insurance",
+    "amount_due_with_insurance",
+    "amount_charged",
+    "amount_paid_ai",
+    "amount_recalculation",
+    "confidence",
+    "warnings",
+    "status",
+    "error_message",
+)
+
+
+def _update_invoice(invoice: Invoice, fields: tuple[str, ...]) -> bool:
+    """Записывает поля квитанции, только если строка ещё существует.
+
+    Args:
+        invoice: Квитанция с уже проставленными значениями полей.
+        fields: Имена полей, которые нужно записать.
+
+    Returns:
+        True, если строка обновлена; False, если квитанцию уже удалили.
+    """
+    values = {name: getattr(invoice, name) for name in fields}
+    values["updated_at"] = timezone.now()
+    return Invoice.objects.filter(pk=invoice.pk).update(**values) > 0
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -132,8 +172,13 @@ def _do_process(invoice: Invoice) -> None:
         invoice.warnings = (invoice.warnings or []) + unit_warnings
 
     with transaction.atomic():
-        invoice.save()
-        LineItem.objects.filter(invoice=invoice).delete()
+        if not _update_invoice(invoice, _PARSED_FIELDS):
+            logger.warning(
+                "Квитанция %s удалена во время разбора, сохранение пропущено",
+                invoice.pk,
+            )
+            return
+        LineItem.objects.filter(invoice_id=invoice.pk).delete()
         saved_items = LineItem.objects.bulk_create(line_items)
 
         for li in saved_items:
@@ -143,7 +188,7 @@ def _do_process(invoice: Invoice) -> None:
         extra_warnings = run_all_checks(invoice, saved_items)
         if extra_warnings:
             invoice.warnings = (invoice.warnings or []) + extra_warnings
-            invoice.save(update_fields=["warnings", "updated_at"])
+            _update_invoice(invoice, ("warnings",))
 
     logger.info(
         "Invoice %s processed successfully. %d line items saved.",
@@ -184,4 +229,8 @@ def _resolve_service(user_id: int, raw_name: str, normalized_unit: str | None) -
 def _fail(invoice: Invoice, message: str) -> None:
     invoice.status = Invoice.Status.FAILED
     invoice.error_message = message
-    invoice.save(update_fields=["status", "error_message", "updated_at"])
+    if not _update_invoice(invoice, ("status", "error_message")):
+        logger.warning(
+            "Квитанция %s удалена во время разбора, статус ошибки не сохранён",
+            invoice.pk,
+        )
