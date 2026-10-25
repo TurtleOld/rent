@@ -3,7 +3,6 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
-import { setTokens } from "@/lib/auth";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -18,8 +17,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const tokens = await login(email, password);
-      await setTokens(tokens.access, tokens.refresh);
+      await login(email, password);
       router.push("/dashboard");
     } catch {
       setError("Неверный email или пароль");

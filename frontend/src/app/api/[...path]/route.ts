@@ -30,6 +30,12 @@ async function proxy(request: NextRequest, params: { path: string[] }): Promise<
     return fetch(url, { method: request.method, headers, body });
   };
 
+  const isLogin = joined === "auth/login";
+  // A cross-site form cannot send JSON without a CORS preflight, so only a JSON login may set cookies.
+  if (isLogin && !request.headers.get("content-type")?.startsWith("application/json")) {
+    return NextResponse.json({ detail: "Ожидается JSON" }, { status: 415 });
+  }
+
   let backendRes = await send(request.cookies.get("access_token")?.value);
   let refreshed: Tokens | null = null;
 
@@ -43,6 +49,15 @@ async function proxy(request: NextRequest, params: { path: string[] }): Promise<
       return response;
     }
     backendRes = await send(refreshed.access);
+  }
+
+  if (isLogin && backendRes.ok) {
+    // Tokens go straight into httpOnly cookies and never reach the browser's JS.
+    const { access, refresh, ...rest } = (await backendRes.json()) as Required<Tokens>;
+    const response = NextResponse.json(rest, { status: backendRes.status });
+    setAccessCookie(response, access);
+    setRefreshCookie(response, refresh);
+    return response;
   }
 
   const responseBody = backendRes.status === 204 ? null : await backendRes.arrayBuffer();
