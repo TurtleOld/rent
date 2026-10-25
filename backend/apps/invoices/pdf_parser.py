@@ -245,6 +245,25 @@ def _parse_line_items_from_text(text: str) -> list[dict[str, Any]]:
     return items
 
 
+def _insurance_total_key(label: str) -> str | None:
+    """Определяет, к какому итогу относится строка: с учётом или без учёта страхования.
+
+    Args:
+        label: Подпись итоговой строки в нижнем регистре.
+
+    Returns:
+        Ключ итога (``amount_due_without_insurance`` или ``amount_due_with_insurance``)
+        или None, если строка не про страхование.
+    """
+    if "страхован" not in label:
+        return None
+    if "без" in label:
+        return "amount_due_without_insurance"
+    if "с учет" in label:
+        return "amount_due_with_insurance"
+    return None
+
+
 def _parse_summary_totals(text: str) -> dict[str, Any]:
     """Извлекает итоги из строк 'Всего за ...' и 'Итого к оплате'."""
     totals: dict[str, Any] = {
@@ -263,23 +282,17 @@ def _parse_summary_totals(text: str) -> dict[str, Any]:
         paid = parse_russian_number(m.group("paid"))
         total = parse_russian_number(m.group("total"))
 
-        is_without = "без" in label and "страхован" in label
-        is_with = "с учет" in label and "страхован" in label and "без" not in label
-
-        if is_without:
-            totals["amount_due_without_insurance"] = total
+        key = _insurance_total_key(label)
+        if key:
+            totals[key] = total
+        if key == "amount_due_without_insurance":
             totals["amount_charged"] = charged
             totals["amount_paid"] = paid
-        elif is_with:
-            totals["amount_due_with_insurance"] = total
 
     for m in _ITOGO_RE.finditer(text):
-        full_match = m.group(0).lower()
-        amount = parse_russian_number(m.group("amount"))
-        if "без" in full_match and "страхован" in full_match:
-            totals["amount_due_without_insurance"] = amount
-        elif "с учет" in full_match and "страхован" in full_match:
-            totals["amount_due_with_insurance"] = amount
+        key = _insurance_total_key(m.group(0).lower())
+        if key:
+            totals[key] = parse_russian_number(m.group("amount"))
 
     totals["amount_due"] = _first_not_none(
         totals["amount_due_without_insurance"], totals["amount_due_with_insurance"]
@@ -460,17 +473,29 @@ def _billing_table_to_items(table: list[list[str | None]]) -> list[dict[str, Any
     return items
 
 
+def _is_billing_table(table: list[list[str | None]]) -> bool:
+    """Проверяет, что таблица pdfplumber — основная таблица начислений.
+
+    Args:
+        table: Таблица pdfplumber.
+
+    Returns:
+        True, если в таблице не меньше трёх строк, а в заголовке есть «расчет»
+        и «услуги» или «жилищно».
+    """
+    if not table or len(table) < 3:
+        return False
+    header_text = " ".join((cell or "") for cell in (table[0] or [])).lower()
+    return "расчет" in header_text and ("услуги" in header_text or "жилищно" in header_text)
+
+
 def _parse_line_items_from_tables(tables: list[list[list[str | None]]]) -> list[dict[str, Any]]:
     """
     Находит основную таблицу начислений среди всех таблиц страницы и парсит её.
-    Основная таблица содержит колонку «Начислено по тарифу» или «ИТОГО».
+    Таблица начислений определяется по _is_billing_table.
     """
     for table in tables:
-        if not table or len(table) < 3:
-            continue
-        # Ищем по заголовку — строка должна содержать «расчет» и «услуги»
-        header_text = " ".join((cell or "") for cell in (table[0] or [])).lower()
-        if "расчет" in header_text and ("услуги" in header_text or "жилищно" in header_text):
+        if _is_billing_table(table):
             items = _billing_table_to_items(table)
             if items:
                 return items
@@ -487,8 +512,7 @@ def _parse_summary_from_table(table: list[list[str | None]], ncols: int) -> dict
         if not label.startswith("всего"):
             continue
 
-        is_without = "без" in label and "страхован" in label
-        is_with = "с учет" in label and "страхован" in label and "без" not in label
+        key = _insurance_total_key(label)
 
         if ncols >= 7:
             charged = parse_russian_number((row[3] or "").strip() if len(row) > 3 else None)
@@ -508,13 +532,12 @@ def _parse_summary_from_table(table: list[list[str | None]], ncols: int) -> dict
             rekalc = None
             paid = parse_russian_number(nums[1].strip()) if len(nums) > 1 else None
 
-        if is_without:
+        if key:
+            totals[key] = total
+        if key == "amount_due_without_insurance":
             totals["amount_charged"] = charged
             totals["amount_recalculation"] = rekalc
             totals["amount_paid"] = paid
-            totals["amount_due_without_insurance"] = total
-        elif is_with:
-            totals["amount_due_with_insurance"] = total
 
     return totals or None
 
@@ -525,10 +548,7 @@ def _parse_merge_totals_from_tables(
 ) -> None:
     """Извлекает итоги из основной таблицы начислений и обновляет result_totals."""
     for table in tables:
-        if not table or len(table) < 3:
-            continue
-        header_text = " ".join((cell or "") for cell in (table[0] or [])).lower()
-        if "расчет" in header_text and ("услуги" in header_text or "жилищно" in header_text):
+        if _is_billing_table(table):
             ncols = max(len(row) for row in table)
             summary = _parse_summary_from_table(table, ncols)
             if summary:

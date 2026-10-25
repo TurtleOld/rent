@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { login } from "@/lib/api";
+import { login, loginErrorMessage } from "@/lib/api";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -19,8 +19,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.push("/dashboard");
-    } catch {
-      setError("Неверный email или пароль");
+    } catch (err) {
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }

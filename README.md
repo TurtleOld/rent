@@ -1,6 +1,6 @@
 # Учёт платежей ЖКХ
 
-MVP для загрузки и отслеживания коммунальных квитанций с автоматическим извлечением данных через AI API.
+MVP для загрузки и отслеживания коммунальных квитанций с автоматическим извлечением данных: PDF разбирается локально через pdfplumber и регулярные выражения, без внешних AI-сервисов.
 
 ## Быстрый старт
 
@@ -55,9 +55,11 @@ docker compose exec backend python manage.py createsuperuser
 | `DATABASE_URL` | — | URL базы данных (dj-database-url формат) |
 | `REDIS_URL` | `redis://redis:6379/0` | URL Redis (Celery broker) |
 | `MEDIA_ROOT` | `/app/media` | Путь для хранения PDF-файлов |
-| `ACCESS_TOKEN_LIFETIME_MINUTES` | `60` | Время жизни JWT access-токена |
-| `REFRESH_TOKEN_LIFETIME_DAYS` | `7` | Время жизни JWT refresh-токена |
+| `ACCESS_TOKEN_LIFETIME_MINUTES` | `60` | Время жизни JWT access-токена и access-cookie фронтенда |
+| `REFRESH_TOKEN_LIFETIME_DAYS` | `7` | Время жизни JWT refresh-токена и refresh-cookie фронтенда |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | CORS (для локальной разработки) |
+
+`ACCESS_TOKEN_LIFETIME_MINUTES` и `REFRESH_TOKEN_LIFETIME_DAYS` читают и бэкенд, и фронтенд: Django задаёт срок жизни JWT, а прокси ставит httpOnly-cookie с тем же сроком. Значения нужно менять до запуска обоих контейнеров; например, при `REFRESH_TOKEN_LIFETIME_DAYS=30` сессия живёт 30 дней, а не 7. В локальной разработке без Docker Next.js не читает корневой `.env` — те же переменные нужно задать в `frontend/.env`.
 
 ---
 
@@ -65,13 +67,15 @@ docker compose exec backend python manage.py createsuperuser
 
 | Метод | URL | Описание |
 |---|---|---|
-| `POST` | `/api/auth/register/` | Регистрация |
-| `POST` | `/api/auth/login/` | Вход (возвращает JWT) |
+| `POST` | `/api/auth/login/` | Вход через прокси (ставит JWT в httpOnly-cookie) |
 | `POST` | `/api/auth/refresh/` | Обновление токена |
+| `POST` | `/api/auth/logout/` | Выход (отзывает refresh-токен) |
 | `GET` | `/api/invoices/` | Список квитанций (только свои) |
 | `POST` | `/api/invoices/upload/` | Загрузить PDF |
 | `GET` | `/api/invoices/{id}/` | Детали квитанции |
-| `PATCH` | `/api/invoices/{id}/` | Редактировать извлечённые поля |
+| `DELETE` | `/api/invoices/{id}/` | Удалить квитанцию |
+| `GET` | `/api/invoices/{id}/file/` | Скачать исходный PDF |
+| `POST` | `/api/invoices/{id}/reparse/` | Повторно разобрать PDF |
 | `GET` | `/api/invoices/{id}/payments/` | Список платежей |
 | `POST` | `/api/invoices/{id}/payments/` | Добавить платёж |
 
@@ -133,10 +137,10 @@ backend:8000 + celery worker
 celery worker
   Обрабатывает PDF асинхронно:
   1. Читает PDF из хранилища
-  2. Отправляет в AI API (POST multipart)
-  3. Валидирует JSON-ответ
+  2. Извлекает текст и таблицы через pdfplumber
+  3. Разбирает строки и таблицы регулярными выражениями
   4. Сохраняет Invoice + LineItems
-  5. Обновляет статус: processed | failed
+  5. Обновляет статус: processing | processed | failed
 ```
 
 ---
