@@ -2,12 +2,17 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
+import pdfplumber
+
 from apps.invoices.pdf_parser import (
     _extract_account_number,
     _extract_address,
     _extract_payer_name,
     _extract_period,
     _extract_provider_name,
+    _parse_line_items_from_tables,
+    _parse_merge_totals_from_tables,
+    _parse_meter_readings_from_tables,
     _parse_summary_totals,
     parse_epd,
     parse_russian_number,
@@ -15,6 +20,8 @@ from apps.invoices.pdf_parser import (
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SAMPLE_PDF = FIXTURES_DIR / "sample_epd.pdf"
+TABLE5_PDF = FIXTURES_DIR / "sample_epd_table5.pdf"
+TABLE8_PDF = FIXTURES_DIR / "sample_epd_table8.pdf"
 
 
 class TestParseRussianNumber(unittest.TestCase):
@@ -266,3 +273,167 @@ class TestZeroAmountDue(unittest.TestCase):
         )
         totals = _parse_summary_totals(text)
         self.assertEqual(totals["amount_due"], Decimal("-1234.56"))
+
+
+class _TableFixtureMixin:
+    """Загружает ЕПД с рамками таблиц: таблицы pdfplumber и результат parse_epd."""
+
+    pdf_path: Path
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with pdfplumber.open(cls.pdf_path) as pdf:
+            cls.tables = [t for page in pdf.pages for t in page.extract_tables()]
+        with open(cls.pdf_path, "rb") as f:
+            cls.result = parse_epd(f)
+        cls.items = {i["service_name"]: i for i in cls.result["line_items"]}
+
+    def table_totals(self):
+        totals = {}
+        _parse_merge_totals_from_tables(self.tables, totals)
+        return totals
+
+    def test_billing_table_found(self):
+        # Без этой проверки фикстура могла бы незаметно уйти на текстовый разбор.
+        self.assertTrue(_parse_line_items_from_tables(self.tables))
+
+    def test_meter_table_found(self):
+        self.assertTrue(_parse_meter_readings_from_tables(self.tables))
+
+    def test_meter_readings_from_table(self):
+        self.assertEqual(
+            _parse_meter_readings_from_tables(self.tables),
+            {
+                "ГОРЯЧЕЕ В/С (НОСИТЕЛЬ)": {
+                    "meter_id": "100200300",
+                    "previous_reading": Decimal("45.000000"),
+                    "current_reading": Decimal("46.000000"),
+                },
+                "ХОЛОДНОЕ В/С": {
+                    "meter_id": "100200400",
+                    "previous_reading": Decimal("120.000000"),
+                    "current_reading": Decimal("121.700000"),
+                },
+            },
+        )
+
+    def test_meter_merged_into_item(self):
+        item = self.items["ХОЛОДНОЕ В/С"]
+        self.assertEqual(item["meter_id"], "100200400")
+        self.assertEqual(item["current_reading"], Decimal("121.700000"))
+
+    def test_no_warnings(self):
+        self.assertEqual(self.result["warnings"], [])
+        self.assertEqual(self.result["confidence"], 1.0)
+
+
+class TestTable5Format(_TableFixtureMixin, unittest.TestCase):
+    """ЕПД без перерасчётов: таблица начислений в 5 колонок."""
+
+    pdf_path = TABLE5_PDF
+
+    def test_five_columns(self):
+        billing = next(t for t in self.tables if "РАСЧЕТ" in (t[0][0] or ""))
+        self.assertEqual(max(len(row) for row in billing), 5)
+
+    def test_line_items_count(self):
+        self.assertEqual(len(self.result["line_items"]), 9)
+
+    def test_quantity_in_service_cell(self):
+        # Объём перенесён второй строкой в ячейку названия услуги.
+        item = self.items["ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ"]
+        self.assertEqual(item["quantity"], Decimal("48.00"))
+        self.assertEqual(item["unit"], "кв.м.")
+        self.assertEqual(item["tariff"], Decimal("24.00"))
+        self.assertEqual(item["amount_charged"], Decimal("1152.00"))
+        self.assertEqual(item["debt"], Decimal("0.00"))
+        self.assertEqual(item["amount"], Decimal("1152.00"))
+
+    def test_debt_and_paid_in_one_cell(self):
+        item = self.items["ГАЗОСНАБЖЕНИЕ"]
+        self.assertEqual(item["quantity"], Decimal("3"))
+        self.assertEqual(item["unit"], "чел.")
+        self.assertEqual(item["tariff"], Decimal("90.00"))
+        self.assertEqual(item["amount_charged"], Decimal("270.00"))
+        self.assertEqual(item["debt"], Decimal("150.00"))
+        self.assertEqual(item["amount"], Decimal("270.00"))
+
+    def test_negative_debt(self):
+        item = self.items["ГОРЯЧЕЕ В/С (ЭНЕРГИЯ) ОДН"]
+        self.assertEqual(item["quantity"], Decimal("0.004500"))
+        self.assertEqual(item["tariff"], Decimal("2900.00"))
+        self.assertEqual(item["amount_charged"], Decimal("13.05"))
+        self.assertEqual(item["debt"], Decimal("-98.30"))
+        self.assertEqual(item["amount"], Decimal("0.00"))
+
+    def test_no_recalculation(self):
+        for item in self.result["line_items"]:
+            self.assertIsNone(item["recalculation"])
+        self.assertIsNone(self.result["totals"]["amount_recalculation"])
+
+    def test_totals_from_table(self):
+        self.assertEqual(self.table_totals(), {
+            "amount_charged": Decimal("5848.55"),
+            "amount_paid": Decimal("150.00"),
+            "amount_due_without_insurance": Decimal("5835.50"),
+            "amount_due_with_insurance": Decimal("6095.18"),
+        })
+
+    def test_amount_due(self):
+        self.assertEqual(self.result["totals"]["amount_due"], Decimal("5835.50"))
+
+
+class TestTable8Format(_TableFixtureMixin, unittest.TestCase):
+    """ЕПД с перерасчётами: 8 колонок, «Оплачено» и «ИТОГО» слиплись."""
+
+    pdf_path = TABLE8_PDF
+
+    def test_eight_columns(self):
+        billing = next(t for t in self.tables if "РАСЧЕТ" in (t[0][0] or ""))
+        self.assertEqual(max(len(row) for row in billing), 8)
+
+    def test_paid_and_total_cells_glued(self):
+        # Фикстура должна воспроизводить разрез числа «2,96» границей колонок.
+        billing = next(t for t in self.tables if "РАСЧЕТ" in (t[0][0] or ""))
+        row = next(r for r in billing if r[0] == "ХОЛОДНОЕ В/С")
+        self.assertEqual(row[6:], ["2,9", "6 110,50"])
+
+    def test_line_items_count(self):
+        self.assertEqual(len(self.result["line_items"]), 8)
+
+    def test_negative_recalculation(self):
+        item = self.items["ГОРЯЧЕЕ В/С (НОСИТЕЛЬ)"]
+        self.assertEqual(item["quantity"], Decimal("0.80"))
+        self.assertEqual(item["unit"], "куб.м.")
+        self.assertEqual(item["tariff"], Decimal("65.00"))
+        self.assertEqual(item["amount_charged"], Decimal("52.00"))
+        self.assertEqual(item["recalculation"], Decimal("-12.30"))
+        self.assertEqual(item["debt"], Decimal("0.00"))
+        self.assertEqual(item["amount"], Decimal("39.70"))
+
+    def test_positive_recalculation(self):
+        item = self.items["ОТОПЛЕНИЕ"]
+        self.assertEqual(item["quantity"], Decimal("0.7500"))
+        self.assertEqual(item["unit"], "Гкал")
+        self.assertEqual(item["tariff"], Decimal("2900.00"))
+        self.assertEqual(item["amount_charged"], Decimal("2175.00"))
+        self.assertEqual(item["recalculation"], Decimal("145.00"))
+        self.assertEqual(item["amount"], Decimal("2320.00"))
+
+    def test_glued_paid_and_total(self):
+        item = self.items["ХОЛОДНОЕ В/С"]
+        self.assertEqual(item["debt"], Decimal("2.96"))
+        self.assertEqual(item["amount"], Decimal("110.50"))
+
+    def test_totals_from_table(self):
+        self.assertEqual(self.table_totals(), {
+            "amount_charged": Decimal("5835.50"),
+            "amount_recalculation": Decimal("132.70"),
+            "amount_paid": Decimal("152.96"),
+            "amount_due_without_insurance": Decimal("5968.20"),
+            "amount_due_with_insurance": Decimal("6227.88"),
+        })
+
+    def test_amount_due(self):
+        self.assertEqual(self.result["totals"]["amount_due"], Decimal("5968.20"))

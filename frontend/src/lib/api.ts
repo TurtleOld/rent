@@ -40,13 +40,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-export interface AuthTokens {
-  access: string;
-  refresh: string;
-}
-
-export async function login(email: string, password: string): Promise<AuthTokens> {
-  return request<AuthTokens>("/auth/login/", {
+export async function login(email: string, password: string): Promise<void> {
+  await request("/auth/login/", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
