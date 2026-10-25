@@ -26,7 +26,7 @@ SECRET_KEY=ci-only-secret DEBUG=False DATABASE_URL=sqlite:////tmp/ci.sqlite3 MED
   .venv/bin/python manage.py test tests
 ```
 
-Frontend (Node 20, as in the Dockerfile):
+Frontend (Node 24, as in the Dockerfile):
 
 ```bash
 cd frontend && npm ci && npm test && npm run build
