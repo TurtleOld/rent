@@ -95,6 +95,8 @@ def _do_process(invoice: Invoice) -> None:
     invoice.amount_recalculation = _to_decimal(totals.get("amount_recalculation"))
     invoice.confidence = parsed_data.get("confidence")
     invoice.warnings = parsed_data.get("warnings") or []
+    if invoice.amount_due is None:
+        invoice.warnings.append("Сумма к оплате не распознана")
     invoice.status = Invoice.Status.PROCESSED
     invoice.error_message = None
 
