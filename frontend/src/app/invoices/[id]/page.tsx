@@ -9,7 +9,9 @@ import {
   deleteInvoice,
   getInvoice,
   getPayments,
+  manualAmountDueErrorMessage,
   reparseInvoice,
+  setManualAmountDue,
 } from "@/lib/api";
 import styles from "./invoice.module.css";
 
@@ -41,6 +43,7 @@ export default function InvoiceDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [manualAmount, setManualAmount] = useState("");
 
   useEffect(() => {
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -87,6 +90,19 @@ export default function InvoiceDetailPage() {
       setInvoice(updated);
     } catch {
       setError("Ошибка при добавлении платежа");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveManualAmount(value: string | null) {
+    setSaving(true);
+    setError(null);
+    try {
+      setInvoice(await setManualAmountDue(id, value));
+      setManualAmount("");
+    } catch (err) {
+      setError(manualAmountDueErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -174,7 +190,14 @@ export default function InvoiceDetailPage() {
               <dd>{fmt(invoice.amount_recalculation)}</dd>
             </>
           )}
-          {invoice.amount_due_without_insurance != null || invoice.amount_due_with_insurance != null ? (
+          {invoice.manual_amount_due != null ? (
+            <>
+              <dt>К оплате</dt>
+              <dd>
+                {fmt(invoice.manual_amount_due)} <span className={styles.manualMark}>введено вручную</span>
+              </dd>
+            </>
+          ) : invoice.amount_due_without_insurance != null || invoice.amount_due_with_insurance != null ? (
             <>
               {invoice.amount_due_without_insurance != null && (
                 <>
@@ -225,6 +248,39 @@ export default function InvoiceDetailPage() {
           )}
         </dl>
       </div>
+
+      {invoice.status === "processed" && (
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>Ручная сумма к оплате</h2>
+          <div className={styles.paymentForm}>
+            <input
+              type="number"
+              placeholder="Сумма (₽)"
+              aria-label="Ручная сумма к оплате"
+              value={manualAmount}
+              onChange={(e) => setManualAmount(e.target.value)}
+              step="0.01"
+              className={styles.payInput}
+            />
+            <button
+              onClick={() => void saveManualAmount(manualAmount)}
+              disabled={saving || !manualAmount}
+              className={styles.saveBtn}
+            >
+              Сохранить
+            </button>
+            {invoice.manual_amount_due != null && (
+              <button
+                onClick={() => void saveManualAmount(null)}
+                disabled={saving}
+                className={styles.cancelBtn}
+              >
+                Сбросить
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Line items */}
       {invoice.line_items.length > 0 && (

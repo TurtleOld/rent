@@ -13,7 +13,7 @@ from apps.payments.models import Payment
 from apps.payments.serializers import PaymentSerializer
 
 from .models import Invoice
-from .serializers import InvoiceSerializer, InvoiceUploadSerializer
+from .serializers import InvoiceSerializer, InvoiceUploadSerializer, ManualAmountDueSerializer
 from .tasks import process_invoice
 
 
@@ -116,6 +116,33 @@ class InvoiceReparseView(views.APIView):
             InvoiceSerializer(invoice).data,
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class InvoiceManualAmountDueView(views.APIView):
+    """Задаёт или сбрасывает ручную сумму к оплате квитанции.
+
+    Доступно только владельцу и только для квитанции в статусе «Обработан».
+    Пустое значение сбрасывает ручную сумму, и снова действует распознанная.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def put(self, request, pk: int) -> Response:
+        invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
+        serializer = ManualAmountDueSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Статус проверяется в самом UPDATE: повторный разбор, начатый после чтения
+        # квитанции, иначе сохранил бы её целиком и затёр введённую сумму.
+        updated = Invoice.objects.filter(pk=invoice.pk, status=Invoice.Status.PROCESSED).update(
+            manual_amount_due=serializer.validated_data["manual_amount_due"],
+            updated_at=timezone.now(),
+        )
+        if not updated:
+            return Response(
+                {"detail": "Сумму к оплате можно ввести только для обработанной квитанции."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(InvoiceSerializer(_invoice_queryset(request.user).get(pk=pk)).data)
 
 
 class InvoicePaymentListCreateView(generics.ListCreateAPIView):

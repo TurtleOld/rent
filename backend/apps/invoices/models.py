@@ -8,6 +8,8 @@ from django.dispatch import receiver
 
 logger = logging.getLogger(__name__)
 
+AMOUNT_DUE_UNKNOWN_WARNING = "Сумма к оплате не распознана"
+
 
 class Service(models.Model):
     """Канонический справочник услуг ЖКХ.
@@ -102,8 +104,21 @@ class Invoice(models.Model):
     period_month = models.PositiveSmallIntegerField(blank=True, null=True)
     period_year = models.PositiveSmallIntegerField(blank=True, null=True)
 
-    # Financial totals (editable by user)
-    amount_due = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    # Financial totals
+    amount_due = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Распознанная сумма к оплате",
+    )
+    manual_amount_due = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Ручная сумма к оплате; главнее распознанной",
+    )
     amount_charged = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     amount_paid_ai = models.DecimalField(
         max_digits=10,
@@ -154,8 +169,15 @@ class Invoice(models.Model):
         return sum((p.amount for p in self.payments.all()), Decimal("0"))
 
     @property
+    def effective_amount_due(self) -> Decimal | None:
+        """Сумма к оплате: ручная, если задана, иначе распознанная."""
+        if self.manual_amount_due is not None:
+            return self.manual_amount_due
+        return self.amount_due
+
+    @property
     def payment_status(self) -> str:
-        amount_due = self.amount_due
+        amount_due = self.effective_amount_due
         # Без суммы к оплате нельзя сказать, хватает ли платежей.
         if amount_due is None:
             return "amount_unknown"

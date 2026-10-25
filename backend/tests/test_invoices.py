@@ -637,3 +637,130 @@ class AmountDueWarningTest(TestCase):
     def test_known_amount_due_adds_no_warning(self):
         self._process({"amount_due": "1500.00"})
         self.assertNotIn("Сумма к оплате не распознана", self.invoice.warnings)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ManualAmountDueTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="manual@example.com",
+            email="manual@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+            warnings=["Сумма к оплате не распознана"],
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def _set(self, value, invoice=None):
+        invoice = invoice or self.invoice
+        return self.client.put(
+            f"/api/invoices/{invoice.pk}/manual-amount-due/",
+            {"manual_amount_due": value},
+            format="json",
+        )
+
+    def test_manual_amount_turns_unknown_into_paid(self):
+        self.invoice.payments.create(
+            user=self.user, amount=Decimal("1000.00"), payment_date="2026-02-01"
+        )
+        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/").data
+        self.assertEqual(detail["payment_status"], "amount_unknown")
+
+        response = self._set("1000.00")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["payment_status"], "paid")
+        self.assertEqual(response.data["amount_due"], "1000.00")
+        self.assertEqual(response.data["manual_amount_due"], "1000.00")
+
+    def test_reparse_keeps_manual_amount(self):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        self._set("700.00")
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=False)
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING, pdf_file=self.invoice.pdf_file.name
+        )
+        parsed = {
+            "period": {},
+            "totals": {"amount_due": "1500.00"},
+            "line_items": [],
+            "warnings": [],
+        }
+        with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
+            process_invoice(self.invoice.pk)
+
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.amount_due, Decimal("1500.00"))
+        self.assertEqual(self.invoice.manual_amount_due, Decimal("700.00"))
+        data = self.client.get(f"/api/invoices/{self.invoice.pk}/").data
+        self.assertEqual(data["amount_due"], "700.00")
+
+    def test_clearing_returns_recognized_amount(self):
+        Invoice.objects.filter(pk=self.invoice.pk).update(amount_due=Decimal("1500.00"))
+        for empty in ("", None):
+            self._set("700.00")
+            response = self._set(empty)
+            self.assertEqual(response.status_code, status.HTTP_200_OK, empty)
+            self.assertIsNone(response.data["manual_amount_due"])
+            self.assertEqual(response.data["amount_due"], "1500.00")
+
+    def test_zero_and_negative_are_accepted(self):
+        for value in ("0.00", "-1234.56"):
+            response = self._set(value)
+            self.assertEqual(response.status_code, status.HTTP_200_OK, value)
+            self.assertEqual(response.data["amount_due"], value)
+            self.assertEqual(response.data["payment_status"], "paid")
+
+    def test_more_than_two_decimals_rejected(self):
+        response = self._set("10.005")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.invoice.refresh_from_db()
+        self.assertIsNone(self.invoice.manual_amount_due)
+
+    def test_rejected_unless_processed(self):
+        for state in (Invoice.Status.FAILED, Invoice.Status.PROCESSING):
+            Invoice.objects.filter(pk=self.invoice.pk).update(status=state)
+            response = self._set("700.00")
+            self.assertEqual(response.status_code, status.HTTP_409_CONFLICT, state)
+            self.assertEqual(
+                response.data["detail"],
+                "Сумму к оплате можно ввести только для обработанной квитанции.",
+            )
+        self.invoice.refresh_from_db()
+        self.assertIsNone(self.invoice.manual_amount_due)
+
+    def test_other_users_invoice_cannot_be_changed(self):
+        other = User.objects.create_user(
+            username="intruder@example.com",
+            email="intruder@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=other)
+        response = self._set("700.00")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.invoice.refresh_from_db()
+        self.assertIsNone(self.invoice.manual_amount_due)
+
+    def test_other_fields_stay_read_only(self):
+        self.client.put(
+            f"/api/invoices/{self.invoice.pk}/manual-amount-due/",
+            {"manual_amount_due": "700.00", "provider_name": "Чужой", "amount_due": "1.00"},
+            format="json",
+        )
+        self.invoice.refresh_from_db()
+        self.assertIsNone(self.invoice.provider_name)
+        self.assertIsNone(self.invoice.amount_due)
+
+    def test_unknown_amount_warning_hidden_while_manual_set(self):
+        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/").data
+        self.assertIn("Сумма к оплате не распознана", detail["warnings"])
+        self.assertNotIn("Сумма к оплате не распознана", self._set("700.00").data["warnings"])
+        self.assertIn("Сумма к оплате не распознана", self._set(None).data["warnings"])
