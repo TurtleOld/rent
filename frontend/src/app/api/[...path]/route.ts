@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setAccessCookie, setRefreshCookie } from "@/lib/authCookies";
+import { isJsonRequest, jsonRequired } from "@/lib/jsonOnly";
 import { type Tokens, refreshOnce } from "@/lib/tokenRefresh";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://backend:8000";
@@ -32,9 +33,7 @@ async function proxy(request: NextRequest, params: { path: string[] }): Promise<
 
   const isLogin = joined === "auth/login";
   // Чужой сайт не отправит JSON без CORS-preflight, поэтому cookie ставит только вход JSON-ом.
-  if (isLogin && !request.headers.get("content-type")?.startsWith("application/json")) {
-    return NextResponse.json({ detail: "Ожидается JSON" }, { status: 415 });
-  }
+  if (isLogin && !isJsonRequest(request)) return jsonRequired();
 
   let backendRes = await send(request.cookies.get("access_token")?.value);
   let refreshed: Tokens | null = null;

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isJsonRequest, jsonRequired } from "@/lib/jsonOnly";
 import { forgetRefresh } from "@/lib/tokenRefresh";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://backend:8000";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Форма с чужого сайта не отправит JSON без CORS-preflight, поэтому навязанный выход отсекается.
+  if (!isJsonRequest(request)) return jsonRequired();
+
   const refreshToken = request.cookies.get("refresh_token")?.value;
 
   if (refreshToken) {
