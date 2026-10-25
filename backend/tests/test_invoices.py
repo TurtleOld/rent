@@ -243,7 +243,6 @@ class InvoiceAtomicProcessingTest(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
-@override_settings(SECURE_SSL_REDIRECT=False)
 class LineItemQuantityPrecisionTest(TestCase):
     """Количество из ЕПД сохраняется с точностью до 6 знаков."""
 
@@ -314,6 +313,7 @@ class LineItemQuantityPrecisionTest(TestCase):
         self.assertEqual(response.data["line_items"][0]["quantity"], "0.954318")
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceFileDownloadTest(TestCase):
     def setUp(self):
         self.client = APIClient()
