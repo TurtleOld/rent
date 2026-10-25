@@ -31,7 +31,7 @@ async function proxy(request: NextRequest, params: { path: string[] }): Promise<
   };
 
   const isLogin = joined === "auth/login";
-  // A cross-site form cannot send JSON without a CORS preflight, so only a JSON login may set cookies.
+  // Чужой сайт не отправит JSON без CORS-preflight, поэтому cookie ставит только вход JSON-ом.
   if (isLogin && !request.headers.get("content-type")?.startsWith("application/json")) {
     return NextResponse.json({ detail: "Ожидается JSON" }, { status: 415 });
   }
@@ -52,7 +52,7 @@ async function proxy(request: NextRequest, params: { path: string[] }): Promise<
   }
 
   if (isLogin && backendRes.ok) {
-    // Tokens go straight into httpOnly cookies and never reach the browser's JS.
+    // Токены сразу уходят в httpOnly-cookie и не попадают в JS браузера.
     const { access, refresh, ...rest } = (await backendRes.json()) as Required<Tokens>;
     const response = NextResponse.json(rest, { status: backendRes.status });
     setAccessCookie(response, access);
