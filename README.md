@@ -59,7 +59,7 @@ docker compose exec backend python manage.py createsuperuser
 | `REFRESH_TOKEN_LIFETIME_DAYS` | `7` | Время жизни JWT refresh-токена и refresh-cookie фронтенда |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | CORS (для локальной разработки) |
 
-`ACCESS_TOKEN_LIFETIME_MINUTES` и `REFRESH_TOKEN_LIFETIME_DAYS` читают и бэкенд, и фронтенд: Django задаёт срок жизни JWT, а прокси ставит httpOnly-cookie с тем же сроком. Значения нужно менять до запуска обоих контейнеров; например, при `REFRESH_TOKEN_LIFETIME_DAYS=30` сессия живёт 30 дней, а не 7.
+`ACCESS_TOKEN_LIFETIME_MINUTES` и `REFRESH_TOKEN_LIFETIME_DAYS` читают и бэкенд, и фронтенд: Django задаёт срок жизни JWT, а прокси ставит httpOnly-cookie с тем же сроком. Значения нужно менять до запуска обоих контейнеров; например, при `REFRESH_TOKEN_LIFETIME_DAYS=30` сессия живёт 30 дней, а не 7. В локальной разработке без Docker Next.js не читает корневой `.env` — те же переменные нужно задать в `frontend/.env`.
 
 ---
 
@@ -67,7 +67,7 @@ docker compose exec backend python manage.py createsuperuser
 
 | Метод | URL | Описание |
 |---|---|---|
-| `POST` | `/api/auth/login/` | Вход (ставит JWT в httpOnly-cookie) |
+| `POST` | `/api/auth/login/` | Вход через прокси (ставит JWT в httpOnly-cookie) |
 | `POST` | `/api/auth/refresh/` | Обновление токена |
 | `POST` | `/api/auth/logout/` | Выход (отзывает refresh-токен) |
 | `GET` | `/api/invoices/` | Список квитанций (только свои) |
@@ -137,10 +137,10 @@ backend:8000 + celery worker
 celery worker
   Обрабатывает PDF асинхронно:
   1. Читает PDF из хранилища
-  2. Извлекает текст через pdfplumber
-  3. Разбирает строки регулярными выражениями
+  2. Извлекает текст и таблицы через pdfplumber
+  3. Разбирает строки и таблицы регулярными выражениями
   4. Сохраняет Invoice + LineItems
-  5. Обновляет статус: processed | failed
+  5. Обновляет статус: processing | processed | failed
 ```
 
 ---
