@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SECRET_KEY: ci-only-secret
-      DEBUG: "True"
+      # CI повторяет продакшен: при DEBUG=False блок защиты в settings.py включает редиректы, и регрессии вроде 301 вместо 200 ловятся тестами.
+      DEBUG: "False"
       DATABASE_URL: sqlite:////tmp/ci.sqlite3
       MEDIA_ROOT: /tmp/media
     steps:
