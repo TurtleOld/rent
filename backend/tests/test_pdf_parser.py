@@ -476,7 +476,7 @@ class TestTable8Format(_TableFixtureMixin, unittest.TestCase):
 class TestPaidAndTotalColumns(unittest.TestCase):
     """«Оплачено» и «ИТОГО» в 8-колоночной таблице: слипшиеся и раздельные ячейки."""
 
-    def table(self, paid_cell, total_cell):
+    def _table(self, paid_cell, total_cell):
         return [
             ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ УСЛУГИ"] + [None] * 7,
             ["ХОЛОДНОЕ В/С", "2.0", "куб.м. 40.73", "81,46", "0,00", "2,96", paid_cell, total_cell],
@@ -485,41 +485,55 @@ class TestPaidAndTotalColumns(unittest.TestCase):
         ]
 
     def test_separate_service_row(self):
-        items = _billing_table_to_items(self.table("2,96", "81,59"))
+        items = _billing_table_to_items(self._table("2,96", "81,59"))
         self.assertEqual(items[0]["amount"], Decimal("81.59"))
 
     def test_glued_service_row(self):
-        items = _billing_table_to_items(self.table("2,9", "6 81,59"))
+        items = _billing_table_to_items(self._table("2,9", "6 81,59"))
         self.assertEqual(items[0]["amount"], Decimal("81.59"))
 
+    def test_separate_with_empty_or_dash_paid(self):
+        for paid_cell in ("", "-", None):
+            with self.subTest(paid_cell=paid_cell):
+                items = _billing_table_to_items(self._table(paid_cell, "81,59"))
+                self.assertEqual(items[0]["amount"], Decimal("81.59"))
+                totals = _parse_summary_from_table(self._table(paid_cell, "81,59"), 8)
+                self.assertIsNone(totals["amount_paid"])
+                self.assertEqual(totals["amount_due_without_insurance"], Decimal("81.59"))
+
+    def test_glued_with_whole_paid_in_total_cell(self):
+        totals = _parse_summary_from_table(self._table("", "2,96 81,59"), 8)
+        self.assertEqual(totals["amount_paid"], Decimal("2.96"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("81.59"))
+
     def test_separate_summary_row(self):
-        totals = _parse_summary_from_table(self.table("2,96", "81,59"), 8)
+        totals = _parse_summary_from_table(self._table("2,96", "81,59"), 8)
         self.assertEqual(totals["amount_paid"], Decimal("2.96"))
         self.assertEqual(totals["amount_due_without_insurance"], Decimal("81.59"))
 
     def test_glued_summary_row(self):
-        totals = _parse_summary_from_table(self.table("2,9", "6 81,59"), 8)
+        totals = _parse_summary_from_table(self._table("2,9", "6 81,59"), 8)
         self.assertEqual(totals["amount_paid"], Decimal("2.96"))
         self.assertEqual(totals["amount_due_without_insurance"], Decimal("81.59"))
 
 
 class TestExtractHeaderTotals(unittest.TestCase):
-    def amounts(self, rub_kop):
+    def _amounts(self, rub_kop):
         # Одна и та же сумма в обоих полях шапки: правило должно быть общим.
         totals = _extract_header_totals(f"К оплате {rub_kop} Без страхования {rub_kop}")
         return totals["amount_due_with_insurance"], totals["amount_due_without_insurance"]
 
     def test_single_digit_kopecks(self):
-        self.assertEqual(self.amounts("1234 руб. 5 коп."), (Decimal("1234.05"),) * 2)
+        self.assertEqual(self._amounts("1234 руб. 5 коп."), (Decimal("1234.05"),) * 2)
 
     def test_two_digit_kopecks(self):
-        self.assertEqual(self.amounts("1234 руб. 05 коп."), (Decimal("1234.05"),) * 2)
+        self.assertEqual(self._amounts("1234 руб. 05 коп."), (Decimal("1234.05"),) * 2)
 
     def test_rubles_with_spaces(self):
-        self.assertEqual(self.amounts("5 432 руб. 10 коп."), (Decimal("5432.10"),) * 2)
+        self.assertEqual(self._amounts("5 432 руб. 10 коп."), (Decimal("5432.10"),) * 2)
 
     def test_negative_overpayment(self):
-        self.assertEqual(self.amounts("-5 172 руб. 20 коп."), (Decimal("-5172.20"),) * 2)
+        self.assertEqual(self._amounts("-5 172 руб. 20 коп."), (Decimal("-5172.20"),) * 2)
 
     def test_single_amount_is_without_insurance(self):
         totals = _extract_header_totals("К оплате 1234 руб. 5 коп.")

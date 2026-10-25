@@ -311,14 +311,24 @@ _METER_IPU_RE = re.compile(
 )
 
 
+_FULL_AMOUNT_RE = re.compile(r"-?[\d\s]+,\d{2}")
+
+
 def _split_last_col_pair(col6: str | None, col7: str | None) -> tuple[str | None, str | None]:
     """
     В 8-колоночном PDF колонки «Оплачено» и «ИТОГО» слипаются:
     col[6]='2,9'  col[7]='6 81,59'  → paid='2,96', total='81,59'
     Восстанавливаем: к col[6] прибавляем первый «кусочек» col[7].
-    Если col[6] — уже целое число с копейками, колонки пришли раздельно.
+    Если в col[6] полная сумма или прочерк либо col[6] пуст, а в col[7] одно
+    число, колонки пришли раздельно.
     """
-    if col7 is None or re.fullmatch(r"-?[\d\s]+,\d{2}", (col6 or "").strip()):
+    paid_cell = (col6 or "").strip()
+    separate = (
+        paid_cell == "-"
+        or _FULL_AMOUNT_RE.fullmatch(paid_cell)
+        or (not paid_cell and (col7 or "").count(",") < 2)
+    )
+    if col7 is None or separate:
         return col6, col7
     parts = (col7 or "").strip().split(None, 1)
     paid = ((col6 or "").strip() + parts[0]) if parts else col6
