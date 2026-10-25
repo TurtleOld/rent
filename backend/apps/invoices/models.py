@@ -166,7 +166,7 @@ class LineItem(models.Model):
     )
     service_name = models.CharField(max_length=255)
     unit = models.CharField(max_length=50, blank=True, null=True)
-    quantity = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
+    quantity = models.DecimalField(max_digits=12, decimal_places=6, blank=True, null=True)
     tariff = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     # amount_charged = начислено по тарифу (до перерасчёта)
     amount_charged = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
