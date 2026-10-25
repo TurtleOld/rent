@@ -610,6 +610,23 @@ def _parse_line_items_from_tables(tables: list[list[list[str | None]]]) -> list[
     return []
 
 
+def _ordered_summary_amounts(row: list[str | None]) -> list[Decimal | None]:
+    """Собирает суммы строки «Всего …» по порядку следования в ячейках.
+
+    В 7-колоночной таблице границы режут слова и слипаются суммы: «Начислено»
+    и «Перерасчёты» оказываются в одной ячейке, остальные колонки съезжают.
+    Позиции колонок тогда недостоверны, а порядок сумм сохраняется.
+
+    Args:
+        row: Строка таблицы начислений.
+
+    Returns:
+        Суммы в порядке слева направо (без учёта ячейки с подписью).
+    """
+    joined = " ".join((cell or "") for cell in row[1:])
+    return [parse_russian_number(n) for n in _FULL_AMOUNT_RE.findall(joined)]
+
+
 def _parse_summary_from_table(table: list[list[str | None]], ncols: int) -> dict[str, Any] | None:
     """Извлекает итоговые суммы из строк «Всего за ...» внутри таблицы начислений."""
     totals: dict[str, Any] = {}
@@ -621,8 +638,12 @@ def _parse_summary_from_table(table: list[list[str | None]], ncols: int) -> dict
             continue
 
         key = _insurance_total_key(label)
+        ordered = _ordered_summary_amounts(row) if ncols >= 7 else []
 
-        if ncols >= 7:
+        if len(ordered) == 5:
+            # Формат с колонкой «Перерасчёты»: порядок сумм надёжнее колонок.
+            charged, rekalc, _debt, paid, total = ordered
+        elif ncols >= 7:
             charged = parse_russian_number((row[3] or "").strip() if len(row) > 3 else None)
             rekalc = parse_russian_number((row[4] or "").strip() if len(row) > 4 else None)
             paid_raw, total_raw = _split_last_col_pair(

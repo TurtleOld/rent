@@ -520,6 +520,59 @@ class TestPaidAndTotalColumns(unittest.TestCase):
         self.assertEqual(totals["amount_due_without_insurance"], Decimal("81.59"))
 
 
+class TestSummaryRowWithRecalculation(unittest.TestCase):
+    """Строка «Всего …» с 5 суммами в 7-колоночной таблице.
+
+    Границы колонок pdfplumber режут слова и сдвигают суммы: «Начислено» и
+    «Перерасчёты» слипаются в одну ячейку, остальные колонки съезжают.
+    """
+
+    HEADER = [
+        "РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ УСЛУГИ",
+        None, None, None, None, None, None,
+    ]
+    SERVICE = [
+        "ВЗНОС НА КАПИТАЛЬНЫЙ Р", "ЕМОНТ", "50.00", "кв.м. 20.00",
+        "1 000,00", "0,00", "1 000,00 1 000,00 1 000,00",
+    ]
+
+    def _table(self, summary_row):
+        return [self.HEADER, self.SERVICE, summary_row]
+
+    def _assert_totals(self, table):
+        self.assertEqual(max(len(row) for row in table), 7)
+        totals = _parse_summary_from_table(table, 7)
+        self.assertEqual(totals["amount_charged"], Decimal("3998.00"))
+        self.assertEqual(totals["amount_recalculation"], Decimal("70.00"))
+        self.assertEqual(totals["amount_paid"], Decimal("3945.00"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("4068.00"))
+
+    def test_two_sums_glued_in_one_cell(self):
+        summary = [
+            "Всего за август 2026 без учета добровольного страхования:",
+            "3 998,00 70,00", "3 945,00", "3 945,00", "4 068,00",
+        ]
+        self._assert_totals(self._table(summary))
+
+    def test_shifted_columns(self):
+        # «Перерасчёты» слиплись с «Начислено», ячейки начислено/итого пусты.
+        summary = [
+            "Всего за август 2026 без учета добровольного страхования:",
+            "3 998,00 70,00", None, None, "3 945,00", "3 945,00", "4 068,00",
+        ]
+        self._assert_totals(self._table(summary))
+
+    def test_merge_totals_updates_result(self):
+        summary = [
+            "Всего за август 2026 без учета добровольного страхования:",
+            "3 998,00 70,00", "3 945,00", "3 945,00", "4 068,00",
+        ]
+        totals: dict = {}
+        _parse_merge_totals_from_tables([self._table(summary)], totals)
+        self.assertEqual(totals["amount_recalculation"], Decimal("70.00"))
+        self.assertEqual(totals["amount_paid"], Decimal("3945.00"))
+
+
 class TestExtractHeaderTotals(unittest.TestCase):
     def _amounts(self, rub_kop):
         # Одна и та же сумма в обоих полях шапки: правило должно быть общим.
