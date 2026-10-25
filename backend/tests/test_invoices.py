@@ -156,6 +156,20 @@ class PaymentTest(TestCase):
         detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
         self.assertEqual(detail.data["payment_status"], "unpaid")
 
+    def test_payment_status_paid_when_amount_due_is_zero(self):
+        self.invoice.amount_due = Decimal("0.00")
+        self.invoice.save(update_fields=["amount_due"])
+        self.client.force_authenticate(user=self.user)
+        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(detail.data["payment_status"], "paid")
+
+    def test_payment_status_paid_when_amount_due_is_negative(self):
+        self.invoice.amount_due = Decimal("-1234.56")
+        self.invoice.save(update_fields=["amount_due"])
+        self.client.force_authenticate(user=self.user)
+        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(detail.data["payment_status"], "paid")
+
     def test_cannot_see_other_users_invoice(self):
         other = User.objects.create_user(
             username="other@example.com",
