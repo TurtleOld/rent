@@ -29,7 +29,7 @@ SECRET_KEY=ci-only-secret DEBUG=True DATABASE_URL=sqlite:////tmp/rent-ci.sqlite3
 Frontend (Node 20, as in the Dockerfile):
 
 ```bash
-cd frontend && npm ci && npm run build
+cd frontend && npm ci && npm test && npm run build
 ```
 
 `npm run build` rewrites `frontend/tsconfig.json` and `frontend/next-env.d.ts`; restore them with `git checkout --` unless your issue is about them. `npm run lint` is broken (`next lint` was removed in Next 16), so the build's type check is the frontend gate.
