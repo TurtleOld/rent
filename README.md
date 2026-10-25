@@ -89,6 +89,26 @@ docker compose exec backend python manage.py test tests
 
 ---
 
+## Очистка осиротевших PDF
+
+После удаления квитанций старые PDF могли остаться в `media/invoices/`. Команда находит файлы, на которые не ссылается ни одна квитанция, и пропускает файлы моложе часа: они могут принадлежать загрузке, запись о которой ещё не создана.
+
+Сначала посмотрите список, ничего не удаляя:
+
+```bash
+docker compose exec backend python manage.py cleanup_orphan_pdfs
+```
+
+Затем удалите найденные файлы:
+
+```bash
+docker compose exec backend python manage.py cleanup_orphan_pdfs --delete
+```
+
+Если удалить какой-то файл не удалось, команда продолжит работу, выведет ошибку и завершится с ненулевым кодом.
+
+---
+
 ## Локальная разработка (без Docker)
 
 ### Backend
