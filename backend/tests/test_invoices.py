@@ -348,6 +348,78 @@ class LineItemQuantityPrecisionTest(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class LineItemPaidTest(TestCase):
+    """«Оплачено по ЕПД» сохраняется из парсера и отдаётся в API строк услуг."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="paid@example.com",
+            email="paid@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _process(self):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import _do_process
+
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        mock_parsed = {
+            "document_type": "utility_bill",
+            "provider_name": "Тест",
+            "account_number": "123",
+            "payer_name": None,
+            "address": None,
+            "period": {"month": 1, "year": 2026, "start_date": None, "end_date": None},
+            "totals": {},
+            "line_items": [
+                {
+                    "service_name": "ВОДООТВЕДЕНИЕ ОДН",
+                    "unit": "куб.м",
+                    "quantity": "0.00",
+                    "tariff": "40.00",
+                    "amount_charged": "0.00",
+                    "recalculation": "70.00",
+                    "debt": "40.00",
+                    "paid": "40.00",
+                    "amount": "70.00",
+                }
+            ],
+            "confidence": 0.9,
+            "warnings": [],
+        }
+        with patch("apps.invoices.tasks.parse_epd", return_value=mock_parsed), \
+             patch("pdfplumber.open") as mock_open:
+            mock_open.return_value.__enter__.return_value.pages = [None]
+            _do_process(self.invoice)
+
+    def test_paid_saved_from_parser(self):
+        self._process()
+        li = LineItem.objects.get(invoice=self.invoice)
+        self.assertEqual(li.paid, Decimal("40.00"))
+
+    def test_no_arithmetic_warning_when_paid_subtracted(self):
+        self._process()
+        self.invoice.refresh_from_db()
+        self.assertFalse(
+            any("итого" in w for w in self.invoice.warnings)
+        )
+
+    def test_api_returns_paid(self):
+        self._process()
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["line_items"][0]["paid"], "40.00")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceFileDownloadTest(TestCase):
     def setUp(self):
         self.client = APIClient()

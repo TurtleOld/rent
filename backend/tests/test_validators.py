@@ -34,6 +34,7 @@ def _make_line_item(**kwargs) -> LineItem:
         "amount_charged": None,
         "recalculation": None,
         "debt": None,
+        "paid": None,
         "amount": None,
     }
     defaults.update(kwargs)
@@ -83,6 +84,41 @@ class CheckLineItemTest(TestCase):
             amount=Decimal("57.00"),
         )
         self.assertEqual(check_line_item(li), [])
+
+    def test_paid_is_subtracted_from_line_total(self):
+        """Итого = начислено + перерасчёт + долг − оплачено по ЕПД."""
+        li = _make_line_item(
+            service_name="Водоотведение ОДН",
+            amount_charged=Decimal("0.00"),
+            recalculation=Decimal("70.00"),
+            debt=Decimal("40.00"),
+            paid=Decimal("40.00"),
+            amount=Decimal("70.00"),
+        )
+        self.assertEqual(check_line_item(li), [])
+
+    def test_four_amount_format_total_with_paid(self):
+        li = _make_line_item(
+            service_name="Взнос на капитальный ремонт",
+            amount_charged=Decimal("1000.00"),
+            debt=Decimal("1000.00"),
+            paid=Decimal("1000.00"),
+            amount=Decimal("1000.00"),
+        )
+        self.assertEqual(check_line_item(li), [])
+
+    def test_paid_does_not_hide_totals_mismatch(self):
+        li = _make_line_item(
+            service_name="Газ",
+            amount_charged=Decimal("0.00"),
+            recalculation=Decimal("70.00"),
+            debt=Decimal("40.00"),
+            paid=Decimal("40.00"),
+            amount=Decimal("99.00"),
+        )
+        warnings = check_line_item(li)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("итого", warnings[0])
 
     def test_totals_mismatch_emits_warning(self):
         li = _make_line_item(

@@ -25,7 +25,7 @@ from apps.invoices.pdf_parser import (
     parse_epd,
     parse_russian_number,
 )
-from apps.invoices.validators import check_invoice_totals
+from apps.invoices.validators import check_invoice_totals, check_line_item
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SAMPLE_PDF = FIXTURES_DIR / "sample_epd.pdf"
@@ -395,7 +395,13 @@ class TestTable5Format(_TableFixtureMixin, unittest.TestCase):
         self.assertEqual(item["tariff"], Decimal("90.00"))
         self.assertEqual(item["amount_charged"], Decimal("270.00"))
         self.assertEqual(item["debt"], Decimal("150.00"))
+        self.assertEqual(item["paid"], Decimal("150.00"))
         self.assertEqual(item["amount"], Decimal("270.00"))
+
+    def test_paid_from_debt_and_paid_cell(self):
+        # В 5-колоночном формате «Задолженность» и «Оплачено» лежат в одной ячейке.
+        self.assertEqual(self.items["ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ"]["paid"], Decimal("0.00"))
+        self.assertEqual(self.items["ГАЗОСНАБЖЕНИЕ"]["paid"], Decimal("150.00"))
 
     def test_negative_debt(self):
         item = self.items["ГОРЯЧЕЕ В/С (ЭНЕРГИЯ) ОДН"]
@@ -463,6 +469,12 @@ class TestTable8Format(_TableFixtureMixin, unittest.TestCase):
         item = self.items["ХОЛОДНОЕ В/С"]
         self.assertEqual(item["debt"], Decimal("2.96"))
         self.assertEqual(item["amount"], Decimal("110.50"))
+
+    def test_paid_column(self):
+        # «Оплачено» и «ИТОГО» слиплись границей колонок: оплачено = 2,96.
+        self.assertEqual(self.items["ХОЛОДНОЕ В/С"]["paid"], Decimal("2.96"))
+        self.assertEqual(self.items["ГАЗОСНАБЖЕНИЕ"]["paid"], Decimal("150.00"))
+        self.assertEqual(self.items["ГОРЯЧЕЕ В/С (НОСИТЕЛЬ)"]["paid"], Decimal("0.00"))
 
     def test_totals_from_table(self):
         self.assertEqual(self.table_totals(), {
@@ -726,25 +738,25 @@ class TestTextRecalculationColumn(unittest.TestCase):
         )
 
     def test_row_values(self):
-        # name: (quantity, unit, tariff, charged, recalc, debt, total)
+        # name: (quantity, unit, tariff, charged, recalc, debt, paid, total)
         expected = {
             "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ": (
-                "50.00", "кв.м", "20.00", "1000.00", "0.00", "1000.00", "1000.00",
+                "50.00", "кв.м", "20.00", "1000.00", "0.00", "1000.00", "1000.00", "1000.00",
             ),
             "ВОДООТВЕДЕНИЕ ОДН": (
-                "0.00", "куб.м", "40.00", "0.00", "70.00", "40.00", "70.00",
+                "0.00", "куб.м", "40.00", "0.00", "70.00", "40.00", "40.00", "70.00",
             ),
             "ЭЛЕКТРОСНАБЖЕНИЕ ОДН": (
-                "20.5", "кВт·ч", "6.00", "123.00", "0.00", "200.00", "123.00",
+                "20.5", "кВт·ч", "6.00", "123.00", "0.00", "200.00", "200.00", "123.00",
             ),
             "ВОДООТВЕДЕНИЕ": (
-                "10.000", "куб.м", "40.00", "400.00", "0.00", "380.00", "400.00",
+                "10.000", "куб.м", "40.00", "400.00", "0.00", "380.00", "380.00", "400.00",
             ),
             "ОБРАЩЕНИЕ С ТКО": (
-                "50.00", "кв.м", "10.500000", "525.00", "0.00", "525.00", "525.00",
+                "50.00", "кв.м", "10.500000", "525.00", "0.00", "525.00", "525.00", "525.00",
             ),
             "ЭЛЕКТРИЧЕСТВО ОДНОТАРИФНЫЙ ПУ (Д1)": (
-                "300", "кВт·ч", "6.5", "1950.00", "0.00", "1800.00", "1950.00",
+                "300", "кВт·ч", "6.5", "1950.00", "0.00", "1800.00", "1800.00", "1950.00",
             ),
         }
         for name, values in expected.items():
@@ -753,7 +765,7 @@ class TestTextRecalculationColumn(unittest.TestCase):
                 actual = (
                     item["quantity"], item["unit"], item["tariff"],
                     item["amount_charged"], item["recalculation"], item["debt"],
-                    item["amount"],
+                    item["paid"], item["amount"],
                 )
                 self.assertEqual(actual, tuple(Decimal(v) if i != 1 else v
                                                for i, v in enumerate(values)))
@@ -796,6 +808,7 @@ class TestTextFourAmountFormat(unittest.TestCase):
         self.assertEqual(item["amount_charged"], Decimal("270.00"))
         self.assertIsNone(item["recalculation"])
         self.assertEqual(item["debt"], Decimal("150.00"))
+        self.assertEqual(item["paid"], Decimal("150.00"))
         self.assertEqual(item["amount"], Decimal("270.00"))
 
     def test_two_lines(self):
@@ -810,4 +823,24 @@ class TestTextFourAmountFormat(unittest.TestCase):
         self.assertEqual(item["amount_charged"], Decimal("1000.00"))
         self.assertIsNone(item["recalculation"])
         self.assertEqual(item["debt"], Decimal("0.00"))
+        self.assertEqual(item["paid"], Decimal("1000.00"))
         self.assertEqual(item["amount"], Decimal("1000.00"))
+
+
+class TestLineItemPaid(unittest.TestCase):
+    """«Оплачено по ЕПД» из строки услуги и проверка итога по полной формуле."""
+
+    def test_five_amounts_paid_and_no_warning(self):
+        item = _parse_line_items_from_text(
+            "ВОДООТВЕДЕНИЕ ОДН 0.00 куб.м. 40.00 0,00 70,00 40,00 40,00 70,00"
+        )[0]
+        self.assertEqual(item["paid"], Decimal("40.00"))
+        self.assertEqual(check_line_item(SimpleNamespace(**item)), [])
+
+    def test_four_amounts_paid_and_no_warning(self):
+        item = _parse_line_items_from_text(
+            "ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ 50.00 кв.м. 20.00"
+            " 1 000,00 1 000,00 1 000,00 1 000,00"
+        )[0]
+        self.assertEqual(item["paid"], Decimal("1000.00"))
+        self.assertEqual(check_line_item(SimpleNamespace(**item)), [])

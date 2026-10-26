@@ -238,12 +238,12 @@ def _make_item(service: str, m_dict: dict[str, str]) -> dict[str, Any]:
     amounts = [parse_russian_number(n) for n in _FULL_AMOUNT_RE.findall(m_dict["amounts"])]
     unit_raw = m_dict["unit"].strip()
     if len(amounts) == 5:
-        charged, recalculation, debt, _paid, total = amounts
+        charged, recalculation, debt, paid, total = amounts
         # Формат с перерасчётами появился позже; его единицы сразу приводим
         # к канонической форме, чтобы счётчики и услуги сопоставлялись.
         unit = normalize_unit(unit_raw) or unit_raw
     else:
-        charged, debt, _paid, total = amounts
+        charged, debt, paid, total = amounts
         recalculation = None
         unit = unit_raw
     return {
@@ -254,6 +254,7 @@ def _make_item(service: str, m_dict: dict[str, str]) -> dict[str, Any]:
         "amount_charged": charged,
         "recalculation": recalculation,
         "debt": debt,
+        "paid": paid,
         "amount": total,
         "provider": None,
         "meter_id": None,
@@ -626,6 +627,7 @@ def _billing_table_to_items(table: list[list[str | None]]) -> list[dict[str, Any
             "amount_charged": parse_russian_number(charged_raw),
             "recalculation": parse_russian_number(rekalc_raw),
             "debt": parse_russian_number(debt_raw),
+            "paid": parse_russian_number(paid_raw),
             "amount": parse_russian_number(total_raw),
             "provider": None,
             "meter_id": None,
