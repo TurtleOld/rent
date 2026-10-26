@@ -681,16 +681,26 @@ def _parse_merge_totals_from_tables(
     tables: list[list[list[str | None]]],
     result_totals: dict[str, Any],
 ) -> None:
-    """Извлекает итоги из основной таблицы начислений и обновляет result_totals."""
+    """Извлекает итоги из первой таблицы начислений со строками «Всего за …».
+
+    Таблицы начислений без итогов пропускаются: pdfplumber может вернуть
+    несколько таблиц начислений, и первая из них бывает пустой.
+
+    Args:
+        tables: Таблицы pdfplumber со всех страниц.
+        result_totals: Итоги, которые нужно дополнить найденными суммами.
+    """
     for table in tables:
-        if _is_billing_table(table):
-            ncols = max(len(row) for row in table)
-            summary = _parse_summary_from_table(table, ncols)
-            if summary:
-                for k, v in summary.items():
-                    if v is not None:
-                        result_totals[k] = v
-            return
+        if not _is_billing_table(table):
+            continue
+        ncols = max(len(row) for row in table)
+        summary = _parse_summary_from_table(table, ncols)
+        if not summary or all(v is None for v in summary.values()):
+            continue
+        for k, v in summary.items():
+            if v is not None:
+                result_totals[k] = v
+        return
 
 
 def _parse_meter_readings_from_tables(tables: list[list[list[str | None]]]) -> dict[str, dict]:

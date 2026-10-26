@@ -604,6 +604,36 @@ class TestSummaryRowWithRecalculation(unittest.TestCase):
         )
 
 
+class TestMergeTotalsFromSeveralBillingTables(unittest.TestCase):
+    """Итоги из таблиц: первая таблица начислений может быть пустой."""
+
+    HEADER = [
+        "РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ УСЛУГИ",
+        None, None, None, None, None, None,
+    ]
+    SERVICE = [
+        "ВЗНОС НА КАПИТАЛЬНЫЙ Р", "ЕМОНТ", "50.00", "кв.м. 20.00",
+        "1 000,00", "0,00", "1 000,00 1 000,00 1 000,00",
+    ]
+    SUMMARY = [
+        "Всего за август 2026 без учета добровольного страхования:",
+        "3 998,00 70,00", "3 945,00", "3 945,00", "4 068,00",
+    ]
+
+    def test_totals_from_second_table_when_first_has_none(self):
+        # Первая таблица — только заголовок в конце страницы, строк «Всего» в ней нет.
+        empty_billing = [self.HEADER, [None] * 7, [None] * 7]
+        billing_with_totals = [self.HEADER, self.SERVICE, self.SUMMARY]
+        totals: dict = {}
+
+        _parse_merge_totals_from_tables([empty_billing, billing_with_totals], totals)
+
+        self.assertEqual(totals["amount_charged"], Decimal("3998.00"))
+        self.assertEqual(totals["amount_recalculation"], Decimal("70.00"))
+        self.assertEqual(totals["amount_paid"], Decimal("3945.00"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("4068.00"))
+
+
 class TestExtractHeaderTotals(unittest.TestCase):
     def _amounts(self, rub_kop):
         # Одна и та же сумма в обоих полях шапки: правило должно быть общим.
