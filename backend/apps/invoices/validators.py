@@ -54,6 +54,9 @@ def check_line_item(li: LineItem) -> list[str]:
 def check_invoice_totals(invoice: Invoice, line_items: Iterable[LineItem]) -> list[str]:
     """Проверяет соответствие суммы строк итогу квитанции.
 
+    Если эталон — итог без учёта добровольного страхования, строки
+    страхования в сумму не входят: этот итог выставлен без них.
+
     Args:
         invoice: Инвойс с полем amount_due / amount_due_without_insurance.
         line_items: Строки услуг инвойса.
@@ -61,12 +64,16 @@ def check_invoice_totals(invoice: Invoice, line_items: Iterable[LineItem]) -> li
     Returns:
         Список текстовых предупреждений (пустой, если ошибок нет).
     """
-    total = sum((li.amount or Decimal("0") for li in line_items), Decimal("0"))
-    reference = (
-        invoice.amount_due_without_insurance
-        if invoice.amount_due_without_insurance is not None
-        else invoice.amount_due
-    )
+    items = list(line_items)
+    reference = invoice.amount_due_without_insurance
+    if reference is not None:
+        items = [
+            li for li in items
+            if "страхован" not in li.service_name.lower()
+        ]
+    else:
+        reference = invoice.amount_due
+    total = sum((li.amount or Decimal("0") for li in items), Decimal("0"))
     if reference is not None and not _close(total, reference):
         return [
             f"Сумма по строкам ({total}) ≠ итог квитанции ({reference})."

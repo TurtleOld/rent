@@ -185,6 +185,75 @@ class CheckInvoiceTotalsTest(TestCase):
         items = self._line_items(["50.00", "100.00"])
         self.assertEqual(check_invoice_totals(invoice, items), [])
 
+    def test_insurance_row_excluded_when_reference_without_insurance(self):
+        """Строка страхования не входит в сумму, если эталон — итог без страхования."""
+        invoice = _make_invoice(
+            amount_due=Decimal("1550.00"),
+            amount_due_without_insurance=Decimal("1500.00"),
+        )
+        items = [
+            _make_line_item(service_name="Холодная вода", amount=Decimal("1000.00")),
+            _make_line_item(service_name="Отопление", amount=Decimal("500.00")),
+            _make_line_item(
+                service_name="ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ",
+                amount=Decimal("50.00"),
+            ),
+        ]
+        self.assertEqual(check_invoice_totals(invoice, items), [])
+
+    def test_insurance_matches_case_insensitively(self):
+        invoice = _make_invoice(
+            amount_due=Decimal("1550.00"),
+            amount_due_without_insurance=Decimal("1500.00"),
+        )
+        items = [
+            _make_line_item(service_name="Холодная вода", amount=Decimal("1500.00")),
+            _make_line_item(service_name="Добровольное страхование", amount=Decimal("50.00")),
+        ]
+        self.assertEqual(check_invoice_totals(invoice, items), [])
+
+    def test_all_rows_checked_when_only_amount_due_with_insurance(self):
+        """Если итог без страхования не задан, сравниваются все строки."""
+        items = [
+            _make_line_item(service_name="Холодная вода", amount=Decimal("1000.00")),
+            _make_line_item(service_name="Отопление", amount=Decimal("500.00")),
+            _make_line_item(
+                service_name="ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ",
+                amount=Decimal("50.00"),
+            ),
+        ]
+        invoice_match = _make_invoice(
+            amount_due=Decimal("1550.00"),
+            amount_due_without_insurance=None,
+        )
+        self.assertEqual(check_invoice_totals(invoice_match, items), [])
+
+        invoice_mismatch = _make_invoice(
+            amount_due=Decimal("1500.00"),
+            amount_due_without_insurance=None,
+        )
+        warnings = check_invoice_totals(invoice_mismatch, items)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("итог квитанции", warnings[0])
+
+    def test_real_mismatch_still_warns_with_insurance_row(self):
+        """Реальное расхождение в строках без страхования остаётся предупреждением."""
+        invoice = _make_invoice(
+            amount_due=Decimal("1550.00"),
+            amount_due_without_insurance=Decimal("1500.00"),
+        )
+        items = [
+            _make_line_item(service_name="Холодная вода", amount=Decimal("900.00")),
+            _make_line_item(service_name="Отопление", amount=Decimal("500.00")),
+            _make_line_item(
+                service_name="ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ",
+                amount=Decimal("50.00"),
+            ),
+        ]
+        warnings = check_invoice_totals(invoice, items)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("итог квитанции", warnings[0])
+
     def test_none_amount_due_no_warning(self):
         invoice = _make_invoice(
             amount_due=None,
