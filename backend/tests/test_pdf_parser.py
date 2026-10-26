@@ -788,7 +788,10 @@ class TestTextRecalculationColumn(unittest.TestCase):
             amount_due_without_insurance=totals["amount_due_without_insurance"],
             amount_due=totals["amount_due"],
         )
-        line_items = [SimpleNamespace(amount=i["amount"]) for i in self.items]
+        line_items = [
+            SimpleNamespace(amount=i["amount"], service_name=i.get("service_name", ""))
+            for i in self.items
+        ]
         self.assertEqual(sum(i["amount"] for i in self.items), Decimal("4068.00"))
         self.assertEqual(check_invoice_totals(invoice, line_items), [])
 
