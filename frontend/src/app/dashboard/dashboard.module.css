@@ -177,11 +177,6 @@
   gap: 0.25rem;
 }
 
-.period {
-  color: #6b7280;
-  font-size: 0.85rem;
-}
-
 .amount {
   font-size: 1.25rem;
   font-weight: 700;
@@ -197,34 +192,6 @@
   font-size: 0.7rem;
   font-weight: 400;
   color: #9ca3af;
-}
-
-.payBadge {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  align-self: flex-start;
-  font-weight: 500;
-}
-
-.pay__unpaid {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.pay__partially_paid {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.pay__amount_unknown {
-  background: #e5e7eb;
-  color: #374151;
-}
-
-.pay__paid {
-  background: #d1fae5;
-  color: #065f46;
 }
 
 .date {

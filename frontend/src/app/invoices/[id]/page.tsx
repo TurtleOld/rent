@@ -4,11 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   type Invoice,
-  type Payment,
-  createPayment,
   deleteInvoice,
   getInvoice,
-  getPayments,
   manualAmountDueErrorMessage,
   reparseInvoice,
   setManualAmountDue,
@@ -21,25 +18,13 @@ const STATUS_LABELS: Record<string, string> = {
   failed: "Ошибка",
 };
 
-const PAYMENT_STATUS_LABELS: Record<string, string> = {
-  unpaid: "Не оплачена",
-  partially_paid: "Частично оплачена",
-  paid: "Оплачена",
-  amount_unknown: "Сумма не распознана",
-};
-
 export default function InvoiceDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = Number(params.id);
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [payAmount, setPayAmount] = useState("");
-  // sv-SE gives local YYYY-MM-DD; toISOString() would give the UTC date.
-  const [payDate, setPayDate] = useState(new Date().toLocaleDateString("sv-SE"));
-  const [payNote, setPayNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -52,10 +37,6 @@ export default function InvoiceDetailPage() {
       try {
         const inv = await getInvoice(id);
         setInvoice(inv);
-        if (isInitial) {
-          const pays = await getPayments(id);
-          setPayments(pays);
-        }
         if (inv.status === "processing") {
           pollTimer = setTimeout(() => void load(false), 3000);
         }
@@ -72,28 +53,6 @@ export default function InvoiceDetailPage() {
       if (pollTimer) clearTimeout(pollTimer);
     };
   }, [id, reloadKey]);
-
-  async function handleAddPayment() {
-    if (!payAmount) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const payment = await createPayment(id, {
-        amount: payAmount,
-        payment_date: payDate,
-        ...(payNote ? { note: payNote } : {}),
-      });
-      setPayments((prev) => [payment, ...prev]);
-      setPayAmount("");
-      setPayNote("");
-      const updated = await getInvoice(id);
-      setInvoice(updated);
-    } catch {
-      setError("Ошибка при добавлении платежа");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function saveManualAmount(value: string | null) {
     setSaving(true);
@@ -218,10 +177,6 @@ export default function InvoiceDetailPage() {
               <dd>{fmt(invoice.amount_due)}</dd>
             </>
           )}
-          <dt>Статус оплаты</dt>
-          <dd>{PAYMENT_STATUS_LABELS[invoice.payment_status]}</dd>
-          <dt>Оплачено (пользователь)</dt>
-          <dd>{fmt(invoice.total_paid)}</dd>
           {invoice.confidence != null && (
             <>
               <dt>Уверенность AI</dt>
@@ -252,7 +207,7 @@ export default function InvoiceDetailPage() {
       {invoice.status === "processed" && (
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>Ручная сумма к оплате</h2>
-          <div className={styles.paymentForm}>
+          <div className={styles.amountForm}>
             <input
               type="number"
               placeholder="Сумма (₽)"
@@ -260,7 +215,7 @@ export default function InvoiceDetailPage() {
               value={manualAmount}
               onChange={(e) => setManualAmount(e.target.value)}
               step="0.01"
-              className={styles.payInput}
+              className={styles.amountInput}
             />
             <button
               onClick={() => void saveManualAmount(manualAmount)}
@@ -320,57 +275,6 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       )}
-
-      {/* Payments */}
-      <div className={styles.section}>
-        <h2 className={styles.sectionTitle}>Платежи</h2>
-        <div className={styles.paymentForm}>
-          <input
-            type="number"
-            placeholder="Сумма (₽)"
-            value={payAmount}
-            onChange={(e) => setPayAmount(e.target.value)}
-            min="0.01"
-            step="0.01"
-            className={styles.payInput}
-          />
-          <input
-            type="date"
-            value={payDate}
-            onChange={(e) => setPayDate(e.target.value)}
-            className={styles.payInput}
-          />
-          <input
-            type="text"
-            placeholder="Примечание (необязательно)"
-            value={payNote}
-            onChange={(e) => setPayNote(e.target.value)}
-            className={`${styles.payInput} ${styles.payNoteInput}`}
-          />
-          <button
-            onClick={handleAddPayment}
-            disabled={saving || !payAmount}
-            className={styles.saveBtn}
-          >
-            Добавить
-          </button>
-        </div>
-        {payments.length === 0 ? (
-          <p className={styles.noPayments}>Платежей ещё нет</p>
-        ) : (
-          <ul className={styles.paymentList}>
-            {payments.map((p) => (
-              <li key={p.id} className={styles.paymentItem}>
-                <span className={styles.paymentDate}>
-                  {new Date(p.payment_date).toLocaleDateString("ru-RU")}
-                </span>
-                <span className={styles.paymentAmount}>{fmt(p.amount)}</span>
-                {p.note && <span className={styles.paymentNote}>{p.note}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }
