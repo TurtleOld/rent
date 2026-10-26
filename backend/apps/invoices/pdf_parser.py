@@ -153,14 +153,69 @@ def _extract_provider_name(text: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+# Сумма из шапки ЕПД. Знак — ASCII-дефис, типографский минус (U+2212) или
+# en dash (U+2013), в том числе отделённый пробелом от цифры. В группе рублей
+# допустимы только пробел и неразрывный пробел: перевод строки склеил бы
+# сумму с цифрами соседней строки.
+_HEADER_AMOUNT_RE = re.compile(
+    r"(?P<sign>[-\u2212\u2013]\s*)?"
+    r"(?P<rubles>\d(?:[\d \xa0]*\d)?)\s*руб\.\s*"
+    r"(?P<kopecks>\d{1,2})\s*коп\."
+)
+
+
+def _header_amounts(text: str) -> list[Decimal]:
+    """Собирает все суммы «X руб. Y коп.» из текста в порядке появления.
+
+    Args:
+        text: Полный текст ЕПД.
+
+    Returns:
+        Суммы в рублях; копейки дополняются нулём слева.
+    """
+    amounts: list[Decimal] = []
+    for match in _HEADER_AMOUNT_RE.finditer(text):
+        rubles = match.group("rubles")
+        if match.group("sign"):
+            rubles = "-" + rubles
+        amount = parse_russian_number(f"{rubles},{match.group('kopecks'):0>2}")
+        if amount is not None:
+            amounts.append(amount)
+    return amounts
+
+
+def _header_amount_pair(text: str) -> tuple[Decimal, Decimal] | None:
+    """Ищет строку с двумя суммами «руб./коп.» подряд.
+
+    В шапке реального ЕПД две колонки — «со страхованием» и «без
+    страхования» — стоят на одной строке. Одиночные суммы в других местах
+    документа не должны сдвигать эту пару.
+
+    Args:
+        text: Полный текст ЕПД.
+
+    Returns:
+        Пара (со страхованием, без страхования) или None, если строки с двумя
+        суммами нет.
+    """
+    for line in text.splitlines():
+        amounts = _header_amounts(line)
+        if len(amounts) >= 2:
+            return amounts[0], amounts[1]
+    return None
+
+
 def _extract_header_totals(text: str) -> dict[str, Decimal | None]:
     """Извлекает итоги из шапки: 'X руб. Y коп.'."""
     totals: dict[str, Decimal | None] = {
         "amount_due_with_insurance": None,
         "amount_due_without_insurance": None,
     }
-    rub_kop = r"(-?\d[\d\s]*)\s*руб\.\s*(\d{1,2})\s*коп\."
-    amounts = [parse_russian_number(f"{rub},{kop:0>2}") for rub, kop in re.findall(rub_kop, text)]
+    pair = _header_amount_pair(text)
+    if pair is not None:
+        totals["amount_due_with_insurance"], totals["amount_due_without_insurance"] = pair
+        return totals
+    amounts = _header_amounts(text)
     if len(amounts) >= 2:
         totals["amount_due_with_insurance"] = amounts[0]
         totals["amount_due_without_insurance"] = amounts[1]

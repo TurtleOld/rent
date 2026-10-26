@@ -652,6 +652,32 @@ class TestExtractHeaderTotals(unittest.TestCase):
     def test_negative_overpayment(self):
         self.assertEqual(self._amounts("-5 172 руб. 20 коп."), (Decimal("-5172.20"),) * 2)
 
+    def test_typographic_minus_signs(self):
+        for sign in ("\u2212", "\u2013", "- "):
+            with self.subTest(sign=sign):
+                rub_kop = f"{sign}5 172 руб. 20 коп."
+                self.assertEqual(self._amounts(rub_kop), (Decimal("-5172.20"),) * 2)
+
+    def test_no_newline_inside_rubles_group(self):
+        totals = _extract_header_totals("Итого 2026\n5 172 руб. 20 коп.")
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("5172.20"))
+
+    def test_pair_line_wins_over_stray_single_amount(self):
+        text = (
+            "1 550 руб. 00 коп.\n"
+            "ИТОГО К ОПЛАТЕ ЗА ВСЕ УСЛУГИ СЧЕТА\n"
+            "1 550 руб. 00 коп. 1 500 руб. 00 коп.\n"
+        )
+        totals = _extract_header_totals(text)
+        self.assertEqual(totals["amount_due_with_insurance"], Decimal("1550.00"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("1500.00"))
+
+    def test_scattered_amounts_keep_document_order(self):
+        text = "-5 172 руб. 20 коп.\n1 234 руб. 05 коп."
+        totals = _extract_header_totals(text)
+        self.assertEqual(totals["amount_due_with_insurance"], Decimal("-5172.20"))
+        self.assertEqual(totals["amount_due_without_insurance"], Decimal("1234.05"))
+
     def test_single_amount_is_without_insurance(self):
         totals = _extract_header_totals("К оплате 1234 руб. 5 коп.")
         self.assertEqual(totals["amount_due_without_insurance"], Decimal("1234.05"))
