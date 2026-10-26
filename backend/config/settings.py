@@ -26,7 +26,6 @@ INSTALLED_APPS = [
     # Local
     "apps.accounts",
     "apps.invoices",
-    "apps.payments",
 ]
 
 MIDDLEWARE = [

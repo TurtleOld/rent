@@ -1,16 +1,10 @@
 from datetime import timedelta
-from decimal import Decimal
 
-from django.db.models import DecimalField, Sum, Value
-from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, parsers, permissions, status, views
 from rest_framework.response import Response
-
-from apps.payments.models import Payment
-from apps.payments.serializers import PaymentSerializer
 
 from .models import Invoice
 from .serializers import InvoiceSerializer, InvoiceUploadSerializer, ManualAmountDueSerializer
@@ -21,13 +15,6 @@ def _invoice_queryset(user):
     return (
         Invoice.objects.filter(user=user)
         .prefetch_related("line_items")
-        .annotate(
-            _total_paid=Coalesce(
-                Sum("payments__amount"),
-                Value(Decimal("0")),
-                output_field=DecimalField(max_digits=12, decimal_places=2),
-            )
-        )
         .order_by("-created_at")
     )
 
@@ -143,17 +130,3 @@ class InvoiceManualAmountDueView(views.APIView):
                 status=status.HTTP_409_CONFLICT,
             )
         return Response(InvoiceSerializer(_invoice_queryset(request.user).get(pk=pk)).data)
-
-
-class InvoicePaymentListCreateView(generics.ListCreateAPIView):
-    serializer_class = PaymentSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def _get_invoice(self) -> Invoice:
-        return get_object_or_404(Invoice, pk=self.kwargs["pk"], user=self.request.user)
-
-    def get_queryset(self):
-        return Payment.objects.filter(invoice=self._get_invoice())
-
-    def perform_create(self, serializer):
-        serializer.save(invoice=self._get_invoice(), user=self.request.user)

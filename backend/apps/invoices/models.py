@@ -162,34 +162,11 @@ class Invoice(models.Model):
         return f"Invoice #{self.pk} — {self.provider_name or 'unknown'} ({self.status})"
 
     @property
-    def total_paid(self) -> Decimal:
-        annotated = getattr(self, "_total_paid", None)
-        if annotated is not None:
-            return annotated
-        return sum((p.amount for p in self.payments.all()), Decimal("0"))
-
-    @property
     def effective_amount_due(self) -> Decimal | None:
         """Сумма к оплате: ручная, если задана, иначе распознанная."""
         if self.manual_amount_due is not None:
             return self.manual_amount_due
         return self.amount_due
-
-    @property
-    def payment_status(self) -> str:
-        amount_due = self.effective_amount_due
-        # Без суммы к оплате нельзя сказать, хватает ли платежей.
-        if amount_due is None:
-            return "amount_unknown"
-        # Ноль или переплата в квитанции — платить нечего, даже без платежей.
-        if amount_due <= 0:
-            return "paid"
-        paid = self.total_paid
-        if paid == 0:
-            return "unpaid"
-        if paid >= amount_due:
-            return "paid"
-        return "partially_paid"
 
 
 class LineItem(models.Model):

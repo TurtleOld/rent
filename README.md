@@ -1,4 +1,4 @@
-# Учёт платежей ЖКХ
+# Учёт квитанций ЖКХ
 
 MVP для загрузки и отслеживания коммунальных квитанций с автоматическим извлечением данных: PDF разбирается локально через pdfplumber и регулярные выражения, без внешних AI-сервисов.
 
@@ -76,8 +76,6 @@ docker compose exec backend python manage.py createsuperuser
 | `DELETE` | `/api/invoices/{id}/` | Удалить квитанцию |
 | `GET` | `/api/invoices/{id}/file/` | Скачать исходный PDF |
 | `POST` | `/api/invoices/{id}/reparse/` | Повторно разобрать PDF |
-| `GET` | `/api/invoices/{id}/payments/` | Список платежей |
-| `POST` | `/api/invoices/{id}/payments/` | Добавить платёж |
 
 ---
 
@@ -176,8 +174,7 @@ rent/
 │   ├── config/           # Django settings, URLs, Celery
 │   ├── apps/
 │   │   ├── accounts/     # User модель + JWT auth
-│   │   ├── invoices/     # Invoice, LineItem, Celery task
-│   │   └── payments/     # Payment модель
+│   │   └── invoices/     # Invoice, LineItem, Celery task
 │   └── tests/
 └── frontend/
     └── src/

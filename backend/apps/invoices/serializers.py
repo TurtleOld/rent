@@ -12,8 +12,6 @@ class LineItemSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     line_items = LineItemSerializer(many=True, read_only=True)
-    payment_status = serializers.ReadOnlyField()
-    total_paid = serializers.ReadOnlyField()
     amount_due = serializers.DecimalField(
         source="effective_amount_due", max_digits=10, decimal_places=2, read_only=True
     )
@@ -43,8 +41,6 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "amount_recalculation",
             "confidence",
             "warnings",
-            "payment_status",
-            "total_paid",
             "line_items",
             "created_at",
             "updated_at",
