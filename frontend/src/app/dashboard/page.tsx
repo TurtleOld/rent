@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type Invoice, getInvoicesAll, uploadInvoice } from "@/lib/api";
+import { type Invoice, getInvoicesAll, uploadErrorMessage, uploadInvoice } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
 import { unknownAmountNote } from "@/lib/reports";
 import styles from "./dashboard.module.css";
@@ -109,8 +109,8 @@ export default function DashboardPage() {
     try {
       const invoice = await uploadInvoice(file);
       setInvoices((prev) => [invoice, ...prev]);
-    } catch {
-      setError("Ошибка при загрузке файла");
+    } catch (err) {
+      setError(uploadErrorMessage(err));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";

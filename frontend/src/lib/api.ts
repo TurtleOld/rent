@@ -157,15 +157,24 @@ export async function setManualAmountDue(id: number, value: string | null): Prom
 }
 
 // Бэкенд отвечает по-русски: 409 с detail, 400 с ошибкой поля.
-export function manualAmountDueErrorMessage(err: unknown): string {
+function backendFieldErrorMessage(err: unknown, field: string, fallback: string): string {
   if (err instanceof ApiError && err.data && typeof err.data === "object") {
-    const data = err.data as { detail?: unknown; manual_amount_due?: unknown };
+    const data = err.data as Record<string, unknown>;
     if (typeof data.detail === "string") return data.detail;
-    if (Array.isArray(data.manual_amount_due) && typeof data.manual_amount_due[0] === "string") {
-      return data.manual_amount_due[0];
+    const fieldErrors = data[field];
+    if (Array.isArray(fieldErrors) && typeof fieldErrors[0] === "string") {
+      return fieldErrors[0];
     }
   }
-  return "Не удалось сохранить сумму к оплате";
+  return fallback;
+}
+
+export function manualAmountDueErrorMessage(err: unknown): string {
+  return backendFieldErrorMessage(err, "manual_amount_due", "Не удалось сохранить сумму к оплате");
+}
+
+export function uploadErrorMessage(err: unknown): string {
+  return backendFieldErrorMessage(err, "pdf_file", "Ошибка при загрузке файла");
 }
 
 // ── Payment types ─────────────────────────────────────────────────────────────
