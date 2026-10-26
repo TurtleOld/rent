@@ -42,12 +42,27 @@ docker compose exec backend python manage.py createsuperuser
 
 ---
 
-## Обновление продакшена: владелец тома media
+## Обновление продакшена: владелец данных бэкенда (media и статика)
 
-Бэкенд и Celery работают от пользователя `app` с uid/gid `10001`. Новый пустой том `media_files` получает владельца из образа автоматически. Существующий том, файлы на котором созданы старым образом от root, нужно один раз перевести на `app` — иначе приложение не сможет записывать новые и удалять старые PDF:
+Бэкенд и Celery работают от пользователя `app` с uid/gid `10001`. Новый пустой том `media_files` получает владельца из образа автоматически. Существующие данные, созданные старым образом от root — загруженные PDF в `/app/media` и собранная статика в `/app/staticfiles` — нужно один раз перевести на `app`. Иначе приложение не сможет записывать новые и удалять старые PDF, а `collectstatic` при старте упадёт с `PermissionError: [Errno 13] Permission denied`.
+
+Если данные лежат в именованных томах, владельца меняют из контейнера:
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm --user root backend chown -R 10001:10001 /app/media
+docker compose -f docker-compose.prod.yml run --rm --user root backend chown -R 10001:10001 /app/media /app/staticfiles
+```
+
+Каталог `/app/staticfiles` есть в образе всегда, поэтому команда подходит и для случая, когда статика не вынесена в отдельный том.
+
+Если каталоги смонтированы с хоста (bind-монтирование), владельца проще сменить прямо на хосте. Пути-источники видны в выводе `docker compose -f docker-compose.prod.yml config`: в секции `volumes` сервиса `backend` у записей с `type: bind` это поле `source`.
+
+```bash
+sudo chown -R 10001:10001 <каталог media на хосте> <каталог static на хосте>
+```
+
+После смены владельца перезапустить контейнеры:
+
+```bash
 docker compose -f docker-compose.prod.yml up -d backend celery
 ```
 
