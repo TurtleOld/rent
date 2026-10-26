@@ -26,9 +26,17 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/* \
 
 COPY . .
 
-RUN mkdir -p /app/media /app/staticfiles
+# Фиксированные uid/gid нужны, чтобы один и тот же пользователь был в образе
+# и во всех контейнерах, и чтобы `chown` на существующем томе media был
+# предсказуемым. Код приложения остаётся принадлежать root: `app` только читает.
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app \
+    && mkdir -p /app/media /app/staticfiles \
+    && chown app:app /app/media /app/staticfiles
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
+
+USER app
 
 EXPOSE 8000

@@ -42,6 +42,26 @@ docker compose exec backend python manage.py createsuperuser
 
 ---
 
+## Обновление продакшена: владелец тома media
+
+Бэкенд и Celery работают от пользователя `app` с uid/gid `10001`. Новый пустой том `media_files` получает владельца из образа автоматически. Существующий том, файлы на котором созданы старым образом от root, нужно один раз перевести на `app` — иначе приложение не сможет записывать новые и удалять старые PDF:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm --user root backend chown -R 10001:10001 /app/media
+docker compose -f docker-compose.prod.yml up -d backend celery
+```
+
+Проверить, что контейнеры запустились от нужного пользователя:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend id -u
+docker compose -f docker-compose.prod.yml exec celery id -u
+```
+
+Обе команды должны вывести `10001`.
+
+---
+
 ## Переменные окружения
 
 | Переменная | Значение по умолчанию | Описание |
