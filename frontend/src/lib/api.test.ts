@@ -6,6 +6,7 @@ import {
   loginErrorMessage,
   manualAmountDueErrorMessage,
   setManualAmountDue,
+  uploadErrorMessage,
   uploadInvoice,
 } from "./api";
 
@@ -59,6 +60,28 @@ describe("общий клиент API", () => {
     expect(init?.body).toBeInstanceOf(FormData);
     expect((init?.body as FormData).get("pdf_file")).toBeInstanceOf(File);
     expect(new Headers(init?.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("ошибка загрузки берёт причину из pdf_file", () => {
+    const err = new ApiError(400, "x", { pdf_file: ["Допускаются только PDF-файлы."] });
+
+    expect(uploadErrorMessage(err)).toBe("Допускаются только PDF-файлы.");
+  });
+
+  it("ошибка загрузки берёт причину из detail", () => {
+    const err = new ApiError(400, "x", { detail: "Файл не является валидным PDF" });
+
+    expect(uploadErrorMessage(err)).toBe("Файл не является валидным PDF");
+  });
+
+  it.each([
+    [new TypeError("Failed to fetch")],
+    [new ApiError(500, "x", null)],
+    [new ApiError(413, "x", "<html>413 Request Entity Too Large</html>")],
+    [new ApiError(400, "x", { other_field: ["что-то"] })],
+    [new ApiError(400, "x", { pdf_file: [42] })],
+  ])("ошибка загрузки %o → общий текст", (err) => {
+    expect(uploadErrorMessage(err)).toBe("Ошибка при загрузке файла");
   });
 
   it("ошибка загрузки отдаёт статус и тело ответа", async () => {
