@@ -40,10 +40,11 @@ def check_line_item(li: LineItem) -> list[str]:
     if li.amount_charged is not None and li.amount is not None:
         rec = li.recalculation or Decimal("0")
         debt = li.debt or Decimal("0")
-        expected_total = (li.amount_charged + rec + debt).quantize(Decimal("0.01"))
+        paid = li.paid or Decimal("0")
+        expected_total = (li.amount_charged + rec + debt - paid).quantize(Decimal("0.01"))
         if not _close(expected_total, li.amount):
             warnings.append(
-                f"«{li.service_name}»: начислено + перерасчёт + долг"
+                f"«{li.service_name}»: начислено + перерасчёт + долг − оплачено"
                 f" ({expected_total}) ≠ итого ({li.amount})."
             )
 

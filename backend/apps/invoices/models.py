@@ -185,6 +185,14 @@ class LineItem(models.Model):
     recalculation = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     # debt = задолженность/переплата на начало периода (может отсутствовать в документе)
     debt = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    # paid = оплачено по ЕПД, прочитано из документа (не пользовательский платёж)
+    paid = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Оплачено по ЕПД",
+    )
     # amount = итого по строке
     amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     service = models.ForeignKey(

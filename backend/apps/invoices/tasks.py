@@ -161,6 +161,7 @@ def _do_process(invoice: Invoice) -> None:
             amount_charged=_to_decimal(item.get("amount_charged")),
             recalculation=_to_decimal(item.get("recalculation")),
             debt=_to_decimal(item.get("debt")),
+            paid=_to_decimal(item.get("paid")),
             amount=_to_decimal(item.get("amount")),
             provider=item.get("provider"),
             meter_id=item.get("meter_id"),
