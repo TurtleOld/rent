@@ -1,8 +1,11 @@
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import Client, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
+from django_ratelimit.core import get_usage
 from rest_framework import status
 from rest_framework.test import APIClient
+
+from apps.accounts.views import LOGIN_RATE_LIMIT, LOGIN_RATE_LIMIT_GROUP
 
 User = get_user_model()
 
@@ -53,6 +56,38 @@ class AuthTest(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
         self.assertEqual(response.json()["detail"], "Слишком много попыток входа. Попробуйте позже.")
+
+    def test_login_rate_limit_response_has_retry_after(self):
+        client = APIClient(REMOTE_ADDR="10.0.0.2")
+        payload = {"email": "nobody@example.com", "password": "wrong_password"}
+        for _ in range(5):
+            client.post("/api/auth/login/", payload, format="json", REMOTE_ADDR="10.0.0.2")
+        response = client.post(
+            "/api/auth/login/", payload, format="json", REMOTE_ADDR="10.0.0.2"
+        )
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        retry_after = response.headers.get("Retry-After")
+        self.assertIsNotNone(retry_after)
+        self.assertTrue(retry_after.isdigit(), retry_after)
+        self.assertGreaterEqual(int(retry_after), 1)
+        self.assertLessEqual(int(retry_after), 60)
+
+    def test_login_rate_limit_check_does_not_increment_counter(self):
+        client = APIClient(REMOTE_ADDR="10.0.0.3")
+        payload = {"email": "nobody@example.com", "password": "wrong_password"}
+        for _ in range(6):
+            client.post("/api/auth/login/", payload, format="json", REMOTE_ADDR="10.0.0.3")
+
+        # Получение времени до конца окна не должно засчитывать седьмую попытку.
+        request = RequestFactory().post("/api/auth/login/", REMOTE_ADDR="10.0.0.3")
+        usage = get_usage(
+            request,
+            group=LOGIN_RATE_LIMIT_GROUP,
+            key="ip",
+            rate=LOGIN_RATE_LIMIT,
+            increment=False,
+        )
+        self.assertEqual(usage["count"], 6)
 
     def test_login_rate_limit_is_per_real_client_ip(self):
         # All requests come from the same proxy REMOTE_ADDR; only X-Real-IP differs.
