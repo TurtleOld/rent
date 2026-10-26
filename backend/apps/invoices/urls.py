@@ -5,7 +5,6 @@ from .views import (
     InvoiceFileDownloadView,
     InvoiceListView,
     InvoiceManualAmountDueView,
-    InvoicePaymentListCreateView,
     InvoiceReparseView,
     InvoiceUploadView,
 )
@@ -21,5 +20,4 @@ urlpatterns = [
         InvoiceManualAmountDueView.as_view(),
         name="invoice-manual-amount-due",
     ),
-    path("<int:pk>/payments/", InvoicePaymentListCreateView.as_view(), name="invoice-payments"),
 ]

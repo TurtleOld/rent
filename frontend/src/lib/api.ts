@@ -97,8 +97,6 @@ export interface Invoice {
   amount_recalculation: string | null;
   confidence: number | null;
   warnings: string[];
-  payment_status: "unpaid" | "partially_paid" | "paid" | "amount_unknown";
-  total_paid: string;
   line_items: LineItem[];
   created_at: string;
   updated_at: string;
@@ -175,34 +173,4 @@ export function manualAmountDueErrorMessage(err: unknown): string {
 
 export function uploadErrorMessage(err: unknown): string {
   return backendFieldErrorMessage(err, "pdf_file", "Ошибка при загрузке файла");
-}
-
-// ── Payment types ─────────────────────────────────────────────────────────────
-
-export interface Payment {
-  id: number;
-  invoice: number;
-  user: number;
-  amount: string;
-  payment_date: string;
-  note: string | null;
-  created_at: string;
-}
-
-export async function getPayments(invoiceId: number): Promise<Payment[]> {
-  const result = await request<PaginatedResponse<Payment> | Payment[]>(
-    `/invoices/${invoiceId}/payments/`,
-  );
-  if (Array.isArray(result)) return result;
-  return (result as PaginatedResponse<Payment>).results;
-}
-
-export async function createPayment(
-  invoiceId: number,
-  data: { amount: string; payment_date: string; note?: string },
-): Promise<Payment> {
-  return request<Payment>(`/invoices/${invoiceId}/payments/`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
 }

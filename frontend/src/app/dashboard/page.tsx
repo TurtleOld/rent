@@ -13,13 +13,6 @@ const STATUS_LABELS: Record<string, string> = {
   failed: "Ошибка",
 };
 
-const PAYMENT_LABELS: Record<string, string> = {
-  unpaid: "Не оплачена",
-  partially_paid: "Частично оплачена",
-  paid: "Оплачена",
-  amount_unknown: "Сумма не распознана",
-};
-
 const MONTH_NAMES = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
@@ -216,15 +209,6 @@ export default function DashboardPage() {
                           ₽
                         </p>
                       ) : null}
-                      <span className={`${styles.payBadge} ${styles[`pay__${inv.payment_status}`]}`}>
-                        {PAYMENT_LABELS[inv.payment_status]}
-                      </span>
-                      {inv.payment_status === "amount_unknown" && (
-                        <span className={styles.amountLabel}>
-                          {" "}внесено{" "}
-                          {parseFloat(inv.total_paid).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
-                        </span>
-                      )}
                     </div>
                     <p className={styles.date}>
                       {new Date(inv.created_at).toLocaleDateString("ru-RU")}

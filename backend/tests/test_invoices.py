@@ -1,9 +1,10 @@
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import DatabaseError
+from django.db import DatabaseError, connection
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -94,12 +95,12 @@ class InvoiceUploadTest(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
-class PaymentTest(TestCase):
+class InvoiceDetailTest(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            username="payer@example.com",
-            email="payer@example.com",
+            username="viewer@example.com",
+            email="viewer@example.com",
             password="testpassword",
         )
         self.invoice = Invoice.objects.create(
@@ -108,87 +109,6 @@ class PaymentTest(TestCase):
             status=Invoice.Status.PROCESSED,
             amount_due=Decimal("1500.00"),
         )
-
-    def test_payment_creation(self):
-        self.client.force_authenticate(user=self.user)
-        response = self.client.post(
-            f"/api/invoices/{self.invoice.pk}/payments/",
-            {"amount": "750.00", "payment_date": "2026-02-01"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["amount"], "750.00")
-
-    def test_payment_rejects_non_positive_amount(self):
-        self.client.force_authenticate(user=self.user)
-        for amount in ("-500.00", "0.00"):
-            response = self.client.post(
-                f"/api/invoices/{self.invoice.pk}/payments/",
-                {"amount": amount, "payment_date": "2026-02-01"},
-                format="json",
-            )
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(self.invoice.payments.exists())
-
-    def test_payment_status_partially_paid(self):
-        self.client.force_authenticate(user=self.user)
-        self.client.post(
-            f"/api/invoices/{self.invoice.pk}/payments/",
-            {"amount": "750.00", "payment_date": "2026-02-01"},
-            format="json",
-        )
-        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
-        self.assertEqual(detail.data["payment_status"], "partially_paid")
-        self.assertEqual(detail.data["total_paid"], Decimal("750.00"))
-
-    def test_payment_status_paid(self):
-        self.client.force_authenticate(user=self.user)
-        self.client.post(
-            f"/api/invoices/{self.invoice.pk}/payments/",
-            {"amount": "1500.00", "payment_date": "2026-02-01"},
-            format="json",
-        )
-        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
-        self.assertEqual(detail.data["payment_status"], "paid")
-
-    def test_payment_status_unpaid(self):
-        self.client.force_authenticate(user=self.user)
-        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
-        self.assertEqual(detail.data["payment_status"], "unpaid")
-
-    def test_payment_status_paid_when_amount_due_is_zero(self):
-        self.invoice.amount_due = Decimal("0.00")
-        self.invoice.save(update_fields=["amount_due"])
-        self.client.force_authenticate(user=self.user)
-        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
-        self.assertEqual(detail.data["payment_status"], "paid")
-
-    def test_payment_status_paid_when_amount_due_is_negative(self):
-        self.invoice.amount_due = Decimal("-1234.56")
-        self.invoice.save(update_fields=["amount_due"])
-        self.client.force_authenticate(user=self.user)
-        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
-        self.assertEqual(detail.data["payment_status"], "paid")
-
-    def test_payment_status_amount_unknown_without_payments(self):
-        self.invoice.amount_due = None
-        self.invoice.save(update_fields=["amount_due"])
-        self.client.force_authenticate(user=self.user)
-        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
-        self.assertEqual(detail.data["payment_status"], "amount_unknown")
-
-    def test_payment_status_amount_unknown_with_payments(self):
-        self.invoice.amount_due = None
-        self.invoice.save(update_fields=["amount_due"])
-        self.client.force_authenticate(user=self.user)
-        self.client.post(
-            f"/api/invoices/{self.invoice.pk}/payments/",
-            {"amount": "750.00", "payment_date": "2026-02-01"},
-            format="json",
-        )
-        detail = self.client.get(f"/api/invoices/{self.invoice.pk}/")
-        self.assertEqual(detail.data["payment_status"], "amount_unknown")
-        self.assertEqual(detail.data["total_paid"], Decimal("750.00"))
 
     def test_cannot_see_other_users_invoice(self):
         other = User.objects.create_user(
@@ -209,6 +129,43 @@ class PaymentTest(TestCase):
             amount=Decimal("4296.90"),
         )
         self.assertEqual(item.amount_charged + item.recalculation, item.amount)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class PaymentRemovalTest(TestCase):
+    """Ручные платежи и статус оплаты удалены из проекта."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="nopayments@example.com",
+            email="nopayments@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/fake.pdf",
+            status=Invoice.Status.PROCESSED,
+            amount_due=Decimal("1500.00"),
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_payments_app_is_not_installed(self):
+        self.assertNotIn("apps.payments", settings.INSTALLED_APPS)
+
+    def test_payments_table_is_dropped(self):
+        with connection.cursor() as cursor:
+            tables = connection.introspection.table_names(cursor)
+        self.assertNotIn("payments_payment", tables)
+
+    def test_payments_endpoint_is_gone(self):
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/payments/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_invoice_api_has_no_payment_fields(self):
+        data = self.client.get(f"/api/invoices/{self.invoice.pk}/").data
+        self.assertNotIn("payment_status", data)
+        self.assertNotIn("total_paid", data)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -611,37 +568,6 @@ class InvoiceReparseTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
-class InvoiceListQueryCountTest(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.user = User.objects.create_user(
-            username="numqueries@example.com",
-            email="numqueries@example.com",
-            password="testpassword",
-        )
-        from apps.payments.models import Payment
-        for i in range(3):
-            inv = Invoice.objects.create(
-                user=self.user,
-                pdf_file=f"invoices/test{i}.pdf",
-                status=Invoice.Status.PROCESSED,
-                amount_due=Decimal("1000.00"),
-            )
-            Payment.objects.create(
-                invoice=inv,
-                user=self.user,
-                amount=Decimal("500.00"),
-                payment_date="2026-01-01",
-            )
-
-    def test_invoice_list_does_not_query_payments_per_invoice(self):
-        self.client.force_authenticate(user=self.user)
-        with self.assertNumQueries(3):
-            response = self.client.get("/api/invoices/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-
 class ProcessInvoiceFailureTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -798,17 +724,13 @@ class ManualAmountDueTest(TestCase):
             format="json",
         )
 
-    def test_manual_amount_turns_unknown_into_paid(self):
-        self.invoice.payments.create(
-            user=self.user, amount=Decimal("1000.00"), payment_date="2026-02-01"
-        )
+    def test_manual_amount_overrides_unknown_amount(self):
         detail = self.client.get(f"/api/invoices/{self.invoice.pk}/").data
-        self.assertEqual(detail["payment_status"], "amount_unknown")
+        self.assertIsNone(detail["amount_due"])
 
         response = self._set("1000.00")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["payment_status"], "paid")
         self.assertEqual(response.data["amount_due"], "1000.00")
         self.assertEqual(response.data["manual_amount_due"], "1000.00")
 
@@ -851,7 +773,6 @@ class ManualAmountDueTest(TestCase):
             response = self._set(value)
             self.assertEqual(response.status_code, status.HTTP_200_OK, value)
             self.assertEqual(response.data["amount_due"], value)
-            self.assertEqual(response.data["payment_status"], "paid")
 
     def test_more_than_two_decimals_rejected(self):
         response = self._set("10.005")
