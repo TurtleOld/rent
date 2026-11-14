@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from celery import shared_task
@@ -8,10 +8,21 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.db import transaction
 from django.utils import timezone
 
-from .models import AMOUNT_DUE_UNKNOWN_WARNING, Invoice, LineItem, Service, ServiceAlias
+from .models import (
+    AMOUNT_DUE_UNKNOWN_WARNING,
+    NO_SERVICES_WARNING,
+    Invoice,
+    LineItem,
+    Service,
+    ServiceAlias,
+)
 from .pdf_parser import parse_epd
 from .units import normalize_unit
 from .validators import run_all_checks
+
+# Обработка старше этого срока считается зависшей (жёсткий лимит задачи — 120 с),
+# и API снова разрешает повторный разбор.
+STUCK_AFTER = timedelta(minutes=5)
 
 
 def _json_serializable(obj: dict) -> dict:
@@ -137,7 +148,6 @@ def _do_process(invoice: Invoice) -> None:
     invoice.warnings = parsed_data.get("warnings") or []
     if invoice.amount_due is None:
         invoice.warnings.append(AMOUNT_DUE_UNKNOWN_WARNING)
-    invoice.status = Invoice.Status.PROCESSED
     invoice.error_message = None
 
     line_items_data = parsed_data.get("line_items") or []
@@ -156,8 +166,8 @@ def _do_process(invoice: Invoice) -> None:
             invoice=invoice,
             service_name=raw_name,
             unit=unit,
-            quantity=_to_decimal(item.get("quantity"), 6),
-            tariff=_to_decimal(item.get("tariff"), 4),
+            quantity=_to_decimal(item.get("quantity"), 7),
+            tariff=_to_decimal(item.get("tariff"), 6),
             amount_charged=_to_decimal(item.get("amount_charged")),
             recalculation=_to_decimal(item.get("recalculation")),
             debt=_to_decimal(item.get("debt")),
@@ -171,6 +181,14 @@ def _do_process(invoice: Invoice) -> None:
 
     if unit_warnings:
         invoice.warnings = (invoice.warnings or []) + unit_warnings
+
+    # Квитанция без единой распознанной услуги не годится для графиков:
+    # это неуспешный разбор, а не полноценный результат.
+    if line_items:
+        invoice.status = Invoice.Status.PROCESSED
+    else:
+        invoice.status = Invoice.Status.INCOMPLETE
+        invoice.warnings.append(NO_SERVICES_WARNING)
 
     with transaction.atomic():
         if not _update_invoice(invoice, _PARSED_FIELDS):

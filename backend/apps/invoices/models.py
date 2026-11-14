@@ -10,6 +10,7 @@ from django.dispatch import receiver
 logger = logging.getLogger(__name__)
 
 AMOUNT_DUE_UNKNOWN_WARNING = "Сумма к оплате не распознана"
+NO_SERVICES_WARNING = "Не распознана ни одна услуга — квитанция исключена из графиков и итогов"
 
 
 def pdf_content_hash(pdf_file) -> str:
@@ -93,6 +94,7 @@ class Invoice(models.Model):
     class Status(models.TextChoices):
         PROCESSING = "processing", "Обрабатывается"
         PROCESSED = "processed", "Обработан"
+        INCOMPLETE = "incomplete", "Обработан частично"
         FAILED = "failed", "Ошибка"
 
     user = models.ForeignKey(
@@ -206,8 +208,8 @@ class LineItem(models.Model):
     )
     service_name = models.CharField(max_length=255)
     unit = models.CharField(max_length=50, blank=True, null=True)
-    quantity = models.DecimalField(max_digits=12, decimal_places=6, blank=True, null=True)
-    tariff = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
+    quantity = models.DecimalField(max_digits=13, decimal_places=7, blank=True, null=True)
+    tariff = models.DecimalField(max_digits=12, decimal_places=6, blank=True, null=True)
     # amount_charged = начислено по тарифу (до перерасчёта)
     amount_charged = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     # recalculation = сумма перерасчёта/доначисления (может отсутствовать в документе)

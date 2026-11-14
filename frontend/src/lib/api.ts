@@ -85,8 +85,9 @@ export interface LineItem {
 export interface Invoice {
   id: number;
   pdf_file: string;
-  status: "processing" | "processed" | "failed";
+  status: "processing" | "processed" | "incomplete" | "failed";
   error_message: string | null;
+  can_reparse: boolean;
   provider_name: string | null;
   account_number: string | null;
   payer_name: string | null;
@@ -186,6 +187,10 @@ function backendFieldErrorMessage(err: unknown, field: string, fallback: string)
 
 export function manualAmountDueErrorMessage(err: unknown): string {
   return backendFieldErrorMessage(err, "manual_amount_due", "Не удалось сохранить сумму к оплате");
+}
+
+export function reparseErrorMessage(err: unknown): string {
+  return backendFieldErrorMessage(err, "reparse", "Не удалось запустить повторный разбор");
 }
 
 export function uploadErrorMessage(err: unknown): string {

@@ -5,6 +5,7 @@ import tempfile
 import threading
 from decimal import Decimal
 from importlib import import_module
+from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import patch
 
@@ -19,13 +20,25 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.invoices.models import Invoice, LineItem, Service, ServiceAlias
+from apps.invoices.models import (
+    NO_SERVICES_WARNING,
+    Invoice,
+    LineItem,
+    Service,
+    ServiceAlias,
+)
 from apps.invoices.validators import check_line_item
+from apps.invoices.views import QUEUE_UNAVAILABLE_MESSAGE
+from kombu.exceptions import OperationalError
 
 User = get_user_model()
 
 FAKE_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
 FAKE_PDF_HASH = hashlib.sha256(FAKE_PDF).hexdigest()
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+MULTIPAGE_PDF = FIXTURES_DIR / "sample_epd_multipage.pdf"
+TWO_DOCUMENTS_PDF = FIXTURES_DIR / "sample_epd_two_documents.pdf"
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -312,7 +325,72 @@ class LineItemQuantityPrecisionTest(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["line_items"][0]["quantity"], "0.954318")
+        # Хранилище хранит 7 знаков, поэтому сериализатор дополняет нулём.
+        self.assertEqual(response.data["line_items"][0]["quantity"], "0.9543180")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class LineItemSourcePrecisionTest(TestCase):
+    """Объём и тариф сохраняются так, как напечатаны в ЕПД."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="source-precision@example.com",
+            email="source-precision@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+        from pathlib import Path
+
+        from django.core.files.base import ContentFile
+
+        with open(Path(__file__).parent / "fixtures" / "sample_epd_precision.pdf", "rb") as f:
+            self.invoice.pdf_file.save("precision.pdf", ContentFile(f.read()), save=True)
+
+    def _process(self):
+        from apps.invoices.tasks import _do_process
+
+        _do_process(self.invoice)
+
+    def _line_item(self):
+        self.invoice.refresh_from_db()
+        return LineItem.objects.get(invoice=self.invoice)
+
+    def test_source_values_saved_exactly(self):
+        self._process()
+        li = self._line_item()
+        self.assertEqual(li.quantity, Decimal("0.2468137"))
+        self.assertEqual(li.tariff, Decimal("76543.654321"))
+
+    def test_api_returns_source_precision(self):
+        self._process()
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item = response.data["line_items"][0]
+        self.assertEqual(item["quantity"], "0.2468137")
+        self.assertEqual(item["tariff"], "76543.654321")
+
+    def test_charge_uses_source_precision_without_warning(self):
+        self._process()
+        li = self._line_item()
+        self.assertEqual(li.amount_charged, Decimal("18892.02"))
+        self.assertEqual(check_line_item(li), [])
+        self.assertFalse(
+            any("количество × тариф" in w for w in self.invoice.warnings)
+        )
+
+    def test_reparse_keeps_source_precision(self):
+        self._process()
+        self._process()
+        li = self._line_item()
+        self.assertEqual(li.quantity, Decimal("0.2468137"))
+        self.assertEqual(li.tariff, Decimal("76543.654321"))
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -385,6 +463,80 @@ class LineItemPaidTest(TestCase):
         response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["line_items"][0]["paid"], "40.00")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class MultipageInvoiceTest(TestCase):
+    """Многостраничная квитанция обрабатывается целиком, без обрезанных услуг."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="multipage@example.com",
+            email="multipage@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _process(self, fixture: Path) -> None:
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        self.invoice.pdf_file.save(
+            "multipage.pdf", ContentFile(fixture.read_bytes()), save=True
+        )
+        process_invoice(self.invoice.pk)
+        self.invoice.refresh_from_db()
+
+    def test_all_services_saved_with_exact_amounts(self):
+        self._process(MULTIPAGE_PDF)
+
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSED)
+        items = {li.service_name: li for li in self.invoice.line_items.all()}
+        self.assertEqual(set(items), {
+            "СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ",
+            "ТЕКУЩИЙ РЕМОНТ",
+            "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ",
+        })
+        self.assertEqual(items["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ"].amount, Decimal("1200.00"))
+        self.assertEqual(items["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ"].paid, Decimal("100.00"))
+        self.assertEqual(items["ТЕКУЩИЙ РЕМОНТ"].amount, Decimal("800.00"))
+        self.assertEqual(items["ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ"].amount, Decimal("96.00"))
+        self.assertEqual(self.invoice.amount_due, Decimal("2000.00"))
+        self.assertEqual(self.invoice.amount_paid_ai, Decimal("100.00"))
+        self.assertEqual(self.invoice.amount_due_without_insurance, Decimal("2000.00"))
+        self.assertEqual(self.invoice.amount_due_with_insurance, Decimal("2096.00"))
+
+    def test_no_false_line_total_warning(self):
+        self._process(MULTIPAGE_PDF)
+
+        self.assertFalse(any("Сумма по строкам" in w for w in self.invoice.warnings))
+        self.assertEqual(self.invoice.warnings, [])
+
+    def test_api_returns_every_service(self):
+        self._process(MULTIPAGE_PDF)
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        amounts = {i["service_name"]: i["amount"] for i in response.data["line_items"]}
+        self.assertEqual(amounts, {
+            "СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ": "1200.00",
+            "ТЕКУЩИЙ РЕМОНТ": "800.00",
+            "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ": "96.00",
+        })
+
+    def test_two_documents_fail_with_clear_error(self):
+        self._process(TWO_DOCUMENTS_PDF)
+
+        self.assertEqual(self.invoice.status, Invoice.Status.FAILED)
+        self.assertIn("несколько квитанций", self.invoice.error_message)
+        self.assertEqual(LineItem.objects.filter(invoice=self.invoice).count(), 0)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -695,7 +847,12 @@ class AmountDueWarningTest(TestCase):
         from apps.invoices.tasks import process_invoice
 
         self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
-        parsed = {"period": {}, "totals": totals, "line_items": [], "warnings": []}
+        parsed = {
+            "period": {},
+            "totals": totals,
+            "line_items": [{"service_name": "ОТОПЛЕНИЕ", "amount": "10.00"}],
+            "warnings": [],
+        }
         with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
             process_invoice(self.invoice.pk)
         self.invoice.refresh_from_db()
@@ -792,7 +949,7 @@ class ManualAmountDueTest(TestCase):
         self.assertIsNone(self.invoice.manual_amount_due)
 
     def test_rejected_unless_processed(self):
-        for state in (Invoice.Status.FAILED, Invoice.Status.PROCESSING):
+        for state in (Invoice.Status.FAILED, Invoice.Status.PROCESSING, Invoice.Status.INCOMPLETE):
             Invoice.objects.filter(pk=self.invoice.pk).update(status=state)
             response = self._set("700.00")
             self.assertEqual(response.status_code, status.HTTP_409_CONFLICT, state)
@@ -830,6 +987,294 @@ class ManualAmountDueTest(TestCase):
         self.assertIn("Сумма к оплате не распознана", detail["warnings"])
         self.assertNotIn("Сумма к оплате не распознана", self._set("700.00").data["warnings"])
         self.assertIn("Сумма к оплате не распознана", self._set(None).data["warnings"])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class IncompleteExtractionTest(TestCase):
+    """Разбор без единой услуги — неполный результат, а не «Обработан»."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="incomplete@example.com",
+            email="incomplete@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _process(self, parsed: dict) -> None:
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        # FieldFile.save(save=True) пишет весь инстанс — сначала подтягиваем свежий.
+        self.invoice.refresh_from_db()
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
+            process_invoice(self.invoice.pk)
+        self.invoice.refresh_from_db()
+
+    @staticmethod
+    def _parsed(totals: dict, line_items: list[dict]) -> dict:
+        return {
+            "period": {"month": 1, "year": 2026, "start_date": None, "end_date": None},
+            "totals": totals,
+            "line_items": line_items,
+            "warnings": [],
+        }
+
+    def test_known_amount_without_services_is_incomplete(self):
+        self._process(self._parsed({"amount_due": "3600.00"}, []))
+
+        self.assertEqual(self.invoice.status, Invoice.Status.INCOMPLETE)
+        self.assertIn(NO_SERVICES_WARNING, self.invoice.warnings)
+        # PDF и распознанные значения сохраняются
+        self.assertEqual(self.invoice.amount_due, Decimal("3600.00"))
+        self.assertTrue(self.invoice.pdf_file)
+
+        self.client.force_authenticate(user=self.user)
+        data = self.client.get(f"/api/invoices/{self.invoice.pk}/").data
+        self.assertEqual(data["status"], "incomplete")
+        self.assertIn(NO_SERVICES_WARNING, data["warnings"])
+
+    def test_fully_empty_result_is_incomplete(self):
+        self._process(self._parsed({}, []))
+
+        self.assertEqual(self.invoice.status, Invoice.Status.INCOMPLETE)
+        self.assertIn(NO_SERVICES_WARNING, self.invoice.warnings)
+        self.assertIn("Сумма к оплате не распознана", self.invoice.warnings)
+
+    def test_normal_invoice_stays_processed(self):
+        self._process(
+            self._parsed(
+                {"amount_due": "100.00"},
+                [{"service_name": "ОТОПЛЕНИЕ", "amount": "100.00"}],
+            )
+        )
+
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSED)
+        self.assertNotIn(NO_SERVICES_WARNING, self.invoice.warnings)
+
+    def test_successful_reparse_restores_processed(self):
+        self._process(self._parsed({"amount_due": "3600.00"}, []))
+        self.assertEqual(self.invoice.status, Invoice.Status.INCOMPLETE)
+
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING, warnings=[]
+        )
+        self._process(
+            self._parsed(
+                {"amount_due": "3600.00"},
+                [{"service_name": "ОТОПЛЕНИЕ", "amount": "3600.00"}],
+            )
+        )
+
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSED)
+        self.assertNotIn(NO_SERVICES_WARNING, self.invoice.warnings)
+        self.assertEqual(
+            LineItem.objects.filter(invoice=self.invoice).count(), 1
+        )
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_reparse_endpoint_allows_incomplete(self, mock_delay):
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.INCOMPLETE
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        mock_delay.assert_called_once_with(self.invoice.pk)
+
+    def test_existing_processed_without_services_marked_incomplete(self):
+        import importlib
+
+        migration = importlib.import_module(
+            "apps.invoices.migrations.0012_invoice_incomplete_status"
+        )
+        from django.apps import apps as global_apps
+
+        old_empty = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/old_empty.pdf",
+            status=Invoice.Status.PROCESSED,
+            amount_due=Decimal("3600.00"),
+        )
+        old_normal = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/old_normal.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+        LineItem.objects.create(
+            invoice=old_normal, service_name="ХВС", amount=Decimal("50.00")
+        )
+
+        migration.mark_incomplete_without_services(global_apps, None)
+
+        old_empty.refresh_from_db()
+        old_normal.refresh_from_db()
+        self.assertEqual(old_empty.status, Invoice.Status.INCOMPLETE)
+        self.assertIn(NO_SERVICES_WARNING, old_empty.warnings)
+        # Распознанная сумма и PDF не тронуты
+        self.assertEqual(old_empty.amount_due, Decimal("3600.00"))
+        self.assertEqual(old_empty.pdf_file.name, "invoices/old_empty.pdf")
+        self.assertEqual(old_normal.status, Invoice.Status.PROCESSED)
+        self.assertNotIn(NO_SERVICES_WARNING, old_normal.warnings)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class QueueRecoveryTest(TestCase):
+    """Сбой постановки задачи не оставляет квитанцию в вечной обработке."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="queue@example.com",
+            email="queue@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def _upload(self):
+        return self.client.post(
+            "/api/invoices/upload/",
+            {
+                "pdf_file": SimpleUploadedFile(
+                    "bill.pdf", FAKE_PDF, content_type="application/pdf"
+                )
+            },
+            format="multipart",
+        )
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_upload_queue_failure_returns_503_and_marks_failed(self, mock_delay):
+        mock_delay.side_effect = OperationalError("broker down")
+
+        response = self._upload()
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data["detail"], QUEUE_UNAVAILABLE_MESSAGE)
+        invoice = Invoice.objects.get(user=self.user)
+        self.assertEqual(invoice.status, Invoice.Status.FAILED)
+        self.assertEqual(invoice.error_message, QUEUE_UNAVAILABLE_MESSAGE)
+        self.assertTrue(invoice.pdf_file.name.endswith(".pdf"))
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_reparse_queue_failure_preserves_pdf_and_parsed_data(self, mock_delay):
+        invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+            amount_due=Decimal("1500.00"),
+            manual_amount_due=Decimal("700.00"),
+            warnings=["старое предупреждение"],
+        )
+        mock_delay.side_effect = OperationalError("broker down")
+
+        response = self.client.post(f"/api/invoices/{invoice.pk}/reparse/")
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data["detail"], QUEUE_UNAVAILABLE_MESSAGE)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.FAILED)
+        self.assertEqual(invoice.error_message, QUEUE_UNAVAILABLE_MESSAGE)
+        self.assertEqual(invoice.amount_due, Decimal("1500.00"))
+        self.assertEqual(invoice.manual_amount_due, Decimal("700.00"))
+        self.assertEqual(invoice.warnings, ["старое предупреждение"])
+        self.assertEqual(invoice.pdf_file.name, "invoices/test.pdf")
+
+    def test_reparse_after_queue_recovery_processes_same_invoice(self):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+        with patch(
+            "apps.invoices.views.process_invoice.delay",
+            side_effect=OperationalError("broker down"),
+        ):
+            failed = self.client.post(f"/api/invoices/{invoice.pk}/reparse/")
+        self.assertEqual(failed.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        with patch("apps.invoices.views.process_invoice.delay") as mock_delay:
+            recovered = self.client.post(f"/api/invoices/{invoice.pk}/reparse/")
+
+        self.assertEqual(recovered.status_code, status.HTTP_202_ACCEPTED)
+        mock_delay.assert_called_once_with(invoice.pk)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.PROCESSING)
+
+        invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        parsed = {
+            "period": {},
+            "totals": {"amount_due": "900.00"},
+            "line_items": [{"service_name": "ОТОПЛЕНИЕ", "amount": "900.00"}],
+            "warnings": [],
+        }
+        with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
+            process_invoice(invoice.pk)
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.PROCESSED)
+        self.assertEqual(invoice.amount_due, Decimal("900.00"))
+        self.assertEqual(Invoice.objects.filter(user=self.user).count(), 1)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CanReparseFlagTest(TestCase):
+    """Флаг can_reparse повторяет правило и порог зависания из API."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="canreparse@example.com",
+            email="canreparse@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=self.user)
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+
+    def _can_reparse(self):
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data["can_reparse"]
+
+    def test_processed_incomplete_and_failed_allow_reparse(self):
+        for state in (
+            Invoice.Status.PROCESSED,
+            Invoice.Status.INCOMPLETE,
+            Invoice.Status.FAILED,
+        ):
+            Invoice.objects.filter(pk=self.invoice.pk).update(status=state)
+            self.assertTrue(self._can_reparse(), state)
+
+    def test_fresh_processing_forbids_reparse(self):
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING
+        )
+        self.assertFalse(self._can_reparse())
+
+    def test_stuck_processing_allows_reparse(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING,
+            updated_at=timezone.now() - timedelta(minutes=10),
+        )
+        self.assertTrue(self._can_reparse())
 
 
 UPLOAD_MEDIA_ROOT = tempfile.mkdtemp()
@@ -884,6 +1329,21 @@ class DuplicateUploadTest(TestCase):
         self.assertEqual(len(filenames), 1)
 
     @patch("apps.invoices.views.process_invoice.delay")
+    def test_retry_after_queue_failure_returns_failed_invoice(self, mock_delay):
+        mock_delay.side_effect = OperationalError("broker down")
+        first = self._upload()
+        self.assertEqual(first.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        mock_delay.reset_mock()
+        second = self._upload()
+
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.data["id"], Invoice.objects.get(user=self.user).pk)
+        self.assertEqual(second.data["status"], "failed")
+        self.assertTrue(second.data["can_reparse"])
+        mock_delay.assert_not_called()
+
+    @patch("apps.invoices.views.process_invoice.delay")
     def test_different_users_get_separate_invoices(self, mock_delay):
         first = self._upload()
         other = User.objects.create_user(
@@ -914,20 +1374,28 @@ class DuplicateUploadTest(TestCase):
         self.assertEqual(Invoice.objects.count(), 1)
 
     @patch("apps.invoices.views.process_invoice.delay")
-    def test_failed_invoice_reupload_allows_reparse(self, mock_delay):
-        first = self._upload()
-        Invoice.objects.filter(pk=first.data["id"]).update(status=Invoice.Status.FAILED)
+    def test_unfinished_invoice_reupload_allows_reparse(self, mock_delay):
+        for index, state in enumerate(
+            (Invoice.Status.FAILED, Invoice.Status.INCOMPLETE), start=1
+        ):
+            with self.subTest(state=state):
+                content = FAKE_PDF + f"%{index}".encode()
+                first = self._upload(content=content)
+                Invoice.objects.filter(pk=first.data["id"]).update(status=state)
 
-        second = self._upload()
+                second = self._upload(content=content)
 
-        self.assertEqual(second.status_code, status.HTTP_200_OK)
-        self.assertEqual(second.data["id"], first.data["id"])
-        self.assertEqual(second.data["status"], "failed")
-        mock_delay.assert_called_once()
+                self.assertEqual(second.status_code, status.HTTP_200_OK)
+                self.assertEqual(second.data["id"], first.data["id"])
+                self.assertEqual(second.data["status"], state)
+                self.assertTrue(second.data["can_reparse"])
+                self.assertEqual(mock_delay.call_count, index * 2 - 1)
 
-        response = self.client.post(f"/api/invoices/{first.data['id']}/reparse/")
-        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
-        self.assertEqual(mock_delay.call_count, 2)
+                response = self.client.post(
+                    f"/api/invoices/{first.data['id']}/reparse/"
+                )
+                self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+                self.assertEqual(mock_delay.call_count, index * 2)
 
     def test_backfill_keeps_historical_duplicates(self):
         first = Invoice.objects.create(
@@ -937,7 +1405,7 @@ class DuplicateUploadTest(TestCase):
             user=self.user, pdf_file=ContentFile(FAKE_PDF, name="old-b.pdf")
         )
 
-        migration = import_module("apps.invoices.migrations.0011_invoice_content_hash")
+        migration = import_module("apps.invoices.migrations.0013_invoice_content_hash")
         migration.fill_content_hash(global_apps, None)
 
         first.refresh_from_db()

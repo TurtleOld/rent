@@ -33,7 +33,7 @@ def fill_content_hash(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("invoices", "0010_lineitem_paid")]
+    dependencies = [("invoices", "0012_invoice_incomplete_status")]
 
     operations = [
         migrations.AddField(

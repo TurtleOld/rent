@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { type Invoice, getInvoicesAll, uploadErrorMessage, uploadInvoice } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
 import { upsertInvoice } from "@/lib/invoiceList";
-import { unknownAmountNote } from "@/lib/reports";
+import { incompleteNote, unknownAmountNote } from "@/lib/reports";
 import styles from "./dashboard.module.css";
 
 const STATUS_LABELS: Record<string, string> = {
   processing: "Обрабатывается",
   processed: "Обработан",
+  incomplete: "Обработан частично",
   failed: "Ошибка",
 };
 
@@ -24,6 +25,7 @@ type InvoiceGroup = {
   label: string;
   totalDue: number | null;
   unknownNote: string | null;
+  incompleteNote: string | null;
   invoices: Invoice[];
 };
 
@@ -47,10 +49,19 @@ function groupByPeriod(invoices: Invoice[]): InvoiceGroup[] {
     const [year, monthStr] = key.split("-");
     const month = parseInt(monthStr, 10);
     const label = `${MONTH_NAMES[month - 1]} ${year}`;
-    const totalDue = items.reduce((sum, i) => {
-      return sum + (i.amount_due ? parseFloat(i.amount_due) : 0);
-    }, 0);
-    groups.push({ key, label, totalDue, unknownNote: unknownAmountNote(items), invoices: items });
+    // В итог месяца входят только полностью обработанные квитанции.
+    const processed = items.filter((i) => i.status === "processed");
+    const totalDue = processed.length
+      ? processed.reduce((sum, i) => sum + (i.amount_due ? parseFloat(i.amount_due) : 0), 0)
+      : null;
+    groups.push({
+      key,
+      label,
+      totalDue,
+      unknownNote: unknownAmountNote(processed),
+      incompleteNote: incompleteNote(items),
+      invoices: items,
+    });
   }
 
   // Sort groups newest first
@@ -59,7 +70,7 @@ function groupByPeriod(invoices: Invoice[]): InvoiceGroup[] {
   // Append "no period" group at the end if exists
   const noPeriod = map.get("__no_period__");
   if (noPeriod) {
-    groups.push({ key: "__no_period__", label: "Без периода", totalDue: null, unknownNote: null, invoices: noPeriod });
+    groups.push({ key: "__no_period__", label: "Без периода", totalDue: null, unknownNote: null, incompleteNote: incompleteNote(noPeriod), invoices: noPeriod });
   }
 
   return groups;
@@ -107,8 +118,8 @@ export default function DashboardPage() {
       setInvoices((prev) => upsertInvoice(prev, invoice));
       if (duplicate) {
         setNotice(
-          invoice.status === "failed"
-            ? "Эта квитанция уже загружена, но разбор не удался. Откройте её и запустите повторный разбор."
+          invoice.status === "failed" || invoice.status === "incomplete"
+            ? "Эта квитанция уже загружена, но разбор неполный или завершился ошибкой. Откройте её и запустите повторный разбор."
             : "Эта квитанция уже загружена.",
         );
       }
@@ -170,6 +181,9 @@ export default function DashboardPage() {
                     Итого: {group.totalDue.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
                     {group.unknownNote && ` (${group.unknownNote})`}
                   </span>
+                )}
+                {group.incompleteNote && (
+                  <span className={styles.groupTotal}>{group.incompleteNote}</span>
                 )}
               </div>
               <div className={styles.grid}>

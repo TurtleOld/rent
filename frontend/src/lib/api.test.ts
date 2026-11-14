@@ -5,6 +5,8 @@ import {
   login,
   loginErrorMessage,
   manualAmountDueErrorMessage,
+  reparseErrorMessage,
+  reparseInvoice,
   setManualAmountDue,
   uploadErrorMessage,
   uploadInvoice,
@@ -105,6 +107,27 @@ describe("общий клиент API", () => {
       status: 400,
       data: { pdf_file: ["Файл больше 20 МБ"] },
     });
+  });
+});
+
+describe("повторный разбор", () => {
+  it("шлёт POST на endpoint повторного разбора", async () => {
+    const fetchMock = backendAnswers(202, { id: 5, status: "processing" });
+
+    await reparseInvoice(5);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/invoices/5/reparse/");
+    expect(init?.method).toBe("POST");
+  });
+
+  it.each([
+    [new ApiError(503, "x", { detail: "Очередь обработки временно недоступна. Повторите позже." }), "Очередь обработки временно недоступна. Повторите позже."],
+    [new ApiError(409, "x", { detail: "Квитанция уже обрабатывается." }), "Квитанция уже обрабатывается."],
+    [new ApiError(500, "x", null), "Не удалось запустить повторный разбор"],
+    [new TypeError("Failed to fetch"), "Не удалось запустить повторный разбор"],
+  ])("ошибка %o → «%s»", (err, message) => {
+    expect(reparseErrorMessage(err)).toBe(message);
   });
 });
 

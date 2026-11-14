@@ -6,7 +6,9 @@ import {
   type Invoice,
   deleteInvoice,
   getInvoice,
+  invoiceFileUrl,
   manualAmountDueErrorMessage,
+  reparseErrorMessage,
   reparseInvoice,
   setManualAmountDue,
 } from "@/lib/api";
@@ -15,6 +17,7 @@ import styles from "./invoice.module.css";
 const STATUS_LABELS: Record<string, string> = {
   processing: "Обрабатывается",
   processed: "Обработан",
+  incomplete: "Обработан частично",
   failed: "Ошибка",
 };
 
@@ -87,8 +90,8 @@ export default function InvoiceDetailPage() {
       const updated = await reparseInvoice(id);
       setInvoice(updated);
       setReloadKey((k) => k + 1); // restart status polling
-    } catch {
-      setError("Ошибка при запуске перепарсинга");
+    } catch (err) {
+      setError(reparseErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -113,7 +116,15 @@ export default function InvoiceDetailPage() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Данные квитанции</h2>
           <div className={styles.headerActions}>
-            {(invoice.status === "processed" || invoice.status === "failed") && (
+            <a
+              href={invoiceFileUrl(invoice.id)}
+              target="_blank"
+              rel="noreferrer"
+              className={styles.editBtn}
+            >
+              Открыть PDF
+            </a>
+            {invoice.can_reparse && (
               <button onClick={handleReparse} disabled={saving} className={styles.editBtn}>
                 Перепарсить PDF
               </button>
