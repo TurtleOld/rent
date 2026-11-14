@@ -2,7 +2,21 @@
 
 Utility-bill tracker for Russian ЖКХ (ЕПД). Django REST + Celery parse uploaded PDFs with pdfplumber and regexes (no AI); Next.js serves the UI and proxies `/api` to Django; nginx sits in front. Data is personal (ФИО, address, account number) and money.
 
+## Product scope
+
+The core flow is PDF upload → extraction → data and charts. Preserve the provider's
+source values. «Оплачено по ЕПД» comes from the PDF and does not prove that the current
+квитанция has been paid. User payments and their derived status were removed (ADR 0002).
+The existing ручная сумма к оплате is a separate field governed by ADR 0001; do not
+expand or remove it incidentally. A future paid checkbox needs its own task.
+
 ## Working an issue
+
+For each implementation task, the required skill chain is **`implement → ponytail-review → pr`**.
+Read each skill's `SKILL.md` before applying it; use `ponytail` at **full**, never ultra.
+Find missing skills among installed skills; report an unavailable skill explicitly.
+The `code-review` call embedded in `implement` is replaced by `ponytail-review` here.
+For read-only consultations and audits, state which stages do not apply; no empty commits or PRs.
 
 Every change ships as one PR that closes one GitHub issue. Steps, in order:
 
@@ -13,7 +27,8 @@ Every change ships as one PR that closes one GitHub issue. Steps, in order:
    - Must fix and Should fix: fix in this PR.
    - Nice to have that is small (a few lines, no new dependency) and sits in a file your PR already changes: fix in this PR.
    - Anything else, including problems in files your PR does not touch: a new issue labelled `needs-triage`, linked from your PR.
-5. **Verify** with the commands below. Done when backend tests, frontend tests and the frontend build are green on your branch and every acceptance criterion has evidence (a test name, command output, or a manual check you actually ran).
+   Re-run affected checks and review after fixes. Record accepted risks without reopening them unless new evidence changes the decision.
+5. **Verify** with the commands below. For code changes, backend tests, frontend tests and the frontend build must be green on your branch. For documentation-only changes, check the diff and referenced paths; application tests and builds are not required. Every acceptance criterion needs evidence: a test name, command output, or a manual check you actually ran.
 6. **Open the PR.** Title is an English Conventional Commit; it becomes the squash commit on `main`. Body is in Russian, written with the `pr` skill template (Кратко / Доказательства / Риск слияния), plus `Closes #<n>`, the acceptance criteria as a checklist with evidence per item, a «Ревью» section (each finding: fixed, or the issue it went to), and a «Не проверено» line naming anything you could not check. A human reviews and merges: leave auto-merge off.
 7. **Blocked or unsure?** Under Orca supervision, ask through the preamble's `ask` command. Otherwise comment the question on the issue, swap `in-progress` for `needs-info`, and stop.
 
@@ -42,8 +57,8 @@ Test PDFs are synthetic and come from `backend/tests/generate_fixtures.py` (need
 
 ## Code rules
 
-- **Money and quantities** are `Decimal` end to end; parse Russian numbers with the parser's existing helper.
-- **Schema changes** come with a new migration; applied migrations stay as they are.
+- **Money and quantities** are `Decimal` end to end; parse Russian numbers with the parser's existing helper. Preserve source precision for quantities and tariffs; round the monetary result by the document's rules. Distinguish zero from missing values, debt from overpayment, and totals with and without insurance.
+- **Schema changes** come with a new migration; applied migrations stay as they are. Check existing data, worker compatibility and rollout order. Document backup, recovery and rollback for irreversible changes; production data operations need an explicit task.
 - **User-facing text** (UI, API error messages, invoice warnings), docstrings and comments are Russian; identifiers and commit messages are English.
 - **Comments** carry only the why the code cannot show: a domain rule, a PDF quirk, a non-obvious limit. Self-explanatory code stands without them.
 - **Docstrings** follow Google style in Russian, with the section headers (`Args:`, `Returns:`, `Raises:`) as Google writes them:
@@ -61,6 +76,13 @@ Test PDFs are synthetic and come from `backend/tests/generate_fixtures.py` (need
   ```
 - **Secrets** live in `.env`, which is gitignored; new settings go through `decouple.config` with a safe default and a line in `.env.example` and the README env table.
 - **Commits** follow the history's Conventional Commits style (`fix(invoices): ...`, `chore(deps): ...`) and describe only the code change. Commit messages and PR bodies carry no AI attribution: no `Co-Authored-By` for an AI, no "Generated with", no session links.
+
+## Production reliability
+
+- **Extraction:** validate PDF contents and limits. An unsupported format or missing data needed for charts must have an explicit incomplete or failed result; reports must not present it as complete.
+- **Writes and jobs:** make related database writes atomic. Account for retries, parallel requests, deletion during parsing and broker failure. Recovery must not duplicate an upload, resurrect a deleted квитанция or leave processing stuck indefinitely.
+- **Ownership and privacy:** check the owner for квитанции, related records and PDF downloads. Keep tokens, secrets, ФИО, addresses and account numbers out of logs, fixtures and PR descriptions; use synthetic anonymized examples.
+- **Scope:** fix the cause in the existing modules; add dependencies or abstractions only when needed for the task. A started, skipped or failed check is not a passing check; success requires exit code 0.
 
 ## `main` is protected
 
