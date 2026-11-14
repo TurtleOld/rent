@@ -21,7 +21,17 @@ jobs:
       DEBUG: "False"
       DATABASE_URL: sqlite:////tmp/ci.sqlite3
       MEDIA_ROOT: /tmp/media
+      REDIS_URL: redis://127.0.0.1:6379/0
     services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgres:
         image: postgres:17-alpine
         env:
@@ -47,7 +57,24 @@ jobs:
         working-directory: backend
         run: |
           pip install -r requirements.txt
+          pip check
           python manage.py test tests
+
+      - name: Check Celery worker with Redis
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import celery.contrib.testing.tasks
+          from celery.contrib.testing.worker import start_worker
+          from config.celery import app
+          from django.core.cache import cache
+
+          with start_worker(app, pool="solo", shutdown_timeout=10):
+              cache.set("ci:redis-compatibility", "ok", timeout=30)
+              assert cache.get("ci:redis-compatibility") == "ok"
+              cache.delete("ci:redis-compatibility")
+              print("Celery Redis worker: pong")
+          PY
 
       # Гонку повторной загрузки нельзя проверить на SQLite: нужен реальный
       # параллельный INSERT и уникальный индекс PostgreSQL.
@@ -163,6 +190,7 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          npm run lint
           npm test
           # Dockerfile копирует контекст целиком: хостовый node_modules (glibc) затёр бы alpine-сборку из стадии deps.
           rm -rf node_modules
