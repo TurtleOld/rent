@@ -11,6 +11,8 @@ from rest_framework.test import APIClient
 
 from apps.invoices.models import Invoice, LineItem, Service, ServiceAlias
 from apps.invoices.validators import check_line_item
+from apps.invoices.views import QUEUE_UNAVAILABLE_MESSAGE
+from kombu.exceptions import OperationalError
 
 User = get_user_model()
 
@@ -819,3 +821,151 @@ class ManualAmountDueTest(TestCase):
         self.assertIn("Сумма к оплате не распознана", detail["warnings"])
         self.assertNotIn("Сумма к оплате не распознана", self._set("700.00").data["warnings"])
         self.assertIn("Сумма к оплате не распознана", self._set(None).data["warnings"])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class QueueRecoveryTest(TestCase):
+    """Сбой постановки задачи не оставляет квитанцию в вечной обработке."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="queue@example.com",
+            email="queue@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def _upload(self):
+        return self.client.post(
+            "/api/invoices/upload/",
+            {
+                "pdf_file": SimpleUploadedFile(
+                    "bill.pdf", FAKE_PDF, content_type="application/pdf"
+                )
+            },
+            format="multipart",
+        )
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_upload_queue_failure_returns_503_and_marks_failed(self, mock_delay):
+        mock_delay.side_effect = OperationalError("broker down")
+
+        response = self._upload()
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data["detail"], QUEUE_UNAVAILABLE_MESSAGE)
+        invoice = Invoice.objects.get(user=self.user)
+        self.assertEqual(invoice.status, Invoice.Status.FAILED)
+        self.assertEqual(invoice.error_message, QUEUE_UNAVAILABLE_MESSAGE)
+        self.assertTrue(invoice.pdf_file.name.endswith(".pdf"))
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_reparse_queue_failure_preserves_pdf_and_parsed_data(self, mock_delay):
+        invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+            amount_due=Decimal("1500.00"),
+            manual_amount_due=Decimal("700.00"),
+            warnings=["старое предупреждение"],
+        )
+        mock_delay.side_effect = OperationalError("broker down")
+
+        response = self.client.post(f"/api/invoices/{invoice.pk}/reparse/")
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data["detail"], QUEUE_UNAVAILABLE_MESSAGE)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.FAILED)
+        self.assertEqual(invoice.error_message, QUEUE_UNAVAILABLE_MESSAGE)
+        self.assertEqual(invoice.amount_due, Decimal("1500.00"))
+        self.assertEqual(invoice.manual_amount_due, Decimal("700.00"))
+        self.assertEqual(invoice.warnings, ["старое предупреждение"])
+        self.assertEqual(invoice.pdf_file.name, "invoices/test.pdf")
+
+    def test_reparse_after_queue_recovery_processes_same_invoice(self):
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+        with patch(
+            "apps.invoices.views.process_invoice.delay",
+            side_effect=OperationalError("broker down"),
+        ):
+            failed = self.client.post(f"/api/invoices/{invoice.pk}/reparse/")
+        self.assertEqual(failed.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        with patch("apps.invoices.views.process_invoice.delay") as mock_delay:
+            recovered = self.client.post(f"/api/invoices/{invoice.pk}/reparse/")
+
+        self.assertEqual(recovered.status_code, status.HTTP_202_ACCEPTED)
+        mock_delay.assert_called_once_with(invoice.pk)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.PROCESSING)
+
+        invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        parsed = {
+            "period": {},
+            "totals": {"amount_due": "900.00"},
+            "line_items": [],
+            "warnings": [],
+        }
+        with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
+            process_invoice(invoice.pk)
+
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.PROCESSED)
+        self.assertEqual(invoice.amount_due, Decimal("900.00"))
+        self.assertEqual(Invoice.objects.filter(user=self.user).count(), 1)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CanReparseFlagTest(TestCase):
+    """Флаг can_reparse повторяет правило и порог зависания из API."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="canreparse@example.com",
+            email="canreparse@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=self.user)
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+
+    def _can_reparse(self):
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data["can_reparse"]
+
+    def test_processed_and_failed_allow_reparse(self):
+        for state in (Invoice.Status.PROCESSED, Invoice.Status.FAILED):
+            Invoice.objects.filter(pk=self.invoice.pk).update(status=state)
+            self.assertTrue(self._can_reparse(), state)
+
+    def test_fresh_processing_forbids_reparse(self):
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING
+        )
+        self.assertFalse(self._can_reparse())
+
+    def test_stuck_processing_allows_reparse(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING,
+            updated_at=timezone.now() - timedelta(minutes=10),
+        )
+        self.assertTrue(self._can_reparse())

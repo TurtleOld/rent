@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from celery import shared_task
@@ -12,6 +12,10 @@ from .models import AMOUNT_DUE_UNKNOWN_WARNING, Invoice, LineItem, Service, Serv
 from .pdf_parser import parse_epd
 from .units import normalize_unit
 from .validators import run_all_checks
+
+# Обработка старше этого срока считается зависшей (жёсткий лимит задачи — 120 с),
+# и API снова разрешает повторный разбор.
+STUCK_AFTER = timedelta(minutes=5)
 
 
 def _json_serializable(obj: dict) -> dict:
