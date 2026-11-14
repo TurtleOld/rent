@@ -54,15 +54,11 @@ export default function ReportsPage() {
 
   const accountKeys = useMemo(() => Array.from(accounts.keys()), [accounts]);
 
-  useEffect(() => {
-    if (accountKeys.length > 0 && selectedAccount === null) {
-      setSelectedAccount(accountKeys[0]);
-    }
-  }, [accountKeys, selectedAccount]);
+  const currentAccount = selectedAccount ?? accountKeys[0] ?? null;
 
   const selectedInvoices = useMemo(
-    () => (selectedAccount ? (accounts.get(selectedAccount) ?? []) : []),
-    [accounts, selectedAccount],
+    () => (currentAccount ? (accounts.get(currentAccount) ?? []) : []),
+    [accounts, currentAccount],
   );
 
   const chartDataByAccount = useMemo(() => {
@@ -104,8 +100,8 @@ export default function ReportsPage() {
   }, [selectedInvoices]);
 
   const tariffRows = useMemo(
-    () => (selectedAccount ? buildTariffRows(invoices, selectedAccount) : []),
-    [invoices, selectedAccount],
+    () => (currentAccount ? buildTariffRows(invoices, currentAccount) : []),
+    [invoices, currentAccount],
   );
 
   if (loading) return <div className={styles.loading}>Загрузка...</div>;
@@ -157,7 +153,7 @@ export default function ReportsPage() {
             <div className={styles.accountPicker}>
               <select
                 className={styles.pickerSelect}
-                value={selectedAccount ?? ""}
+                value={currentAccount ?? ""}
                 onChange={(e) => setSelectedAccount(e.target.value)}
               >
                 {accountKeys.map((k) => (

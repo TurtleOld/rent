@@ -36,7 +36,7 @@ Under Orca supervision the injected preamble owns the lifecycle (heartbeats, `as
 
 ## Commands
 
-Backend tests, same as CI. Use Python 3.12: on 3.13 `psycopg2-binary` 2.9.9 fails to build.
+Backend tests, same as CI. Use Python 3.12, as in the Dockerfile.
 
 ```bash
 cd backend
@@ -50,10 +50,10 @@ The concurrent duplicate-upload test (`tests.test_invoices.ConcurrentDuplicateUp
 Frontend (Node 24, as in the Dockerfile):
 
 ```bash
-cd frontend && npm ci && npm test && npm run build
+cd frontend && npm ci && npm run lint && npm test && npm run build
 ```
 
-`npm run build` rewrites `frontend/tsconfig.json` and `frontend/next-env.d.ts`; restore them with `git checkout --` unless your issue is about them. `npm run lint` is broken (`next lint` was removed in Next 16), so the build's type check is the frontend gate.
+`npm run lint` uses the ESLint flat config. `npm run build` checks TypeScript and may rewrite `frontend/tsconfig.json` and `frontend/next-env.d.ts`; retain intentional compatibility changes and restore unrelated generated changes.
 
 Test PDFs are synthetic and come from `backend/tests/generate_fixtures.py` (needs `reportlab` and a DejaVu/Liberation font; not in `requirements.txt`). Commit regenerated fixtures together with the generator change. Real ЕПД never enter the repo, logs, issues or PRs.
 

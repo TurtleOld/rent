@@ -13,7 +13,7 @@ import {
 } from "./api";
 
 function backendAnswers(status: number, body: unknown) {
-  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => Response.json(body, { status }));
+  const fetchMock = vi.fn<typeof fetch>(async () => Response.json(body, { status }));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }

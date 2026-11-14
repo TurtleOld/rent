@@ -85,14 +85,11 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function loadInvoices() {
-    try {
-      setInvoices(await getInvoicesAll());
-    } catch {
-      setError("Не удалось загрузить квитанции");
-    } finally {
-      setLoading(false);
-    }
+  function loadInvoices() {
+    return getInvoicesAll()
+      .then(setInvoices)
+      .catch(() => setError("Не удалось загрузить квитанции"))
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {

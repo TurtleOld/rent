@@ -77,6 +77,37 @@ docker compose -f docker-compose.prod.yml exec celery id -u
 
 ---
 
+## Обновление production
+
+После принятия PR дождитесь успешной сборки и публикации образов в GitHub Actions.
+На уже работающем сервере сохраните предыдущий `IMAGE_TAG` для отката и обновите
+все контейнеры приложения одной версией:
+
+```bash
+export IMAGE_TAG=main
+docker compose -f docker-compose.prod.yml pull backend celery frontend nginx
+docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate backend celery frontend nginx
+docker compose -f docker-compose.prod.yml exec -T backend python -m pip check
+docker compose -f docker-compose.prod.yml exec -T celery celery -A config inspect ping --timeout 10
+```
+
+Вместо `main` можно указать опубликованный тег `sha-<короткий SHA>` для конкретного
+коммита. Backend и Celery используют один образ, поэтому обновляйте их вместе.
+Ожидаемые результаты проверок: `No broken requirements found` и ответ worker `pong`.
+Если worker не отвечает, проверьте `docker compose -f docker-compose.prod.yml logs --tail 100 celery`.
+После восстановления worker запустите повторный разбор квитанций, обработка
+которых завершилась ошибкой или зависла; исходные PDF для этого уже сохранены.
+
+Поддержка Redis устанавливается через `celery[redis]`: так установщик учитывает
+ограничения Redis-транспорта Kombu. CI проверяет совместимость клиента, запуск
+настоящего worker с Redis и выполнение проверочной задачи, а не только подменённый
+вызов отправки задачи.
+
+Версии TypeScript и ESLint согласованы с `eslint-config-next`. Для зависимости
+`minimatch` внутри `@typescript-eslint/typescript-estree` закреплено исправление
+11.0.8 через `overrides`: опубликованный парсер пока требует уязвимую ветку 10.
+Ограничение можно удалить, когда сам парсер перейдёт на исправленную версию.
+
 ## Переменные окружения
 
 | Переменная | Значение по умолчанию | Описание |
