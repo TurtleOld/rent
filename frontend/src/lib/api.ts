@@ -12,7 +12,10 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function requestWithStatus<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<{ data: T; status: number }> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -37,8 +40,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, `API error ${res.status}`, data);
   }
 
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  if (res.status === 204) return { data: undefined as T, status: res.status };
+  return { data: (await res.json()) as T, status: res.status };
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return (await requestWithStatus<T>(path, options)).data;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -126,10 +133,20 @@ export async function getInvoicesAll(): Promise<Invoice[]> {
   return all;
 }
 
-export async function uploadInvoice(file: File): Promise<Invoice> {
+export interface UploadResult {
+  invoice: Invoice;
+  duplicate: boolean;
+}
+
+export async function uploadInvoice(file: File): Promise<UploadResult> {
   const formData = new FormData();
   formData.append("pdf_file", file);
-  return request<Invoice>("/invoices/upload/", { method: "POST", body: formData });
+  const { data, status } = await requestWithStatus<Invoice>("/invoices/upload/", {
+    method: "POST",
+    body: formData,
+  });
+  // 200 вместо 201: такое содержимое уже загружено, квитанция не создана.
+  return { invoice: data, duplicate: status === 200 };
 }
 
 export async function getInvoice(id: number): Promise<Invoice> {

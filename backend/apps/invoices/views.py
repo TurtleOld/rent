@@ -1,12 +1,13 @@
 import logging
 
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, parsers, permissions, status, views
 from rest_framework.response import Response
 
-from .models import Invoice
+from .models import Invoice, pdf_content_hash
 from .serializers import InvoiceSerializer, InvoiceUploadSerializer, ManualAmountDueSerializer
 from .tasks import STUCK_AFTER, process_invoice
 
@@ -40,32 +41,68 @@ class InvoiceUploadView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [parsers.MultiPartParser]
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        invoice = serializer.instance
-        try:
-            process_invoice.delay(invoice.pk)
-        except Exception:
-            logger.exception("Не удалось поставить задачу разбора квитанции %s", invoice.pk)
-            # update, а не save: не воскрешаем квитанцию, удалённую во время запроса.
-            Invoice.objects.filter(pk=invoice.pk).update(
-                status=Invoice.Status.FAILED,
-                error_message=QUEUE_UNAVAILABLE_MESSAGE,
-                updated_at=timezone.now(),
-            )
-            return Response(
-                {"detail": QUEUE_UNAVAILABLE_MESSAGE},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        invoice, created = _get_or_create_invoice(
+            user=request.user,
+            pdf_file=serializer.validated_data["pdf_file"],
+        )
+        if created:
+            try:
+                process_invoice.delay(invoice.pk)
+            except Exception:
+                logger.exception(
+                    "Не удалось поставить задачу разбора квитанции %s", invoice.pk
+                )
+                # update, а не save: не воскрешаем квитанцию, удалённую во время запроса.
+                Invoice.objects.filter(pk=invoice.pk).update(
+                    status=Invoice.Status.FAILED,
+                    error_message=QUEUE_UNAVAILABLE_MESSAGE,
+                    updated_at=timezone.now(),
+                )
+                return Response(
+                    {"detail": QUEUE_UNAVAILABLE_MESSAGE},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
         return Response(
             InvoiceSerializer(invoice).data,
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+def _get_or_create_invoice(*, user, pdf_file) -> tuple[Invoice, bool]:
+    """Создаёт квитанцию или возвращает существующую с тем же содержимым PDF.
+
+    Уникальность гарантирует индекс (user, content_hash): предварительный
+    поиск лишь отсекает частый случай, а гонку параллельных загрузок
+    разрешает IntegrityError.
+
+    Args:
+        user: Владелец квитанции.
+        pdf_file: Загруженный PDF, уже проверенный сериализатором.
+
+    Returns:
+        Пара (квитанция, создана ли она этим вызовом).
+    """
+    content_hash = pdf_content_hash(pdf_file)
+    existing = Invoice.objects.filter(user=user, content_hash=content_hash).first()
+    if existing is not None:
+        return existing, False
+    invoice = Invoice(user=user, pdf_file=pdf_file, content_hash=content_hash)
+    try:
+        # Savepoint нужен, когда запрос уже в транзакции: иначе после
+        # IntegrityError следующая проверка упадёт на сломанной транзакции.
+        with transaction.atomic():
+            invoice.save()
+    except IntegrityError:
+        # Параллельная загрузка успела первой: файл проигравшей копии лишний.
+        try:
+            invoice.pdf_file.delete(save=False)
+        except Exception:
+            logger.exception("Не удалось удалить PDF проигравшей гонки квитанции")
+        return Invoice.objects.get(user=user, content_hash=content_hash), False
+    return invoice, True
 
 
 class InvoiceDetailView(generics.RetrieveDestroyAPIView):

@@ -55,13 +55,26 @@ describe("общий клиент API", () => {
     const fetchMock = backendAnswers(201, { id: 7 });
     const file = new File(["%PDF"], "bill.pdf", { type: "application/pdf" });
 
-    await expect(uploadInvoice(file)).resolves.toEqual({ id: 7 });
+    await expect(uploadInvoice(file)).resolves.toEqual({
+      invoice: { id: 7 },
+      duplicate: false,
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/invoices/upload/");
     expect(init?.body).toBeInstanceOf(FormData);
     expect((init?.body as FormData).get("pdf_file")).toBeInstanceOf(File);
     expect(new Headers(init?.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("ответ 200 означает, что квитанция уже была загружена", async () => {
+    backendAnswers(200, { id: 7 });
+    const file = new File(["%PDF"], "bill.pdf", { type: "application/pdf" });
+
+    await expect(uploadInvoice(file)).resolves.toEqual({
+      invoice: { id: 7 },
+      duplicate: true,
+    });
   });
 
   it("ошибка загрузки берёт причину из pdf_file", () => {

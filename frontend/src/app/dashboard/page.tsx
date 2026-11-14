@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Invoice, getInvoicesAll, uploadErrorMessage, uploadInvoice } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { upsertInvoice } from "@/lib/invoiceList";
 import { incompleteNote, unknownAmountNote } from "@/lib/reports";
 import styles from "./dashboard.module.css";
 
@@ -81,6 +82,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function loadInvoices() {
@@ -110,9 +112,17 @@ export default function DashboardPage() {
     if (!file) return;
     setUploading(true);
     setError(null);
+    setNotice(null);
     try {
-      const invoice = await uploadInvoice(file);
-      setInvoices((prev) => [invoice, ...prev]);
+      const { invoice, duplicate } = await uploadInvoice(file);
+      setInvoices((prev) => upsertInvoice(prev, invoice));
+      if (duplicate) {
+        setNotice(
+          invoice.status === "failed" || invoice.status === "incomplete"
+            ? "Эта квитанция уже загружена, но разбор неполный или завершился ошибкой. Откройте её и запустите повторный разбор."
+            : "Эта квитанция уже загружена.",
+        );
+      }
     } catch (err) {
       setError(uploadErrorMessage(err));
     } finally {
@@ -154,6 +164,7 @@ export default function DashboardPage() {
       </header>
 
       {error && <p className={styles.error}>{error}</p>}
+      {notice && <p className={styles.notice}>{notice}</p>}
 
       {loading ? (
         <p className={styles.placeholder}>Загрузка...</p>

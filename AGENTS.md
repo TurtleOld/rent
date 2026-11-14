@@ -45,6 +45,8 @@ SECRET_KEY=ci-only-secret DEBUG=False DATABASE_URL=sqlite:////tmp/ci.sqlite3 MED
   .venv/bin/python manage.py test tests
 ```
 
+The concurrent duplicate-upload test (`tests.test_invoices.ConcurrentDuplicateUploadTest`) is skipped on SQLite; CI runs it separately on PostgreSQL. To run it locally, point `DATABASE_URL` at PostgreSQL and run that test class.
+
 Frontend (Node 24, as in the Dockerfile):
 
 ```bash

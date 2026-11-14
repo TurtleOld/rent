@@ -76,6 +76,11 @@
   margin-bottom: 1rem;
 }
 
+.notice {
+  color: #4a5568;
+  margin-bottom: 1rem;
+}
+
 .placeholder {
   text-align: center;
   color: #6b7280;
