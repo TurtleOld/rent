@@ -30,6 +30,7 @@ FIXTURES_DIR.mkdir(exist_ok=True)
 OUTPUT = FIXTURES_DIR / "sample_epd.pdf"
 OUTPUT_TABLE5 = FIXTURES_DIR / "sample_epd_table5.pdf"
 OUTPUT_TABLE8 = FIXTURES_DIR / "sample_epd_table8.pdf"
+OUTPUT_PRECISION = FIXTURES_DIR / "sample_epd_precision.pdf"
 
 # ─── Шрифты ───
 
@@ -547,7 +548,39 @@ def generate_table8():
     print(f"Сгенерирован: {OUTPUT_TABLE8}")
 
 
+def generate_precision():
+    """ЕПД с объёмом до 7 и тарифом до 6 знаков после запятой."""
+    global _canvas
+    _canvas = canvas.Canvas(str(OUTPUT_PRECISION), pagesize=A4, invariant=1)
+    _, h = A4
+    y = table_header(h - 18 * mm, "март 2026",
+                     "18 892 руб. 02 коп.", "18 892 руб. 02 коп.")
+
+    col_x = [x * mm for x in (15, 85, 125, 145, 175, 195)]
+    y = table_row(y, 4 * mm, col_x,
+                  ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА МАРТ 2026г."],
+                  [5], size=7, bold=True)
+    y = table_row(y, 6.5 * mm, col_x,
+                  ["Виды услуг", "Объем, ед.изм.,\nтариф, руб.", "Начислено,\nруб.",
+                   "Задолженность /\nОплачено, руб.", "ИТОГО,\nруб."], size=6, bold=True)
+    y = table_row(y, 4 * mm, col_x, ["Начисления за коммунальные услуги"], [5])
+    y = table_row(y, 4 * mm, col_x,
+                  ["ОТОПЛЕНИЕ", "0.2468137 Гкал 76543.654321", "18 892,02", "0,00 0,00", "18 892,02"])
+    y = table_row(y, 4 * mm, col_x,
+                  ["Всего за март 2026 без учета добровольного страхования:",
+                   "18 892,02", "0,00 0,00", "18 892,02"], [2, 1, 1, 1], bold=True)
+
+    y -= 5 * mm
+    text_at(15 * mm, y, "Итого к оплате за март 2026 без учета добровольного страхования: 18 892,02",
+            7, bold=True)
+    meter_table(y - 6 * mm)
+
+    _canvas.save()
+    print(f"Сгенерирован: {OUTPUT_PRECISION}")
+
+
 if __name__ == "__main__":
     generate()
     generate_table5()
     generate_table8()
+    generate_precision()
