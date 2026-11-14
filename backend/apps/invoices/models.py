@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from decimal import Decimal
 
@@ -9,6 +10,22 @@ from django.dispatch import receiver
 logger = logging.getLogger(__name__)
 
 AMOUNT_DUE_UNKNOWN_WARNING = "Сумма к оплате не распознана"
+
+
+def pdf_content_hash(pdf_file) -> str:
+    """Вычисляет SHA-256 содержимого загруженного PDF.
+
+    Args:
+        pdf_file: Загруженный файл; после чтения указатель возвращается в начало.
+
+    Returns:
+        Шестнадцатеричный хэш содержимого файла.
+    """
+    digest = hashlib.sha256()
+    for chunk in pdf_file.chunks():
+        digest.update(chunk)
+    pdf_file.seek(0)
+    return digest.hexdigest()
 
 
 class Service(models.Model):
@@ -84,6 +101,12 @@ class Invoice(models.Model):
         related_name="invoices",
     )
     pdf_file = models.FileField(upload_to="invoices/")
+    content_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="SHA-256 содержимого PDF; защита от повторной загрузки",
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -156,6 +179,12 @@ class Invoice(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "content_hash"],
+                name="uniq_user_invoice_content_hash",
+            ),
+        ]
         ordering = ["-created_at"]
 
     def __str__(self) -> str:

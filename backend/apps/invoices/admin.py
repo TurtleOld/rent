@@ -18,7 +18,7 @@ class LineItemInline(admin.TabularInline):
 class InvoiceAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "provider_name", "status", "amount_due", "created_at")
     list_filter = ("status",)
-    readonly_fields = ("status", "raw_ai_response", "confidence", "warnings", "created_at", "updated_at")
+    readonly_fields = ("status", "content_hash", "raw_ai_response", "confidence", "warnings", "created_at", "updated_at")
     inlines = [LineItemInline]
 
 

@@ -1,11 +1,21 @@
+import hashlib
+import os
+import shutil
+import tempfile
+import threading
 from decimal import Decimal
+from importlib import import_module
+from unittest import skipUnless
 from unittest.mock import patch
 
+from django.apps import apps as global_apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import DatabaseError, connection
-from django.test import TestCase, override_settings
+from django.db import DatabaseError, IntegrityError, connection, connections
+from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -15,6 +25,7 @@ from apps.invoices.validators import check_line_item
 User = get_user_model()
 
 FAKE_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
+FAKE_PDF_HASH = hashlib.sha256(FAKE_PDF).hexdigest()
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -819,3 +830,204 @@ class ManualAmountDueTest(TestCase):
         self.assertIn("Сумма к оплате не распознана", detail["warnings"])
         self.assertNotIn("Сумма к оплате не распознана", self._set("700.00").data["warnings"])
         self.assertIn("Сумма к оплате не распознана", self._set(None).data["warnings"])
+
+
+UPLOAD_MEDIA_ROOT = tempfile.mkdtemp()
+RACE_MEDIA_ROOT = tempfile.mkdtemp()
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, MEDIA_ROOT=UPLOAD_MEDIA_ROOT)
+class DuplicateUploadTest(TestCase):
+    """Повторная загрузка того же PDF возвращает существующую квитанцию."""
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(UPLOAD_MEDIA_ROOT, ignore_errors=True)
+
+    def setUp(self):
+        shutil.rmtree(UPLOAD_MEDIA_ROOT, ignore_errors=True)
+        os.makedirs(UPLOAD_MEDIA_ROOT, exist_ok=True)
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="dup@example.com",
+            email="dup@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def _upload(self, content: bytes = FAKE_PDF, name: str = "epd.pdf"):
+        return self.client.post(
+            "/api/invoices/upload/",
+            {"pdf_file": SimpleUploadedFile(name, content, content_type="application/pdf")},
+            format="multipart",
+        )
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_same_content_returns_existing_invoice(self, mock_delay):
+        first = self._upload()
+        # Имя файла не определяет совпадение, только содержимое.
+        second = self._upload(name="копия.pdf")
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(first.data["id"], second.data["id"])
+        self.assertEqual(Invoice.objects.count(), 1)
+        mock_delay.assert_called_once()
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_duplicate_does_not_leave_second_file(self, mock_delay):
+        self._upload()
+        self._upload(name="copy.pdf")
+
+        _, filenames = default_storage.listdir("invoices/")
+        self.assertEqual(len(filenames), 1)
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_different_users_get_separate_invoices(self, mock_delay):
+        first = self._upload()
+        other = User.objects.create_user(
+            username="other-dup@example.com",
+            email="other-dup@example.com",
+            password="testpassword",
+        )
+        self.client.force_authenticate(user=other)
+        second = self._upload()
+
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(first.data["id"], second.data["id"])
+        self.assertEqual(Invoice.objects.count(), 2)
+        own_ids = [i["id"] for i in self.client.get("/api/invoices/").data["results"]]
+        self.assertEqual(own_ids, [second.data["id"]])
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_reupload_after_delete_creates_new_invoice(self, mock_delay):
+        first = self._upload()
+        pk = first.data["id"]
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.delete(f"/api/invoices/{pk}/")
+
+        second = self._upload()
+
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+        self.assertNotEqual(second.data["id"], pk)
+        self.assertEqual(Invoice.objects.count(), 1)
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_failed_invoice_reupload_allows_reparse(self, mock_delay):
+        first = self._upload()
+        Invoice.objects.filter(pk=first.data["id"]).update(status=Invoice.Status.FAILED)
+
+        second = self._upload()
+
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.data["id"], first.data["id"])
+        self.assertEqual(second.data["status"], "failed")
+        mock_delay.assert_called_once()
+
+        response = self.client.post(f"/api/invoices/{first.data['id']}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(mock_delay.call_count, 2)
+
+    def test_backfill_keeps_historical_duplicates(self):
+        first = Invoice.objects.create(
+            user=self.user, pdf_file=ContentFile(FAKE_PDF, name="old-a.pdf")
+        )
+        second = Invoice.objects.create(
+            user=self.user, pdf_file=ContentFile(FAKE_PDF, name="old-b.pdf")
+        )
+
+        migration = import_module("apps.invoices.migrations.0011_invoice_content_hash")
+        migration.fill_content_hash(global_apps, None)
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.content_hash, FAKE_PDF_HASH)
+        self.assertIsNone(second.content_hash)
+        self.assertEqual(Invoice.objects.count(), 2)
+
+    def test_db_blocks_second_invoice_with_same_content_hash(self):
+        Invoice.objects.create(
+            user=self.user, pdf_file="invoices/a.pdf", content_hash=FAKE_PDF_HASH
+        )
+        with self.assertRaises(IntegrityError):
+            Invoice.objects.create(
+                user=self.user, pdf_file="invoices/b.pdf", content_hash=FAKE_PDF_HASH
+            )
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_raced_insert_returns_existing_and_cleans_file(self, mock_delay):
+        # Проигравшая гонка: предварительный поиск промахнулся,
+        # вставку отклонил уникальный индекс.
+        existing = Invoice(user=self.user)
+        existing.pdf_file.save("epd.pdf", ContentFile(FAKE_PDF), save=True)
+        Invoice.objects.filter(pk=existing.pk).update(content_hash=FAKE_PDF_HASH)
+
+        with patch.object(Invoice.objects, "filter", return_value=Invoice.objects.none()):
+            response = self._upload()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], existing.pk)
+        self.assertEqual(Invoice.objects.count(), 1)
+        mock_delay.assert_not_called()
+        _, filenames = default_storage.listdir("invoices/")
+        self.assertEqual(filenames, [existing.pdf_file.name.rsplit("/", 1)[-1]])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, MEDIA_ROOT=RACE_MEDIA_ROOT)
+@skipUnless(
+    "postgresql" in settings.DATABASES["default"]["ENGINE"],
+    "Конкурентную запись проверяем на PostgreSQL",
+)
+class ConcurrentDuplicateUploadTest(TransactionTestCase):
+    """Параллельные загрузки одного PDF создают одну квитанцию."""
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(RACE_MEDIA_ROOT, ignore_errors=True)
+
+    def setUp(self):
+        shutil.rmtree(RACE_MEDIA_ROOT, ignore_errors=True)
+        os.makedirs(RACE_MEDIA_ROOT, exist_ok=True)
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_parallel_uploads_create_one_invoice(self, mock_delay):
+        user = User.objects.create_user(
+            username="race@example.com",
+            email="race@example.com",
+            password="testpassword",
+        )
+        barrier = threading.Barrier(2)
+        responses = []
+
+        def worker(name: str) -> None:
+            try:
+                client = APIClient()
+                client.force_authenticate(user=user)
+                barrier.wait(timeout=10)
+                responses.append(
+                    client.post(
+                        "/api/invoices/upload/",
+                        {
+                            "pdf_file": SimpleUploadedFile(
+                                name, FAKE_PDF, content_type="application/pdf"
+                            )
+                        },
+                        format="multipart",
+                    )
+                )
+            finally:
+                connections.close_all()
+
+        threads = [
+            threading.Thread(target=worker, args=(name,)) for name in ("a.pdf", "b.pdf")
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+
+        self.assertEqual(sorted(r.status_code for r in responses), [200, 201])
+        self.assertEqual(len({r.data["id"] for r in responses}), 1)
+        self.assertEqual(Invoice.objects.count(), 1)
