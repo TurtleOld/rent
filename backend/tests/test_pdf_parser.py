@@ -31,6 +31,8 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SAMPLE_PDF = FIXTURES_DIR / "sample_epd.pdf"
 TABLE5_PDF = FIXTURES_DIR / "sample_epd_table5.pdf"
 TABLE8_PDF = FIXTURES_DIR / "sample_epd_table8.pdf"
+MULTIPAGE_PDF = FIXTURES_DIR / "sample_epd_multipage.pdf"
+TWO_DOCUMENTS_PDF = FIXTURES_DIR / "sample_epd_two_documents.pdf"
 
 
 class TestParseRussianNumber(unittest.TestCase):
@@ -487,6 +489,77 @@ class TestTable8Format(_TableFixtureMixin, unittest.TestCase):
 
     def test_amount_due(self):
         self.assertEqual(self.result["totals"]["amount_due"], Decimal("5968.20"))
+
+
+class TestMultipageContinuation(unittest.TestCase):
+    """Таблица начислений одной квитанции продолжается на второй странице."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with pdfplumber.open(MULTIPAGE_PDF) as pdf:
+            cls.tables = [t for page in pdf.pages for t in page.extract_tables()]
+        with open(MULTIPAGE_PDF, "rb") as f:
+            cls.result = parse_epd(f)
+
+    def test_line_items_from_both_pages(self):
+        self.assertEqual(
+            [i["service_name"] for i in self.result["line_items"]],
+            [
+                "СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ",
+                "ТЕКУЩИЙ РЕМОНТ",
+                "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ",
+            ],
+        )
+
+    def test_first_page_amount(self):
+        item = self.result["line_items"][0]
+        self.assertEqual(item["quantity"], Decimal("48.00"))
+        self.assertEqual(item["unit"], "кв.м.")
+        self.assertEqual(item["tariff"], Decimal("25.00"))
+        self.assertEqual(item["amount_charged"], Decimal("1200.00"))
+        self.assertEqual(item["debt"], Decimal("100.00"))
+        self.assertEqual(item["paid"], Decimal("100.00"))
+        self.assertEqual(item["amount"], Decimal("1200.00"))
+
+    def test_second_page_amount(self):
+        item = self.result["line_items"][1]
+        self.assertEqual(item["quantity"], Decimal("20.00"))
+        self.assertEqual(item["unit"], "кв.м.")
+        self.assertEqual(item["tariff"], Decimal("40.00"))
+        self.assertEqual(item["amount_charged"], Decimal("800.00"))
+        self.assertEqual(item["amount"], Decimal("800.00"))
+
+    def test_repeated_headers_and_totals_are_not_services(self):
+        for item in self.result["line_items"]:
+            name = item["service_name"].lower()
+            self.assertFalse(name.startswith("всего"))
+            self.assertFalse(name.startswith("итого"))
+            self.assertNotIn("расчет размера", name)
+
+    def test_totals_from_last_page(self):
+        totals = {}
+        _parse_merge_totals_from_tables(self.tables, totals)
+        self.assertEqual(totals, {
+            "amount_charged": Decimal("2000.00"),
+            "amount_paid": Decimal("100.00"),
+            "amount_due_without_insurance": Decimal("2000.00"),
+            "amount_due_with_insurance": Decimal("2096.00"),
+        })
+        self.assertEqual(self.result["totals"]["amount_due"], Decimal("2000.00"))
+
+    def test_no_warnings(self):
+        self.assertEqual(self.result["warnings"], [])
+        self.assertEqual(self.result["confidence"], 1.0)
+
+
+class TestMultipleDocuments(unittest.TestCase):
+    """Объединённый файл с несколькими ЕПД не поддерживается."""
+
+    def test_clear_error(self):
+        with open(TWO_DOCUMENTS_PDF, "rb") as f:
+            with self.assertRaisesRegex(ValueError, "несколько квитанций"):
+                parse_epd(f)
 
 
 class TestPaidAndTotalColumns(unittest.TestCase):

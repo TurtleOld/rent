@@ -1,4 +1,5 @@
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
@@ -15,6 +16,10 @@ from apps.invoices.validators import check_line_item
 User = get_user_model()
 
 FAKE_PDF = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF"
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+MULTIPAGE_PDF = FIXTURES_DIR / "sample_epd_multipage.pdf"
+TWO_DOCUMENTS_PDF = FIXTURES_DIR / "sample_epd_two_documents.pdf"
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -374,6 +379,80 @@ class LineItemPaidTest(TestCase):
         response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["line_items"][0]["paid"], "40.00")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class MultipageInvoiceTest(TestCase):
+    """Многостраничная квитанция обрабатывается целиком, без обрезанных услуг."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="multipage@example.com",
+            email="multipage@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _process(self, fixture: Path) -> None:
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        self.invoice.pdf_file.save(
+            "multipage.pdf", ContentFile(fixture.read_bytes()), save=True
+        )
+        process_invoice(self.invoice.pk)
+        self.invoice.refresh_from_db()
+
+    def test_all_services_saved_with_exact_amounts(self):
+        self._process(MULTIPAGE_PDF)
+
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSED)
+        items = {li.service_name: li for li in self.invoice.line_items.all()}
+        self.assertEqual(set(items), {
+            "СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ",
+            "ТЕКУЩИЙ РЕМОНТ",
+            "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ",
+        })
+        self.assertEqual(items["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ"].amount, Decimal("1200.00"))
+        self.assertEqual(items["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ"].paid, Decimal("100.00"))
+        self.assertEqual(items["ТЕКУЩИЙ РЕМОНТ"].amount, Decimal("800.00"))
+        self.assertEqual(items["ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ"].amount, Decimal("96.00"))
+        self.assertEqual(self.invoice.amount_due, Decimal("2000.00"))
+        self.assertEqual(self.invoice.amount_paid_ai, Decimal("100.00"))
+        self.assertEqual(self.invoice.amount_due_without_insurance, Decimal("2000.00"))
+        self.assertEqual(self.invoice.amount_due_with_insurance, Decimal("2096.00"))
+
+    def test_no_false_line_total_warning(self):
+        self._process(MULTIPAGE_PDF)
+
+        self.assertFalse(any("Сумма по строкам" in w for w in self.invoice.warnings))
+        self.assertEqual(self.invoice.warnings, [])
+
+    def test_api_returns_every_service(self):
+        self._process(MULTIPAGE_PDF)
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        amounts = {i["service_name"]: i["amount"] for i in response.data["line_items"]}
+        self.assertEqual(amounts, {
+            "СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ": "1200.00",
+            "ТЕКУЩИЙ РЕМОНТ": "800.00",
+            "ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ": "96.00",
+        })
+
+    def test_two_documents_fail_with_clear_error(self):
+        self._process(TWO_DOCUMENTS_PDF)
+
+        self.assertEqual(self.invoice.status, Invoice.Status.FAILED)
+        self.assertIn("несколько квитанций", self.invoice.error_message)
+        self.assertEqual(LineItem.objects.filter(invoice=self.invoice).count(), 0)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

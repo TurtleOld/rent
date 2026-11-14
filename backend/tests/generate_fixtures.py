@@ -30,6 +30,8 @@ FIXTURES_DIR.mkdir(exist_ok=True)
 OUTPUT = FIXTURES_DIR / "sample_epd.pdf"
 OUTPUT_TABLE5 = FIXTURES_DIR / "sample_epd_table5.pdf"
 OUTPUT_TABLE8 = FIXTURES_DIR / "sample_epd_table8.pdf"
+OUTPUT_MULTIPAGE = FIXTURES_DIR / "sample_epd_multipage.pdf"
+OUTPUT_TWO_DOCUMENTS = FIXTURES_DIR / "sample_epd_two_documents.pdf"
 
 # ─── Шрифты ───
 
@@ -425,6 +427,25 @@ def generate():
     print(f"Сгенерирован: {OUTPUT}")
 
 
+def _table5_columns():
+    return [x * mm for x in (15, 85, 125, 145, 175, 195)]
+
+
+def _table5_header(y, col_x):
+    return table_row(
+        y, 6.5 * mm, col_x,
+        ["Виды услуг", "Объем, ед.изм.,\nтариф, руб.", "Начислено,\nруб.",
+         "Задолженность /\nОплачено, руб.", "ИТОГО,\nруб."], size=6, bold=True,
+    )
+
+
+def _table5_summary(y, col_x, label, charged, debt_paid, total):
+    return table_row(
+        y, 4 * mm, col_x, [label, charged, debt_paid, total],
+        [2, 1, 1, 1], bold=True,
+    )
+
+
 def generate_table5():
     """ЕПД без перерасчётов: таблица начислений в 5 колонок."""
     global _canvas
@@ -433,19 +454,14 @@ def generate_table5():
     y = table_header(h - 18 * mm, "январь 2026",
                      "6 095 руб. 18 коп.", "5 835 руб. 50 коп.")
 
-    col_x = [x * mm for x in (15, 85, 125, 145, 175, 195)]
+    col_x = _table5_columns()
     y = table_row(y, 4 * mm, col_x,
                   ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА ЯНВАРЬ 2026г."],
                   [5], size=7, bold=True)
-    y = table_row(y, 6.5 * mm, col_x,
-                  ["Виды услуг", "Объем, ед.изм.,\nтариф, руб.", "Начислено,\nруб.",
-                   "Задолженность /\nОплачено, руб.", "ИТОГО,\nруб."], size=6, bold=True)
+    y = _table5_header(y, col_x)
 
     def section(title):
         return table_row(y, 4 * mm, col_x, [title], [5])
-
-    def summary(label, charged, debt_paid, total):
-        return table_row(y, 4 * mm, col_x, [label, charged, debt_paid, total], [2, 1, 1, 1], bold=True)
 
     y = section("Начисления за жилищные услуги")
     # В реальных ЕПД объём бывает перенесён в ячейку названия услуги второй строкой.
@@ -467,12 +483,14 @@ def generate_table5():
     y = section("Начисления за иные услуги")
     y = table_row(y, 4 * mm, col_x,
                   ["ЗАПИРАЮЩЕЕ УСТРОЙСТВО", "1.00 абонент 60.00", "60,00", "0,00 0,00", "60,00"])
-    y = summary("Всего за январь 2026 без учета добровольного страхования:",
-                "5 848,55", "51,70 150,00", "5 835,50")
+    y = _table5_summary(y, col_x,
+                        "Всего за январь 2026 без учета добровольного страхования:",
+                        "5 848,55", "51,70 150,00", "5 835,50")
     y = table_row(y, 4 * mm, col_x,
                   ["ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ", "48.00 кв.м. 5.41", "259,68", "0,00 0,00", "259,68"])
-    y = summary("Всего за январь 2026 с учетом добровольного страхования :",
-                "6 108,23", "51,70 150,00", "6 095,18")
+    y = _table5_summary(y, col_x,
+                        "Всего за январь 2026 с учетом добровольного страхования :",
+                        "6 108,23", "51,70 150,00", "6 095,18")
 
     y -= 5 * mm
     text_at(15 * mm, y, "Итого к оплате за январь 2026 без учета добровольного страхования: 5 835,50",
@@ -547,7 +565,87 @@ def generate_table8():
     print(f"Сгенерирован: {OUTPUT_TABLE8}")
 
 
+def generate_multipage():
+    """ЕПД, таблица начислений которого продолжается на второй странице."""
+    global _canvas
+    _canvas = canvas.Canvas(str(OUTPUT_MULTIPAGE), pagesize=A4, invariant=1)
+    _, h = A4
+    col_x = _table5_columns()
+    y = table_header(h - 18 * mm, "март 2026",
+                     "2 096 руб. 00 коп.", "2 000 руб. 00 коп.")
+
+    y = table_row(y, 4 * mm, col_x,
+                  ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА МАРТ 2026г."],
+                  [5], size=7, bold=True)
+    y = _table5_header(y, col_x)
+    y = table_row(y, 4 * mm, col_x, ["Начисления за жилищные услуги"], [5])
+    y = table_row(y, 4 * mm, col_x,
+                  ["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ", "48.00 кв.м. 25.00",
+                   "1 200,00", "100,00 100,00", "1 200,00"])
+
+    # Продолжение той же таблицы: заголовок повторяется, шапки ЕПД уже нет.
+    _canvas.showPage()
+    y = h - 18 * mm
+    y = table_row(y, 4 * mm, col_x,
+                  ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА МАРТ 2026г."],
+                  [5], size=7, bold=True)
+    y = _table5_header(y, col_x)
+    y = table_row(y, 4 * mm, col_x, ["Начисления за коммунальные услуги"], [5])
+    y = table_row(y, 4 * mm, col_x,
+                  ["ТЕКУЩИЙ РЕМОНТ", "20.00 кв.м. 40.00", "800,00", "0,00 0,00", "800,00"])
+    y = _table5_summary(y, col_x,
+                        "Всего за март 2026 без учета добровольного страхования:",
+                        "2 000,00", "100,00 100,00", "2 000,00")
+    y = table_row(y, 4 * mm, col_x,
+                  ["ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ", "48.00 кв.м. 2.00", "96,00", "0,00 0,00", "96,00"])
+    y = _table5_summary(y, col_x,
+                        "Всего за март 2026 с учетом добровольного страхования :",
+                        "2 096,00", "100,00 100,00", "2 096,00")
+
+    y -= 5 * mm
+    text_at(15 * mm, y,
+            "Итого к оплате за март 2026 без учета добровольного страхования: 2 000,00",
+            7, bold=True)
+    y -= 3.5 * mm
+    text_at(15 * mm, y,
+            "Итого к оплате за март 2026 с учетом добровольного страхования: 2 096,00",
+            7, bold=True)
+
+    _canvas.save()
+    print(f"Сгенерирован: {OUTPUT_MULTIPAGE}")
+
+
+def generate_two_documents():
+    """Объединённый PDF с двумя отдельными ЕПД: парсер должен явно отказать."""
+    global _canvas
+    _canvas = canvas.Canvas(str(OUTPUT_TWO_DOCUMENTS), pagesize=A4, invariant=1)
+    _, h = A4
+    col_x = _table5_columns()
+    documents = (
+        ("апрель 2026", "1 000 руб. 00 коп.", "1 000,00"),
+        ("май 2026", "1 100 руб. 00 коп.", "1 100,00"),
+    )
+    for period, header_amount, amount in documents:
+        y = table_header(h - 18 * mm, period, header_amount, header_amount)
+        y = table_row(y, 4 * mm, col_x,
+                      [f"РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА {period.upper()}г."],
+                      [5], size=7, bold=True)
+        y = _table5_header(y, col_x)
+        y = table_row(y, 4 * mm, col_x,
+                      ["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ", "40.00 кв.м. 25.00",
+                       amount, "0,00 0,00", amount])
+        y = _table5_summary(y, col_x,
+                            f"Всего за {period} без учета добровольного страхования:",
+                            amount, "0,00 0,00", amount)
+        _canvas.showPage()
+
+    _canvas.save()
+    print(f"Сгенерирован: {OUTPUT_TWO_DOCUMENTS}")
+
+
 if __name__ == "__main__":
     generate()
     generate_table5()
     generate_table8()
+    generate_multipage()
+    generate_two_documents()
