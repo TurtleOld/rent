@@ -140,3 +140,18 @@ export function unknownAmountNote(invoices: Invoice[]): string | null {
   const word = n % 10 === 1 && n % 100 !== 11 ? "квитанции" : "квитанций";
   return `без учёта ${n} ${word}`;
 }
+
+// Неполные квитанции (без распознанных услуг) исключаются из итогов и графиков — об этом надо сказать.
+export function incompleteNote(invoices: Invoice[]): string | null {
+  const n = invoices.filter((inv) => inv.status === "incomplete").length;
+  if (n === 0) return null;
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  const phrase =
+    mod10 === 1 && mod100 !== 11
+      ? "неполная квитанция исключена"
+      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? "неполные квитанции исключены"
+        : "неполных квитанций исключены";
+  return `${n} ${phrase} из итогов и графиков`;
+}

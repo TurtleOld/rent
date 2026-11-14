@@ -6,6 +6,7 @@ import {
   type Invoice,
   deleteInvoice,
   getInvoice,
+  invoiceFileUrl,
   manualAmountDueErrorMessage,
   reparseErrorMessage,
   reparseInvoice,
@@ -16,6 +17,7 @@ import styles from "./invoice.module.css";
 const STATUS_LABELS: Record<string, string> = {
   processing: "Обрабатывается",
   processed: "Обработан",
+  incomplete: "Обработан частично",
   failed: "Ошибка",
 };
 
@@ -114,6 +116,14 @@ export default function InvoiceDetailPage() {
         <div className={styles.sectionHeader}>
           <h2 className={styles.sectionTitle}>Данные квитанции</h2>
           <div className={styles.headerActions}>
+            <a
+              href={invoiceFileUrl(invoice.id)}
+              target="_blank"
+              rel="noreferrer"
+              className={styles.editBtn}
+            >
+              Открыть PDF
+            </a>
             {invoice.can_reparse && (
               <button onClick={handleReparse} disabled={saving} className={styles.editBtn}>
                 Перепарсить PDF

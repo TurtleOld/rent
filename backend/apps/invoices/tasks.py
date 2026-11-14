@@ -8,7 +8,14 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.db import transaction
 from django.utils import timezone
 
-from .models import AMOUNT_DUE_UNKNOWN_WARNING, Invoice, LineItem, Service, ServiceAlias
+from .models import (
+    AMOUNT_DUE_UNKNOWN_WARNING,
+    NO_SERVICES_WARNING,
+    Invoice,
+    LineItem,
+    Service,
+    ServiceAlias,
+)
 from .pdf_parser import parse_epd
 from .units import normalize_unit
 from .validators import run_all_checks
@@ -141,7 +148,6 @@ def _do_process(invoice: Invoice) -> None:
     invoice.warnings = parsed_data.get("warnings") or []
     if invoice.amount_due is None:
         invoice.warnings.append(AMOUNT_DUE_UNKNOWN_WARNING)
-    invoice.status = Invoice.Status.PROCESSED
     invoice.error_message = None
 
     line_items_data = parsed_data.get("line_items") or []
@@ -175,6 +181,14 @@ def _do_process(invoice: Invoice) -> None:
 
     if unit_warnings:
         invoice.warnings = (invoice.warnings or []) + unit_warnings
+
+    # Квитанция без единой распознанной услуги не годится для графиков:
+    # это неуспешный разбор, а не полноценный результат.
+    if line_items:
+        invoice.status = Invoice.Status.PROCESSED
+    else:
+        invoice.status = Invoice.Status.INCOMPLETE
+        invoice.warnings.append(NO_SERVICES_WARNING)
 
     with transaction.atomic():
         if not _update_invoice(invoice, _PARSED_FIELDS):

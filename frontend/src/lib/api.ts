@@ -78,7 +78,7 @@ export interface LineItem {
 export interface Invoice {
   id: number;
   pdf_file: string;
-  status: "processing" | "processed" | "failed";
+  status: "processing" | "processed" | "incomplete" | "failed";
   error_message: string | null;
   can_reparse: boolean;
   provider_name: string | null;

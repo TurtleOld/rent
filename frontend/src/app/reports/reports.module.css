@@ -41,6 +41,15 @@
   margin-bottom: 1rem;
 }
 
+.note {
+  color: #9a3412;
+  background: #ffedd5;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
 .empty {
   color: #6b7280;
   text-align: center;

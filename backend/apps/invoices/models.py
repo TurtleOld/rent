@@ -9,6 +9,7 @@ from django.dispatch import receiver
 logger = logging.getLogger(__name__)
 
 AMOUNT_DUE_UNKNOWN_WARNING = "Сумма к оплате не распознана"
+NO_SERVICES_WARNING = "Не распознана ни одна услуга — квитанция исключена из графиков и итогов"
 
 
 class Service(models.Model):
@@ -76,6 +77,7 @@ class Invoice(models.Model):
     class Status(models.TextChoices):
         PROCESSING = "processing", "Обрабатывается"
         PROCESSED = "processed", "Обработан"
+        INCOMPLETE = "incomplete", "Обработан частично"
         FAILED = "failed", "Ошибка"
 
     user = models.ForeignKey(
