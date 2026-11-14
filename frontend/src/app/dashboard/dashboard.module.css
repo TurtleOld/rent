@@ -166,6 +166,11 @@
   color: #065f46;
 }
 
+.badge__incomplete {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
 .badge__failed {
   background: #fee2e2;
   color: #991b1b;

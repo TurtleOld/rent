@@ -9,7 +9,13 @@ from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.invoices.models import Invoice, LineItem, Service, ServiceAlias
+from apps.invoices.models import (
+    NO_SERVICES_WARNING,
+    Invoice,
+    LineItem,
+    Service,
+    ServiceAlias,
+)
 from apps.invoices.validators import check_line_item
 
 User = get_user_model()
@@ -684,7 +690,12 @@ class AmountDueWarningTest(TestCase):
         from apps.invoices.tasks import process_invoice
 
         self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
-        parsed = {"period": {}, "totals": totals, "line_items": [], "warnings": []}
+        parsed = {
+            "period": {},
+            "totals": totals,
+            "line_items": [{"service_name": "ОТОПЛЕНИЕ", "amount": "10.00"}],
+            "warnings": [],
+        }
         with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
             process_invoice(self.invoice.pk)
         self.invoice.refresh_from_db()
@@ -781,7 +792,7 @@ class ManualAmountDueTest(TestCase):
         self.assertIsNone(self.invoice.manual_amount_due)
 
     def test_rejected_unless_processed(self):
-        for state in (Invoice.Status.FAILED, Invoice.Status.PROCESSING):
+        for state in (Invoice.Status.FAILED, Invoice.Status.PROCESSING, Invoice.Status.INCOMPLETE):
             Invoice.objects.filter(pk=self.invoice.pk).update(status=state)
             response = self._set("700.00")
             self.assertEqual(response.status_code, status.HTTP_409_CONFLICT, state)
@@ -819,3 +830,139 @@ class ManualAmountDueTest(TestCase):
         self.assertIn("Сумма к оплате не распознана", detail["warnings"])
         self.assertNotIn("Сумма к оплате не распознана", self._set("700.00").data["warnings"])
         self.assertIn("Сумма к оплате не распознана", self._set(None).data["warnings"])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class IncompleteExtractionTest(TestCase):
+    """Разбор без единой услуги — неполный результат, а не «Обработан»."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="incomplete@example.com",
+            email="incomplete@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+
+    def _process(self, parsed: dict) -> None:
+        from django.core.files.base import ContentFile
+
+        from apps.invoices.tasks import process_invoice
+
+        # FieldFile.save(save=True) пишет весь инстанс — сначала подтягиваем свежий.
+        self.invoice.refresh_from_db()
+        self.invoice.pdf_file.save("test.pdf", ContentFile(FAKE_PDF), save=True)
+        with patch("apps.invoices.tasks.parse_epd", return_value=parsed):
+            process_invoice(self.invoice.pk)
+        self.invoice.refresh_from_db()
+
+    @staticmethod
+    def _parsed(totals: dict, line_items: list[dict]) -> dict:
+        return {
+            "period": {"month": 1, "year": 2026, "start_date": None, "end_date": None},
+            "totals": totals,
+            "line_items": line_items,
+            "warnings": [],
+        }
+
+    def test_known_amount_without_services_is_incomplete(self):
+        self._process(self._parsed({"amount_due": "3600.00"}, []))
+
+        self.assertEqual(self.invoice.status, Invoice.Status.INCOMPLETE)
+        self.assertIn(NO_SERVICES_WARNING, self.invoice.warnings)
+        # PDF и распознанные значения сохраняются
+        self.assertEqual(self.invoice.amount_due, Decimal("3600.00"))
+        self.assertTrue(self.invoice.pdf_file)
+
+        self.client.force_authenticate(user=self.user)
+        data = self.client.get(f"/api/invoices/{self.invoice.pk}/").data
+        self.assertEqual(data["status"], "incomplete")
+        self.assertIn(NO_SERVICES_WARNING, data["warnings"])
+
+    def test_fully_empty_result_is_incomplete(self):
+        self._process(self._parsed({}, []))
+
+        self.assertEqual(self.invoice.status, Invoice.Status.INCOMPLETE)
+        self.assertIn(NO_SERVICES_WARNING, self.invoice.warnings)
+        self.assertIn("Сумма к оплате не распознана", self.invoice.warnings)
+
+    def test_normal_invoice_stays_processed(self):
+        self._process(
+            self._parsed(
+                {"amount_due": "100.00"},
+                [{"service_name": "ОТОПЛЕНИЕ", "amount": "100.00"}],
+            )
+        )
+
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSED)
+        self.assertNotIn(NO_SERVICES_WARNING, self.invoice.warnings)
+
+    def test_successful_reparse_restores_processed(self):
+        self._process(self._parsed({"amount_due": "3600.00"}, []))
+        self.assertEqual(self.invoice.status, Invoice.Status.INCOMPLETE)
+
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.PROCESSING, warnings=[]
+        )
+        self._process(
+            self._parsed(
+                {"amount_due": "3600.00"},
+                [{"service_name": "ОТОПЛЕНИЕ", "amount": "3600.00"}],
+            )
+        )
+
+        self.assertEqual(self.invoice.status, Invoice.Status.PROCESSED)
+        self.assertNotIn(NO_SERVICES_WARNING, self.invoice.warnings)
+        self.assertEqual(
+            LineItem.objects.filter(invoice=self.invoice).count(), 1
+        )
+
+    @patch("apps.invoices.views.process_invoice.delay")
+    def test_reparse_endpoint_allows_incomplete(self, mock_delay):
+        Invoice.objects.filter(pk=self.invoice.pk).update(
+            status=Invoice.Status.INCOMPLETE
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(f"/api/invoices/{self.invoice.pk}/reparse/")
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        mock_delay.assert_called_once_with(self.invoice.pk)
+
+    def test_existing_processed_without_services_marked_incomplete(self):
+        import importlib
+
+        migration = importlib.import_module(
+            "apps.invoices.migrations.0011_invoice_incomplete_status"
+        )
+        from django.apps import apps as global_apps
+
+        old_empty = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/old_empty.pdf",
+            status=Invoice.Status.PROCESSED,
+            amount_due=Decimal("3600.00"),
+        )
+        old_normal = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/old_normal.pdf",
+            status=Invoice.Status.PROCESSED,
+        )
+        LineItem.objects.create(
+            invoice=old_normal, service_name="ХВС", amount=Decimal("50.00")
+        )
+
+        migration.mark_incomplete_without_services(global_apps, None)
+
+        old_empty.refresh_from_db()
+        old_normal.refresh_from_db()
+        self.assertEqual(old_empty.status, Invoice.Status.INCOMPLETE)
+        self.assertIn(NO_SERVICES_WARNING, old_empty.warnings)
+        # Распознанная сумма и PDF не тронуты
+        self.assertEqual(old_empty.amount_due, Decimal("3600.00"))
+        self.assertEqual(old_empty.pdf_file.name, "invoices/old_empty.pdf")
+        self.assertEqual(old_normal.status, Invoice.Status.PROCESSED)
+        self.assertNotIn(NO_SERVICES_WARNING, old_normal.warnings)

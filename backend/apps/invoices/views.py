@@ -74,11 +74,11 @@ class InvoiceFileDownloadView(views.APIView):
 
 
 class InvoiceReparseView(views.APIView):
-    """Resets invoice status to PROCESSING and re-queues the parsing task.
+    """Сбрасывает статус в PROCESSING и ставит разбор в очередь.
 
-    Available in 'processed' or 'failed' state, or when 'processing' is stuck
-    (worker died mid-task) for longer than STUCK_AFTER.
-    Clears error_message and warnings; line_items are rebuilt by the task.
+    Доступно в статусах «Обработан», «Обработан частично» и «Ошибка», а также
+    когда «Обрабатывается» зависло дольше STUCK_AFTER (воркер умер посреди
+    задачи). Очищает error_message и warnings; line_items пересобирает задача.
     """
 
     permission_classes = [permissions.IsAuthenticated]

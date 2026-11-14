@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Invoice, getInvoicesAll } from "@/lib/api";
-import { periodKey, periodLabel, serviceKey, unknownAmountNote } from "@/lib/reports";
+import { incompleteNote, periodKey, periodLabel, serviceKey, unknownAmountNote } from "@/lib/reports";
 import LineChart, { type ChartPoint } from "@/components/LineChart";
 import ServiceChart, { type ServiceRow } from "@/components/ServiceChart";
 import TariffDynamicsTable, { type TariffRow } from "@/components/TariffDynamicsTable";
@@ -18,9 +18,15 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
 
+  const [incomplete, setIncomplete] = useState<string | null>(null);
+
   useEffect(() => {
     getInvoicesAll()
-      .then((data) => setInvoices(data.filter((inv) => inv.status === "processed")))
+      .then((data) => {
+        // Неполные квитанции (без распознанных услуг) в отчёты не входят.
+        setIncomplete(incompleteNote(data));
+        setInvoices(data.filter((inv) => inv.status === "processed"));
+      })
       .catch(() => setError("Не удалось загрузить данные"))
       .finally(() => setLoading(false));
   }, []);
@@ -130,6 +136,8 @@ export default function ReportsPage() {
       </div>
 
       {error && <p className={styles.error}>{error}</p>}
+
+      {incomplete && <p className={styles.note}>{incomplete}</p>}
 
       {invoices.length === 0 && !error && (
         <p className={styles.empty}>Нет обработанных квитанций для построения отчётов.</p>
