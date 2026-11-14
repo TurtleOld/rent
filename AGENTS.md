@@ -1,82 +1,103 @@
 # AGENTS.md
 
-## Продукт
+Utility-bill tracker for Russian ЖКХ (ЕПД). Django REST + Celery parse uploaded PDFs with pdfplumber and regexes (no AI); Next.js serves the UI and proxies `/api` to Django; nginx sits in front. Data is personal (ФИО, address, account number) and money.
 
-Приложение принимает квитанции ЖКХ в PDF и строит графики по квартирам,
-лицевым счетам, периодам и услугам. Основной сценарий: загрузка → распознавание
-→ просмотр данных и графиков. Данные поставщика не редактируются пользователем;
-ошибочную загрузку можно удалить и загрузить заново.
+## Product scope
 
-Ручной реестр платежей пока присутствует в коде, но его удаление запланировано
-отдельно. Не расширяй его и не удаляй попутно. Будущий ручной чекбокс «Оплачено»
-тоже отдельная задача: колонка «Оплачено» в PDF не подтверждает оплату текущего счёта.
+The core flow is PDF upload → extraction → data and charts. Preserve the provider's
+source values. «Оплачено по ЕПД» comes from the PDF and does not prove that the current
+квитанция has been paid. User payments and their derived status were removed (ADR 0002).
+The existing ручная сумма к оплате is a separate field governed by ADR 0001; do not
+expand or remove it incidentally. A future paid checkbox needs its own task.
 
-## Обязательный порядок работы
+## Working an issue
 
-Для каждого тикета или задачи выполняй цепочку **`implement → ponytail-review → pr`**.
-Прочитай соответствующие `SKILL.md` перед применением. Используй `ponytail`
-на уровне **full**, не ultra. Если нужный навык недоступен, найди его среди
-установленных навыков; если не найден, явно сообщи об этом, не заявляй о выполнении.
+For each implementation task, the required skill chain is **`implement → ponytail-review → pr`**.
+Read each skill's `SKILL.md` before applying it; use `ponytail` at **full**, never ultra.
+Find missing skills among installed skills; report an unavailable skill explicitly.
+The `code-review` call embedded in `implement` is replaced by `ponytail-review` here.
+For read-only consultations and audits, state which stages do not apply; no empty commits or PRs.
 
-1. **implement:** прочитай тикет, критерии приёмки и затронутые пути данных.
-   Сделай минимальное полное изменение с учётом вызывающего кода, API, UI,
-   миграций и документации, если они затронуты. Проверь результат.
-   Встроенный вызов `code-review` из этого навыка замени следующим шагом
-   `ponytail-review`; это проектная последовательность ревью.
-2. **ponytail-review:** проверь итоговый diff и связанный код. Исправь блокирующие
-   замечания, повтори затронутые проверки и ревью изменённых участков. В результате
-   явно перечисли оставшиеся ограничения и принятые владельцем риски.
-3. **pr:** подготовь заголовок и описание PR **на русском языке** по шаблону навыка.
-   Укажи проблему, результат, ссылку на тикет при наличии, фактические проверки,
-   риски, миграции и способ отката, когда они применимы. Технические имена и команды
-   оставляй как в коде. Публикацию выполняй в рамках поручения; иначе сохрани
-   готовое описание и укажи его путь. Создание PR само по себе не разрешает merge
-   или развёртывание.
+Every change ships as one PR that closes one GitHub issue. Steps, in order:
 
-Для консультаций и аудитов без изменений явно укажи неприменимые этапы;
-пустые коммиты и PR не нужны. Задача с изменениями завершена после проверок,
-ревью и подготовки описания PR; не выдавай план или начатую проверку за результат.
+1. **Claim.** The issue is open, labelled `ready-for-agent`, has no `in-progress` label, and every issue it is blocked by is closed (`gh api repos/TurtleOld/rent/issues/<n> --jq .issue_dependencies_summary`). Add `in-progress` as your first write: all agents share one GitHub account, so the label, not the assignee, marks ownership. Done when the label is on.
+2. **Branch** from fresh `origin/main`: `<type>/<slug>`, e.g. `fix/login-csrf`. The slug names the change in words; the issue link lives in the PR body.
+3. **Build** exactly the issue's acceptance criteria with the `implement` skill. New or changed logic (parser, money, auth, data writes) gets a test that goes red without your change.
+4. **Review** your diff against `origin/main` with the `ponytail-review` skill and act on every finding that survives its verification:
+   - Must fix and Should fix: fix in this PR.
+   - Nice to have that is small (a few lines, no new dependency) and sits in a file your PR already changes: fix in this PR.
+   - Anything else, including problems in files your PR does not touch: a new issue labelled `needs-triage`, linked from your PR.
+   Re-run affected checks and review after fixes. Record accepted risks without reopening them unless new evidence changes the decision.
+5. **Verify** with the commands below. For code changes, backend tests, frontend tests and the frontend build must be green on your branch. For documentation-only changes, check the diff and referenced paths; application tests and builds are not required. Every acceptance criterion needs evidence: a test name, command output, or a manual check you actually ran.
+6. **Open the PR.** Title is an English Conventional Commit; it becomes the squash commit on `main`. Body is in Russian, written with the `pr` skill template (Кратко / Доказательства / Риск слияния), plus `Closes #<n>`, the acceptance criteria as a checklist with evidence per item, a «Ревью» section (each finding: fixed, or the issue it went to), and a «Не проверено» line naming anything you could not check. A human reviews and merges: leave auto-merge off.
+7. **Blocked or unsure?** Under Orca supervision, ask through the preamble's `ask` command. Otherwise comment the question on the issue, swap `in-progress` for `needs-info`, and stop.
 
-## Требования к изменениям для production
+Under Orca supervision the injected preamble owns the lifecycle (heartbeats, `ask`, `worker_done`); this file owns how the code change is made.
 
-- **Точность:** деньги считай через `Decimal`, без промежуточного `float`.
-  Сохраняй точность объёмов и тарифов из PDF; округляй денежный результат
-  по правилам документа. Различай ноль и отсутствующее значение, долг и переплату,
-  итоги со страхованием и без него. Нормализация для графиков не должна терять
-  исходные значения или подменять данные поставщика.
-- **Импорт:** проверяй содержимое и ограничения PDF на входе. Неподдерживаемый
-  формат и отсутствие обязательных для графиков данных показывай как явный
-  неполный или неуспешный разбор. Не включай неполные результаты в отчёт так,
-  будто распознана вся квитанция.
-- **Надёжность:** связанные изменения базы выполняй атомарно. Для операций
-  загрузки, удаления и фоновой обработки учитывай повтор запроса, параллельное
-  выполнение и сбой очереди. Повтор не должен создавать дубли, возвращать
-  удалённую запись или оставлять вечную обработку без способа восстановления.
-- **Доступ и данные:** проверяй владельца при чтении и изменении квитанций,
-  связанных записей и скачивании PDF. Секреты, токены, ФИО, адреса, номера счетов
-  и реальные квитанции держи вне git, тестовых фикстур, логов и описаний PR.
-  Для тестов создавай синтетические обезличенные аналоги нужного формата.
-- **Проверки:** для исправления ошибки добавь минимальный регрессионный тест,
-  который воспроизводит исходный сбой; для парсера проверь затронутые форматы.
-  Запускай подходящие тесты, проверку типов и сборку по характеру изменения.
-  Для правок только документации достаточно проверки diff и ссылок, без запуска
-  приложения. Используй команды репозитория и CI; успех — завершение с кодом 0.
-  Невыполненную или упавшую проверку укажи явно, устрани причину в рамках задачи.
-- **Миграции и выпуск:** при изменении схемы или хранения проверь существующие
-  данные, совместимость запущенного worker с новой схемой и порядок обновления.
-  Для необратимых изменений опиши резервную копию и восстановление; данные
-  production меняй только в рамках явно порученной операции.
-- **Объём:** устраняй причину ошибки, сохраняй существующие границы модулей.
-  Новые зависимости, абстракции и попутные переделки добавляй только при
-  необходимости для задачи. Принятые владельцем ограничения не открывай заново
-  без новых фактов.
+## Commands
 
-## Тикеты и доменная документация
+Backend tests, same as CI. Use Python 3.12: on 3.13 `psycopg2-binary` 2.9.9 fails to build.
 
-- Перед работой с GitHub Issues для `TurtleOld/rent` прочитай
-  [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md); используй `gh`.
-- Перед триажем прочитай [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
-  Метки: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`.
-- Перед изменением доменных правил прочитай
-  [docs/agents/domain.md](docs/agents/domain.md) и относящиеся к задаче
-  `GLOSSARY.md` и ADR из `docs/adr/`, если они существуют.
+```bash
+cd backend
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+SECRET_KEY=ci-only-secret DEBUG=False DATABASE_URL=sqlite:////tmp/ci.sqlite3 MEDIA_ROOT=/tmp/media \
+  .venv/bin/python manage.py test tests
+```
+
+Frontend (Node 24, as in the Dockerfile):
+
+```bash
+cd frontend && npm ci && npm test && npm run build
+```
+
+`npm run build` rewrites `frontend/tsconfig.json` and `frontend/next-env.d.ts`; restore them with `git checkout --` unless your issue is about them. `npm run lint` is broken (`next lint` was removed in Next 16), so the build's type check is the frontend gate.
+
+Test PDFs are synthetic and come from `backend/tests/generate_fixtures.py` (needs `reportlab` and a DejaVu/Liberation font; not in `requirements.txt`). Commit regenerated fixtures together with the generator change. Real ЕПД never enter the repo, logs, issues or PRs.
+
+## Code rules
+
+- **Money and quantities** are `Decimal` end to end; parse Russian numbers with the parser's existing helper. Preserve source precision for quantities and tariffs; round the monetary result by the document's rules. Distinguish zero from missing values, debt from overpayment, and totals with and without insurance.
+- **Schema changes** come with a new migration; applied migrations stay as they are. Check existing data, worker compatibility and rollout order. Document backup, recovery and rollback for irreversible changes; production data operations need an explicit task.
+- **User-facing text** (UI, API error messages, invoice warnings), docstrings and comments are Russian; identifiers and commit messages are English.
+- **Comments** carry only the why the code cannot show: a domain rule, a PDF quirk, a non-obvious limit. Self-explanatory code stands without them.
+- **Docstrings** follow Google style in Russian, with the section headers (`Args:`, `Returns:`, `Raises:`) as Google writes them:
+
+  ```python
+  def normalize_unit(raw: str | None) -> str | None:
+      """Приводит запись единицы из PDF к канонической форме.
+
+      Args:
+          raw: Сырая строка единицы измерения из PDF.
+
+      Returns:
+          Каноническая форма единицы или None, если строка не распознана.
+      """
+  ```
+- **Secrets** live in `.env`, which is gitignored; new settings go through `decouple.config` with a safe default and a line in `.env.example` and the README env table.
+- **Commits** follow the history's Conventional Commits style (`fix(invoices): ...`, `chore(deps): ...`) and describe only the code change. Commit messages and PR bodies carry no AI attribution: no `Co-Authored-By` for an AI, no "Generated with", no session links.
+
+## Production reliability
+
+- **Extraction:** validate PDF contents and limits. An unsupported format or missing data needed for charts must have an explicit incomplete or failed result; reports must not present it as complete.
+- **Writes and jobs:** make related database writes atomic. Account for retries, parallel requests, deletion during parsing and broker failure. Recovery must not duplicate an upload, resurrect a deleted квитанция or leave processing stuck indefinitely.
+- **Ownership and privacy:** check the owner for квитанции, related records and PDF downloads. Keep tokens, secrets, ФИО, addresses and account numbers out of logs, fixtures and PR descriptions; use synthetic anonymized examples.
+- **Scope:** fix the cause in the existing modules; add dependencies or abstractions only when needed for the task. A started, skipped or failed check is not a passing check; success requires exit code 0.
+
+## `main` is protected
+
+A ruleset allows changes only through a squash-merged PR with these checks green: `Backend tests`, `Backend`, `Nginx`, `Frontend`. The branch must be up to date with `main` (`gh pr update-branch <n>`), and review threads resolved. Renaming one of those CI jobs leaves every PR waiting on the old name; a rename PR must also update the ruleset.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for TurtleOld/rent (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix, plus `in-progress` for claimed work. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.

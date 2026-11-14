@@ -2,20 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type Invoice, getInvoicesAll, uploadInvoice } from "@/lib/api";
+import { type Invoice, getInvoicesAll, uploadErrorMessage, uploadInvoice } from "@/lib/api";
 import { clearTokens } from "@/lib/auth";
+import { unknownAmountNote } from "@/lib/reports";
 import styles from "./dashboard.module.css";
 
 const STATUS_LABELS: Record<string, string> = {
   processing: "Обрабатывается",
   processed: "Обработан",
   failed: "Ошибка",
-};
-
-const PAYMENT_LABELS: Record<string, string> = {
-  unpaid: "Не оплачен",
-  partially_paid: "Частично оплачен",
-  paid: "Оплачен",
 };
 
 const MONTH_NAMES = [
@@ -27,6 +22,7 @@ type InvoiceGroup = {
   key: string;
   label: string;
   totalDue: number | null;
+  unknownNote: string | null;
   invoices: Invoice[];
 };
 
@@ -50,13 +46,10 @@ function groupByPeriod(invoices: Invoice[]): InvoiceGroup[] {
     const [year, monthStr] = key.split("-");
     const month = parseInt(monthStr, 10);
     const label = `${MONTH_NAMES[month - 1]} ${year}`;
-    const totalDue = items.some((i) => i.amount_due_without_insurance != null || i.amount_due != null)
-      ? items.reduce((sum, i) => {
-          const v = i.amount_due_without_insurance ?? i.amount_due;
-          return sum + (v ? parseFloat(v) : 0);
-        }, 0)
-      : null;
-    groups.push({ key, label, totalDue, invoices: items });
+    const totalDue = items.reduce((sum, i) => {
+      return sum + (i.amount_due ? parseFloat(i.amount_due) : 0);
+    }, 0);
+    groups.push({ key, label, totalDue, unknownNote: unknownAmountNote(items), invoices: items });
   }
 
   // Sort groups newest first
@@ -65,7 +58,7 @@ function groupByPeriod(invoices: Invoice[]): InvoiceGroup[] {
   // Append "no period" group at the end if exists
   const noPeriod = map.get("__no_period__");
   if (noPeriod) {
-    groups.push({ key: "__no_period__", label: "Без периода", totalDue: null, invoices: noPeriod });
+    groups.push({ key: "__no_period__", label: "Без периода", totalDue: null, unknownNote: null, invoices: noPeriod });
   }
 
   return groups;
@@ -109,8 +102,8 @@ export default function DashboardPage() {
     try {
       const invoice = await uploadInvoice(file);
       setInvoices((prev) => [invoice, ...prev]);
-    } catch {
-      setError("Ошибка при загрузке файла");
+    } catch (err) {
+      setError(uploadErrorMessage(err));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -164,6 +157,7 @@ export default function DashboardPage() {
                 {group.totalDue != null && (
                   <span className={styles.groupTotal}>
                     Итого: {group.totalDue.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₽
+                    {group.unknownNote && ` (${group.unknownNote})`}
                   </span>
                 )}
               </div>
@@ -179,7 +173,14 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <div className={styles.cardBody}>
-                      {inv.amount_due_without_insurance != null || inv.amount_due_with_insurance != null ? (
+                      {inv.manual_amount_due != null ? (
+                        <p className={styles.amount}>
+                          {parseFloat(inv.manual_amount_due).toLocaleString("ru-RU", {
+                            minimumFractionDigits: 2,
+                          })}{" "}
+                          ₽ <span className={styles.amountLabel}>введено вручную</span>
+                        </p>
+                      ) : inv.amount_due_without_insurance != null || inv.amount_due_with_insurance != null ? (
                         <>
                           {inv.amount_due_without_insurance != null && (
                             <p className={styles.amount}>
@@ -208,9 +209,6 @@ export default function DashboardPage() {
                           ₽
                         </p>
                       ) : null}
-                      <span className={`${styles.payBadge} ${styles[`pay__${inv.payment_status}`]}`}>
-                        {PAYMENT_LABELS[inv.payment_status]}
-                      </span>
                     </div>
                     <p className={styles.date}>
                       {new Date(inv.created_at).toLocaleDateString("ru-RU")}

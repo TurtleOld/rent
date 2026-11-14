@@ -1,4 +1,5 @@
 const API_BASE = "/api";
+const LOGIN_ENDPOINT = "/auth/login/";
 
 export class ApiError extends Error {
   constructor(
@@ -15,14 +16,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      // Для FormData браузер сам ставит multipart/form-data с boundary.
+      ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...options.headers,
     },
     credentials: "include",
   });
 
   if (!res.ok) {
-    if (res.status === 401 && typeof window !== "undefined") {
+    // Неверный пароль тоже 401: редирект на /login стёр бы сообщение об ошибке.
+    if (res.status === 401 && path !== LOGIN_ENDPOINT && typeof window !== "undefined") {
       window.location.href = "/login";
     }
     let data: unknown = null;
@@ -40,16 +43,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-export interface AuthTokens {
-  access: string;
-  refresh: string;
-}
-
-export async function login(email: string, password: string): Promise<AuthTokens> {
-  return request<AuthTokens>("/auth/login/", {
+export async function login(email: string, password: string): Promise<void> {
+  await request(LOGIN_ENDPOINT, {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+}
+
+export function loginErrorMessage(err: unknown): string {
+  return err instanceof ApiError && err.status === 429
+    ? "Слишком много попыток входа. Попробуйте позже."
+    : "Неверный email или пароль";
 }
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
@@ -85,6 +89,7 @@ export interface Invoice {
   period_month: number | null;
   period_year: number | null;
   amount_due: string | null;
+  manual_amount_due: string | null;
   amount_due_without_insurance: string | null;
   amount_due_with_insurance: string | null;
   amount_charged: string | null;
@@ -92,8 +97,6 @@ export interface Invoice {
   amount_recalculation: string | null;
   confidence: number | null;
   warnings: string[];
-  payment_status: "unpaid" | "partially_paid" | "paid";
-  total_paid: string;
   line_items: LineItem[];
   created_at: string;
   updated_at: string;
@@ -125,19 +128,7 @@ export async function getInvoicesAll(): Promise<Invoice[]> {
 export async function uploadInvoice(file: File): Promise<Invoice> {
   const formData = new FormData();
   formData.append("pdf_file", file);
-  const res = await fetch(`${API_BASE}/invoices/upload/`, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-  if (!res.ok) {
-    if (res.status === 401 && typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-    const data = await res.json().catch(() => null);
-    throw new ApiError(res.status, "Upload failed", data);
-  }
-  return res.json() as Promise<Invoice>;
+  return request<Invoice>("/invoices/upload/", { method: "POST", body: formData });
 }
 
 export async function getInvoice(id: number): Promise<Invoice> {
@@ -156,32 +147,30 @@ export async function reparseInvoice(id: number): Promise<Invoice> {
   return request<Invoice>(`/invoices/${id}/reparse/`, { method: "POST" });
 }
 
-// ── Payment types ─────────────────────────────────────────────────────────────
-
-export interface Payment {
-  id: number;
-  invoice: number;
-  user: number;
-  amount: string;
-  payment_date: string;
-  note: string | null;
-  created_at: string;
-}
-
-export async function getPayments(invoiceId: number): Promise<Payment[]> {
-  const result = await request<PaginatedResponse<Payment> | Payment[]>(
-    `/invoices/${invoiceId}/payments/`,
-  );
-  if (Array.isArray(result)) return result;
-  return (result as PaginatedResponse<Payment>).results;
-}
-
-export async function createPayment(
-  invoiceId: number,
-  data: { amount: string; payment_date: string; note?: string },
-): Promise<Payment> {
-  return request<Payment>(`/invoices/${invoiceId}/payments/`, {
-    method: "POST",
-    body: JSON.stringify(data),
+export async function setManualAmountDue(id: number, value: string | null): Promise<Invoice> {
+  return request<Invoice>(`/invoices/${id}/manual-amount-due/`, {
+    method: "PUT",
+    body: JSON.stringify({ manual_amount_due: value }),
   });
+}
+
+// Бэкенд отвечает по-русски: 409 с detail, 400 с ошибкой поля.
+function backendFieldErrorMessage(err: unknown, field: string, fallback: string): string {
+  if (err instanceof ApiError && err.data && typeof err.data === "object") {
+    const data = err.data as Record<string, unknown>;
+    if (typeof data.detail === "string") return data.detail;
+    const fieldErrors = data[field];
+    if (Array.isArray(fieldErrors) && typeof fieldErrors[0] === "string") {
+      return fieldErrors[0];
+    }
+  }
+  return fallback;
+}
+
+export function manualAmountDueErrorMessage(err: unknown): string {
+  return backendFieldErrorMessage(err, "manual_amount_due", "Не удалось сохранить сумму к оплате");
+}
+
+export function uploadErrorMessage(err: unknown): string {
+  return backendFieldErrorMessage(err, "pdf_file", "Ошибка при загрузке файла");
 }

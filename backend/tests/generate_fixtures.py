@@ -5,6 +5,10 @@
 Запуск:
     cd backend
     python tests/generate_fixtures.py
+
+sample_epd.pdf нарисован только горизонтальными линиями: pdfplumber не находит
+в нём таблиц, и парсер идёт текстовым путём. sample_epd_table5.pdf и
+sample_epd_table8.pdf нарисованы с рамками ячеек для табличного пути.
 """
 import os
 import sys
@@ -24,6 +28,8 @@ except ImportError:
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 FIXTURES_DIR.mkdir(exist_ok=True)
 OUTPUT = FIXTURES_DIR / "sample_epd.pdf"
+OUTPUT_TABLE5 = FIXTURES_DIR / "sample_epd_table5.pdf"
+OUTPUT_TABLE8 = FIXTURES_DIR / "sample_epd_table8.pdf"
 
 # ─── Шрифты ───
 
@@ -96,11 +102,90 @@ def meter_row(y, name, ipu, num, date_prev, curr_vol):
     _canvas.drawString(125 * mm, y, curr_vol)
 
 
+def table_row(y_top, height, col_x, cells, spans=None, size=6.5, bold=False):
+    """Рисует строку таблицы с рамками ячеек.
+
+    Args:
+        y_top: Верхняя граница строки.
+        height: Высота строки.
+        col_x: Границы колонок слева направо (на одну больше числа колонок).
+        cells: Текст ячеек; строка с переводами строк рисуется в несколько линий.
+        spans: Сколько колонок занимает каждая ячейка; по умолчанию по одной.
+
+    Returns:
+        Нижняя граница строки.
+    """
+    spans = spans or [1] * len(cells)
+    y_bottom = y_top - height
+    _canvas.setStrokeColor(colors.black)
+    _canvas.setLineWidth(0.5)
+    _canvas.line(col_x[0], y_top, col_x[-1], y_top)
+    _canvas.line(col_x[0], y_bottom, col_x[-1], y_bottom)
+    _canvas.setFont("CyrFontBold" if bold else "CyrFont", size)
+    col = 0
+    for text, span in zip(cells, spans):
+        _canvas.line(col_x[col], y_top, col_x[col], y_bottom)
+        for i, line in enumerate(text.split("\n")):
+            _canvas.drawString(col_x[col] + 1 * mm, y_top - 2.8 * mm - i * 2.6 * mm, line)
+        col += span
+    _canvas.line(col_x[-1], y_top, col_x[-1], y_bottom)
+    return y_bottom
+
+
+def straddle(x_border, y_top, txt, size=6.5):
+    """Рисует число поверх границы колонок, как в реальных ЕПД с перерасчётами.
+
+    Последний символ уходит за границу, поэтому pdfplumber режет число:
+    «2,96» → «2,9» в левой ячейке и «6» в правой.
+    """
+    _canvas.setFont("CyrFont", size)
+    head = pdfmetrics.stringWidth(txt[:-1], "CyrFont", size)
+    _canvas.drawString(x_border - head + 0.3, y_top - 2.8 * mm, txt)
+
+
+def table_header(y, period_lower, with_ins, without_ins):
+    """Рисует шапку ЕПД без рамок и возвращает y, с которого начинается таблица."""
+    text_at(40 * mm, y, "ЕДИНЫЙ ПЛАТЕЖНЫЙ ДОКУМЕНТ", 11, bold=True)
+    y -= 5 * mm
+    text_at(15 * mm, y, f"ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА {period_lower} г.", 9, bold=True)
+    y -= 4.5 * mm
+    text_at(15 * mm, y,
+            'ВАША УПРАВЛЯЮЩАЯ ОРГАНИЗАЦИЯ: ООО "УК "Солнечный"142700, Московская область, г. Видное,',
+            6.5)
+    y -= 5 * mm
+    text_at(15 * mm, y, "Лицевой счет: 1 2 3 4 5 - 6 7 8", 9, bold=True)
+    y -= 5 * mm
+    text_at(15 * mm, y, "ФИО: ИВАНОВ ИВАН ИВАНОВИЧ", 9, bold=True)
+    y -= 4.5 * mm
+    text_at(15 * mm, y, "Адрес: 142700, МОСКОВСКАЯ ОБЛ., Г. ВИДНОЕ, УЛ СОЛНЕЧНАЯ, д.10, кв.42", 8)
+    y -= 5 * mm
+    text_at(15 * mm, y, f"С УЧЕТОМ ДОБРОВОЛЬНОГО СТРАХОВАНИЯ: {with_ins}", 7)
+    y -= 3.5 * mm
+    text_at(15 * mm, y, f"БЕЗ УЧЕТА ДОБРОВОЛЬНОГО СТРАХОВАНИЯ: {without_ins}", 7)
+    return y - 5 * mm
+
+
+def meter_table(y):
+    """Рисует таблицу «Справочная информация» с рамками (5 колонок)."""
+    col_x = [x * mm for x in (15, 75, 95, 125, 165, 195)]
+    y = table_row(y, 4 * mm, col_x, ["Справочная информация"], [5], size=7, bold=True)
+    y = table_row(y, 6.5 * mm, col_x,
+                  ["Виды услуг", "ИПУ/ОДПУ", "Номер прибора\nучета",
+                   "Дата поверки,\nпредыдущее", "Текущее,\nобъем"], size=6, bold=True)
+    for row in (
+        ["ГОРЯЧЕЕ В/С (НОСИТЕЛЬ)", "ИПУ", "100200300", "15.06.2030 45.000000", "46.000000 1.000000"],
+        ["ХОЛОДНОЕ В/С", "ИПУ", "100200400", "15.06.2030 120.000000", "121.700000 1.700000"],
+        ["ХОЛОДНОЕ В/С ОДН", "ОДПУ", "б/н к расчёт", "0.000", "3.500 3.500"],
+    ):
+        y = table_row(y, 4 * mm, col_x, row)
+    return y
+
+
 # ─── Генерация ───
 
 def generate():
     global _canvas
-    _canvas = canvas.Canvas(str(OUTPUT), pagesize=A4)
+    _canvas = canvas.Canvas(str(OUTPUT), pagesize=A4, invariant=1)
     _, h = A4
 
     y = h - 18 * mm
@@ -340,5 +425,129 @@ def generate():
     print(f"Сгенерирован: {OUTPUT}")
 
 
+def generate_table5():
+    """ЕПД без перерасчётов: таблица начислений в 5 колонок."""
+    global _canvas
+    _canvas = canvas.Canvas(str(OUTPUT_TABLE5), pagesize=A4, invariant=1)
+    _, h = A4
+    y = table_header(h - 18 * mm, "январь 2026",
+                     "6 095 руб. 18 коп.", "5 835 руб. 50 коп.")
+
+    col_x = [x * mm for x in (15, 85, 125, 145, 175, 195)]
+    y = table_row(y, 4 * mm, col_x,
+                  ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА ЯНВАРЬ 2026г."],
+                  [5], size=7, bold=True)
+    y = table_row(y, 6.5 * mm, col_x,
+                  ["Виды услуг", "Объем, ед.изм.,\nтариф, руб.", "Начислено,\nруб.",
+                   "Задолженность /\nОплачено, руб.", "ИТОГО,\nруб."], size=6, bold=True)
+
+    def section(title):
+        return table_row(y, 4 * mm, col_x, [title], [5])
+
+    def summary(label, charged, debt_paid, total):
+        return table_row(y, 4 * mm, col_x, [label, charged, debt_paid, total], [2, 1, 1, 1], bold=True)
+
+    y = section("Начисления за жилищные услуги")
+    # В реальных ЕПД объём бывает перенесён в ячейку названия услуги второй строкой.
+    y = table_row(y, 6.5 * mm, col_x,
+                  ["ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ\n48.00", "кв.м. 24.00", "1 152,00", "0,00 0,00", "1 152,00"])
+    for row in (
+        ["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ", "48.00 кв.м. 42.00", "2 016,00", "0,00 0,00", "2 016,00"],
+        ["ГОРЯЧЕЕ В/С (ЭНЕРГИЯ) ОДН", "0.004500 Гкал 2900.00", "13,05", "-98,30 0,00", "0,00"],
+    ):
+        y = table_row(y, 4 * mm, col_x, row)
+    y = section("Начисления за коммунальные услуги")
+    for row in (
+        ["ГАЗОСНАБЖЕНИЕ", "3 чел. 90.00", "270,00", "150,00 150,00", "270,00"],
+        ["ГОРЯЧЕЕ В/С (НОСИТЕЛЬ)", "0.80 куб.м. 65.00", "52,00", "0,00 0,00", "52,00"],
+        ["ХОЛОДНОЕ В/С", "1.70 куб. м. 65.00", "110,50", "0,00 0,00", "110,50"],
+        ["ОТОПЛЕНИЕ", "0.7500 Гкал 2900.00", "2 175,00", "0,00 0,00", "2 175,00"],
+    ):
+        y = table_row(y, 4 * mm, col_x, row)
+    y = section("Начисления за иные услуги")
+    y = table_row(y, 4 * mm, col_x,
+                  ["ЗАПИРАЮЩЕЕ УСТРОЙСТВО", "1.00 абонент 60.00", "60,00", "0,00 0,00", "60,00"])
+    y = summary("Всего за январь 2026 без учета добровольного страхования:",
+                "5 848,55", "51,70 150,00", "5 835,50")
+    y = table_row(y, 4 * mm, col_x,
+                  ["ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ", "48.00 кв.м. 5.41", "259,68", "0,00 0,00", "259,68"])
+    y = summary("Всего за январь 2026 с учетом добровольного страхования :",
+                "6 108,23", "51,70 150,00", "6 095,18")
+
+    y -= 5 * mm
+    text_at(15 * mm, y, "Итого к оплате за январь 2026 без учета добровольного страхования: 5 835,50",
+            7, bold=True)
+    y -= 3.5 * mm
+    text_at(15 * mm, y, "Итого к оплате за январь 2026 с учетом добровольного страхования: 6 095,18",
+            7, bold=True)
+    meter_table(y - 6 * mm)
+
+    _canvas.save()
+    print(f"Сгенерирован: {OUTPUT_TABLE5}")
+
+
+def generate_table8():
+    """ЕПД с перерасчётами: таблица начислений в 8 колонок, «Оплачено» и «ИТОГО» слиплись."""
+    global _canvas
+    _canvas = canvas.Canvas(str(OUTPUT_TABLE8), pagesize=A4, invariant=1)
+    _, h = A4
+    y = table_header(h - 18 * mm, "февраль 2026",
+                     "6 227 руб. 88 коп.", "5 968 руб. 20 коп.")
+
+    col_x = [x * mm for x in (15, 71, 89, 115, 133, 148, 165, 179, 195)]
+    paid_border = col_x[7]
+
+    def row8(cells, spans=None, bold=False):
+        """Строка с «Оплачено» поверх границы колонок «Оплачено»/«ИТОГО»."""
+        *head, paid, total = cells
+        spans = spans or [1] * len(head)
+        y_bottom = table_row(y, 4 * mm, col_x, [*head, "", ""], [*spans, 1, 1], bold=bold)
+        straddle(paid_border, y, paid)
+        # Итог прижат вправо, чтобы отрезанный хвост «Оплачено» остался отдельным словом.
+        _canvas.drawRightString(col_x[-1] - 1 * mm, y - 2.8 * mm, total)
+        return y_bottom
+
+    y = table_row(y, 4 * mm, col_x,
+                  ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ И ИНЫЕ УСЛУГИ ЗА ФЕВРАЛЬ 2026г."],
+                  [8], size=7, bold=True)
+    y = table_row(y, 6.5 * mm, col_x,
+                  ["Виды услуг", "Объем", "Ед.изм.,\nтариф", "Начислено,\nруб.", "Перерас-\nчеты",
+                   "Задолжен-\nность", "Оплачено", "ИТОГО"], size=6, bold=True)
+    y = table_row(y, 4 * mm, col_x, ["Начисления за жилищные услуги"], [8])
+    for row in (
+        ["ВЗНОС НА КАПИТАЛЬНЫЙ РЕМОНТ", "48.00", "кв.м. 24.00", "1 152,00", "0,00", "0,00", "0,00", "1 152,00"],
+        ["СОДЕРЖАНИЕ ЖИЛОГО ПОМЕЩЕНИЯ", "48.00", "кв.м. 42.00", "2 016,00", "0,00", "0,00", "0,00", "2 016,00"],
+    ):
+        y = row8(row)
+    y = table_row(y, 4 * mm, col_x, ["Начисления за коммунальные услуги"], [8])
+    for row in (
+        ["ГОРЯЧЕЕ В/С (НОСИТЕЛЬ)", "0.80", "куб.м. 65.00", "52,00", "-12,30", "0,00", "0,00", "39,70"],
+        ["ХОЛОДНОЕ В/С", "1.70", "куб. м. 65.00", "110,50", "0,00", "2,96", "2,96", "110,50"],
+        ["ОТОПЛЕНИЕ", "0.7500", "Гкал 2900.00", "2 175,00", "145,00", "0,00", "0,00", "2 320,00"],
+        ["ГАЗОСНАБЖЕНИЕ", "3", "чел. 90.00", "270,00", "0,00", "150,00", "150,00", "270,00"],
+    ):
+        y = row8(row)
+    y = table_row(y, 4 * mm, col_x, ["Начисления за иные услуги"], [8])
+    y = row8(["ЗАПИРАЮЩЕЕ УСТРОЙСТВО", "1.00", "абонент 60.00", "60,00", "0,00", "0,00", "0,00", "60,00"])
+    y = row8(["Всего за февраль 2026 без учета добровольного страхования:",
+              "5 835,50", "132,70", "152,96", "152,96", "5 968,20"], [3, 1, 1, 1], bold=True)
+    y = row8(["ДОБРОВОЛЬНОЕ СТРАХОВАНИЕ", "48.00", "кв.м. 5.41", "259,68", "0,00", "0,00", "0,00", "259,68"])
+    y = row8(["Всего за февраль 2026 с учетом добровольного страхования :",
+              "6 095,18", "132,70", "152,96", "152,96", "6 227,88"], [3, 1, 1, 1], bold=True)
+
+    y -= 5 * mm
+    text_at(15 * mm, y, "Итого к оплате за февраль 2026 без учета добровольного страхования: 5 968,20",
+            7, bold=True)
+    y -= 3.5 * mm
+    text_at(15 * mm, y, "Итого к оплате за февраль 2026 с учетом добровольного страхования: 6 227,88",
+            7, bold=True)
+    meter_table(y - 6 * mm)
+
+    _canvas.save()
+    print(f"Сгенерирован: {OUTPUT_TABLE8}")
+
+
 if __name__ == "__main__":
     generate()
+    generate_table5()
+    generate_table8()

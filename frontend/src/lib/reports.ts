@@ -33,3 +33,11 @@ export function showVolume(unit: string | null): boolean {
   if (!unit) return false;
   return VOLUME_UNITS.has(unit.trim());
 }
+
+// Квитанции без суммы к оплате не попадают в итоги и графики — об этом надо сказать.
+export function unknownAmountNote(invoices: Invoice[]): string | null {
+  const n = invoices.filter((inv) => inv.amount_due == null).length;
+  if (n === 0) return null;
+  const word = n % 10 === 1 && n % 100 !== 11 ? "квитанции" : "квитанций";
+  return `без учёта ${n} ${word}`;
+}

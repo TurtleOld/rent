@@ -1,19 +1,13 @@
 from datetime import timedelta
-from decimal import Decimal
 
-from django.db.models import DecimalField, Sum, Value
-from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, parsers, permissions, status, views
 from rest_framework.response import Response
 
-from apps.payments.models import Payment
-from apps.payments.serializers import PaymentSerializer
-
 from .models import Invoice
-from .serializers import InvoiceSerializer, InvoiceUploadSerializer
+from .serializers import InvoiceSerializer, InvoiceUploadSerializer, ManualAmountDueSerializer
 from .tasks import process_invoice
 
 
@@ -21,13 +15,6 @@ def _invoice_queryset(user):
     return (
         Invoice.objects.filter(user=user)
         .prefetch_related("line_items")
-        .annotate(
-            _total_paid=Coalesce(
-                Sum("payments__amount"),
-                Value(Decimal("0")),
-                output_field=DecimalField(max_digits=12, decimal_places=2),
-            )
-        )
         .order_by("-created_at")
     )
 
@@ -118,15 +105,28 @@ class InvoiceReparseView(views.APIView):
         )
 
 
-class InvoicePaymentListCreateView(generics.ListCreateAPIView):
-    serializer_class = PaymentSerializer
+class InvoiceManualAmountDueView(views.APIView):
+    """Задаёт или сбрасывает ручную сумму к оплате квитанции.
+
+    Доступно только владельцу и только для квитанции в статусе «Обработан».
+    Пустое значение сбрасывает ручную сумму, и снова действует распознанная.
+    """
+
     permission_classes = [permissions.IsAuthenticated]
 
-    def _get_invoice(self) -> Invoice:
-        return get_object_or_404(Invoice, pk=self.kwargs["pk"], user=self.request.user)
-
-    def get_queryset(self):
-        return Payment.objects.filter(invoice=self._get_invoice())
-
-    def perform_create(self, serializer):
-        serializer.save(invoice=self._get_invoice(), user=self.request.user)
+    def put(self, request, pk: int) -> Response:
+        invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
+        serializer = ManualAmountDueSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Статус проверяется в самом UPDATE: повторный разбор, начатый после чтения
+        # квитанции, иначе сохранил бы её целиком и затёр введённую сумму.
+        updated = Invoice.objects.filter(pk=invoice.pk, status=Invoice.Status.PROCESSED).update(
+            manual_amount_due=serializer.validated_data["manual_amount_due"],
+            updated_at=timezone.now(),
+        )
+        if not updated:
+            return Response(
+                {"detail": "Сумму к оплате можно ввести только для обработанной квитанции."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(InvoiceSerializer(_invoice_queryset(request.user).get(pk=pk)).data)

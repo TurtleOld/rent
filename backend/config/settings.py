@@ -11,7 +11,7 @@ DEBUG = config("DEBUG", default=False, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost", cast=Csv())
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "config.apps.RentAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -26,7 +26,6 @@ INSTALLED_APPS = [
     # Local
     "apps.accounts",
     "apps.invoices",
-    "apps.payments",
 ]
 
 MIDDLEWARE = [

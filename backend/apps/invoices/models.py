@@ -1,7 +1,14 @@
+import logging
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+logger = logging.getLogger(__name__)
+
+AMOUNT_DUE_UNKNOWN_WARNING = "Сумма к оплате не распознана"
 
 
 class Service(models.Model):
@@ -97,8 +104,21 @@ class Invoice(models.Model):
     period_month = models.PositiveSmallIntegerField(blank=True, null=True)
     period_year = models.PositiveSmallIntegerField(blank=True, null=True)
 
-    # Financial totals (editable by user)
-    amount_due = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    # Financial totals
+    amount_due = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Распознанная сумма к оплате",
+    )
+    manual_amount_due = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Ручная сумма к оплате; главнее распознанной",
+    )
     amount_charged = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     amount_paid_ai = models.DecimalField(
         max_digits=10,
@@ -142,20 +162,11 @@ class Invoice(models.Model):
         return f"Invoice #{self.pk} — {self.provider_name or 'unknown'} ({self.status})"
 
     @property
-    def total_paid(self) -> Decimal:
-        annotated = getattr(self, "_total_paid", None)
-        if annotated is not None:
-            return annotated
-        return sum((p.amount for p in self.payments.all()), Decimal("0"))
-
-    @property
-    def payment_status(self) -> str:
-        paid = self.total_paid
-        if paid == 0:
-            return "unpaid"
-        if self.amount_due and paid >= self.amount_due:
-            return "paid"
-        return "partially_paid"
+    def effective_amount_due(self) -> Decimal | None:
+        """Сумма к оплате: ручная, если задана, иначе распознанная."""
+        if self.manual_amount_due is not None:
+            return self.manual_amount_due
+        return self.amount_due
 
 
 class LineItem(models.Model):
@@ -166,7 +177,7 @@ class LineItem(models.Model):
     )
     service_name = models.CharField(max_length=255)
     unit = models.CharField(max_length=50, blank=True, null=True)
-    quantity = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
+    quantity = models.DecimalField(max_digits=12, decimal_places=6, blank=True, null=True)
     tariff = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     # amount_charged = начислено по тарифу (до перерасчёта)
     amount_charged = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
@@ -174,6 +185,14 @@ class LineItem(models.Model):
     recalculation = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     # debt = задолженность/переплата на начало периода (может отсутствовать в документе)
     debt = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    # paid = оплачено по ЕПД, прочитано из документа (не пользовательский платёж)
+    paid = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Оплачено по ЕПД",
+    )
     # amount = итого по строке
     amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     service = models.ForeignKey(
@@ -190,3 +209,32 @@ class LineItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.service_name} — {self.amount}"
+
+
+@receiver(post_delete, sender=Invoice)
+def delete_invoice_pdf(sender, instance: Invoice, using: str, **kwargs) -> None:
+    """Удаляет PDF квитанции с диска после удаления записи.
+
+    Django не удаляет файлы FileField сам, а в PDF лежат персональные
+    данные. Сигнал срабатывает и при каскадном удалении пользователя.
+    Файл удаляется только после коммита, чтобы откат не оставил запись
+    без файла; ошибка удаления файла лишь логируется.
+
+    Args:
+        sender: Класс модели Invoice.
+        instance: Удалённая квитанция.
+        using: Алиас базы данных, в которой шло удаление.
+        **kwargs: Прочие аргументы сигнала.
+    """
+    if not instance.pdf_file:
+        return
+    storage, name, pk = instance.pdf_file.storage, instance.pdf_file.name, instance.pk
+
+    def delete_file() -> None:
+        # Не robust=True: Django пишет его ошибки в логгер django.*, который при DEBUG=False молчит.
+        try:
+            storage.delete(name)
+        except Exception:
+            logger.exception("Не удалось удалить PDF квитанции %s", pk)
+
+    transaction.on_commit(delete_file, using=using)

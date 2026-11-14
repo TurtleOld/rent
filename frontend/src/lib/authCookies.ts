@@ -7,10 +7,28 @@ const BASE = {
   path: "/",
 };
 
+const DEFAULT_ACCESS_MINUTES = 60;
+const DEFAULT_REFRESH_DAYS = 7;
+
+// Значение читается при каждом вызове: имена и значения те же, что в Django SimpleJWT.
+function envPositiveInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  const value = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function accessCookieMaxAge(): number {
+  return envPositiveInt("ACCESS_TOKEN_LIFETIME_MINUTES", DEFAULT_ACCESS_MINUTES) * 60;
+}
+
+function refreshCookieMaxAge(): number {
+  return envPositiveInt("REFRESH_TOKEN_LIFETIME_DAYS", DEFAULT_REFRESH_DAYS) * 60 * 60 * 24;
+}
+
 export function setAccessCookie(response: NextResponse, access: string): void {
-  response.cookies.set("access_token", access, { ...BASE, maxAge: 60 * 60 });
+  response.cookies.set("access_token", access, { ...BASE, maxAge: accessCookieMaxAge() });
 }
 
 export function setRefreshCookie(response: NextResponse, refresh: string): void {
-  response.cookies.set("refresh_token", refresh, { ...BASE, maxAge: 60 * 60 * 24 * 7 });
+  response.cookies.set("refresh_token", refresh, { ...BASE, maxAge: refreshCookieMaxAge() });
 }
