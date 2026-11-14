@@ -553,6 +553,33 @@ class TestMultipageContinuation(unittest.TestCase):
         self.assertEqual(self.result["confidence"], 1.0)
 
 
+class TestMultipageTables(unittest.TestCase):
+    """Таблицы начислений разных страниц дают строки одной квитанции."""
+
+    @staticmethod
+    def _table(row):
+        return [
+            ["РАСЧЕТ РАЗМЕРА ПЛАТЫ ЗА ЖИЛИЩНО-КОММУНАЛЬНЫЕ УСЛУГИ"],
+            ["Виды услуг", "Объем", "Ед.изм., тариф", "Начислено, руб.",
+             "Перерасчеты", "Задолженность", "Оплачено", "ИТОГО"],
+            row,
+        ]
+
+    def test_recalculation_and_paid_from_both_pages(self):
+        items = _parse_line_items_from_tables([
+            self._table(["ГОРЯЧЕЕ В/С", "0.80", "куб.м. 65.00",
+                         "52,00", "-12,30", "0,00", "0,00", "39,70"]),
+            self._table(["ХОЛОДНОЕ В/С", "1.70", "куб. м. 65.00",
+                         "110,50", "0,00", "2,96", "2,96", "110,50"]),
+        ])
+
+        self.assertEqual(
+            [i["service_name"] for i in items], ["ГОРЯЧЕЕ В/С", "ХОЛОДНОЕ В/С"]
+        )
+        self.assertEqual(items[0]["recalculation"], Decimal("-12.30"))
+        self.assertEqual(items[1]["paid"], Decimal("2.96"))
+
+
 class TestMultipleDocuments(unittest.TestCase):
     """Объединённый файл с несколькими ЕПД не поддерживается."""
 
