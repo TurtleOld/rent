@@ -8,6 +8,7 @@ import {
   getInvoice,
   invoiceFileUrl,
   manualAmountDueErrorMessage,
+  reparseErrorMessage,
   reparseInvoice,
   setManualAmountDue,
 } from "@/lib/api";
@@ -89,8 +90,8 @@ export default function InvoiceDetailPage() {
       const updated = await reparseInvoice(id);
       setInvoice(updated);
       setReloadKey((k) => k + 1); // restart status polling
-    } catch {
-      setError("Ошибка при запуске перепарсинга");
+    } catch (err) {
+      setError(reparseErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -123,9 +124,7 @@ export default function InvoiceDetailPage() {
             >
               Открыть PDF
             </a>
-            {(invoice.status === "processed" ||
-              invoice.status === "incomplete" ||
-              invoice.status === "failed") && (
+            {invoice.can_reparse && (
               <button onClick={handleReparse} disabled={saving} className={styles.editBtn}>
                 Перепарсить PDF
               </button>

@@ -1,6 +1,8 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import AMOUNT_DUE_UNKNOWN_WARNING, Invoice, LineItem
+from .tasks import STUCK_AFTER
 
 
 class LineItemSerializer(serializers.ModelSerializer):
@@ -16,6 +18,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         source="effective_amount_due", max_digits=10, decimal_places=2, read_only=True
     )
     warnings = serializers.SerializerMethodField()
+    can_reparse = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
@@ -24,6 +27,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "pdf_file",
             "status",
             "error_message",
+            "can_reparse",
             "provider_name",
             "account_number",
             "payer_name",
@@ -52,6 +56,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
         if invoice.manual_amount_due is None:
             return invoice.warnings
         return [w for w in invoice.warnings if w != AMOUNT_DUE_UNKNOWN_WARNING]
+
+    def get_can_reparse(self, invoice: Invoice) -> bool:
+        """Повторный разбор разрешён по тому же порогу зависания, что в API."""
+        if invoice.status != Invoice.Status.PROCESSING:
+            return True
+        return invoice.updated_at <= timezone.now() - STUCK_AFTER
 
 
 class ManualAmountDueSerializer(serializers.Serializer):

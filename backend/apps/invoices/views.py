@@ -1,4 +1,4 @@
-from datetime import timedelta
+import logging
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -8,7 +8,15 @@ from rest_framework.response import Response
 
 from .models import Invoice
 from .serializers import InvoiceSerializer, InvoiceUploadSerializer, ManualAmountDueSerializer
-from .tasks import process_invoice
+from .tasks import STUCK_AFTER, process_invoice
+
+logger = logging.getLogger(__name__)
+
+# Без внутренних адресов и причин сбоя брокера: их место в логах, не в ответе.
+QUEUE_UNAVAILABLE_MESSAGE = (
+    "Очередь обработки временно недоступна. "
+    "Квитанция и её данные сохранены, повторите разбор позже."
+)
 
 
 def _invoice_queryset(user):
@@ -40,8 +48,20 @@ class InvoiceUploadView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         invoice = serializer.instance
-        # Trigger async processing after save
-        process_invoice.delay(invoice.pk)
+        try:
+            process_invoice.delay(invoice.pk)
+        except Exception:
+            logger.exception("Не удалось поставить задачу разбора квитанции %s", invoice.pk)
+            # update, а не save: не воскрешаем квитанцию, удалённую во время запроса.
+            Invoice.objects.filter(pk=invoice.pk).update(
+                status=Invoice.Status.FAILED,
+                error_message=QUEUE_UNAVAILABLE_MESSAGE,
+                updated_at=timezone.now(),
+            )
+            return Response(
+                {"detail": QUEUE_UNAVAILABLE_MESSAGE},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             InvoiceSerializer(invoice).data,
             status=status.HTTP_201_CREATED,
@@ -74,31 +94,46 @@ class InvoiceFileDownloadView(views.APIView):
 
 
 class InvoiceReparseView(views.APIView):
-    """Сбрасывает статус в PROCESSING и ставит разбор в очередь.
+    """Переводит квитанцию в «Обрабатывается» и снова ставит задачу разбора.
 
     Доступно в статусах «Обработан», «Обработан частично» и «Ошибка», а также
-    когда «Обрабатывается» зависло дольше STUCK_AFTER (воркер умер посреди
-    задачи). Очищает error_message и warnings; line_items пересобирает задача.
+    когда обработка зависла (воркер умер посреди задачи) дольше STUCK_AFTER.
+    Сбой постановки задачи возвращает квитанцию в «Ошибка» с понятным
+    сообщением, не трогая PDF и распознанные данные.
     """
 
     permission_classes = [permissions.IsAuthenticated]
-    STUCK_AFTER = timedelta(minutes=5)  # task hard time_limit is 120s
 
     def post(self, request, pk: int) -> Response:
         invoice = get_object_or_404(Invoice, pk=pk, user=request.user)
         if (
             invoice.status == Invoice.Status.PROCESSING
-            and invoice.updated_at > timezone.now() - self.STUCK_AFTER
+            and invoice.updated_at > timezone.now() - STUCK_AFTER
         ):
             return Response(
-                {"detail": "Инвойс уже обрабатывается."},
+                {"detail": "Квитанция уже обрабатывается."},
                 status=status.HTTP_409_CONFLICT,
             )
+        previous_warnings = invoice.warnings
         invoice.status = Invoice.Status.PROCESSING
         invoice.error_message = None
         invoice.warnings = []
         invoice.save(update_fields=["status", "error_message", "warnings", "updated_at"])
-        process_invoice.delay(invoice.pk)
+        try:
+            process_invoice.delay(invoice.pk)
+        except Exception:
+            logger.exception("Не удалось поставить задачу разбора квитанции %s", invoice.pk)
+            # update, а не save: не воскрешаем квитанцию, удалённую во время запроса.
+            Invoice.objects.filter(pk=invoice.pk).update(
+                status=Invoice.Status.FAILED,
+                error_message=QUEUE_UNAVAILABLE_MESSAGE,
+                warnings=previous_warnings,
+                updated_at=timezone.now(),
+            )
+            return Response(
+                {"detail": QUEUE_UNAVAILABLE_MESSAGE},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             InvoiceSerializer(invoice).data,
             status=status.HTTP_202_ACCEPTED,

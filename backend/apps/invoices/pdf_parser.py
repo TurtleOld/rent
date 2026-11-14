@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGES = 50
 
+# Заголовок ЕПД. Объединённый файл с несколькими ЕПД не поддерживается:
+# строки и итоги разных квитанций смешались бы в одной.
+_DOCUMENT_TITLE_RE = re.compile(r"ЕДИНЫЙ\s+ПЛАТЕЖНЫЙ\s+ДОКУМЕНТ", re.IGNORECASE)
+
 RUSSIAN_MONTHS: dict[str, int] = {
     "январь": 1, "января": 1, "январе": 1,
     "февраль": 2, "февраля": 2, "феврале": 2,
@@ -655,16 +659,23 @@ def _is_billing_table(table: list[list[str | None]]) -> bool:
 
 
 def _parse_line_items_from_tables(tables: list[list[list[str | None]]]) -> list[dict[str, Any]]:
+    """Собирает строки услуг из всех таблиц начислений.
+
+    Таблица одной квитанции может продолжаться на следующих страницах:
+    pdfplumber возвращает каждую страницу отдельной таблицей. Повторные
+    заголовки и итоговые строки отбрасывает _billing_table_to_items.
+
+    Args:
+        tables: Таблицы pdfplumber со всех страниц.
+
+    Returns:
+        Строки услуг в порядке следования в документе.
     """
-    Находит основную таблицу начислений среди всех таблиц страницы и парсит её.
-    Таблица начислений определяется по _is_billing_table.
-    """
+    items: list[dict[str, Any]] = []
     for table in tables:
         if _is_billing_table(table):
-            items = _billing_table_to_items(table)
-            if items:
-                return items
-    return []
+            items.extend(_billing_table_to_items(table))
+    return items
 
 
 def _ordered_summary_amounts(row: list[str | None]) -> list[Decimal | None]:
@@ -738,10 +749,11 @@ def _parse_merge_totals_from_tables(
     tables: list[list[list[str | None]]],
     result_totals: dict[str, Any],
 ) -> None:
-    """Извлекает итоги из первой таблицы начислений со строками «Всего за …».
+    """Извлекает итоги из строк «Всего за …» во всех таблицах начислений.
 
-    Таблицы начислений без итогов пропускаются: pdfplumber может вернуть
-    несколько таблиц начислений, и первая из них бывает пустой.
+    Итог одной квитанции может стоять на последней странице, а таблица
+    без строк «Всего» — на первой. Поздние итоги перекрывают ранние:
+    на промежуточной странице может быть промежуточный итог.
 
     Args:
         tables: Таблицы pdfplumber со всех страниц.
@@ -752,12 +764,11 @@ def _parse_merge_totals_from_tables(
             continue
         ncols = max(len(row) for row in table)
         summary = _parse_summary_from_table(table, ncols)
-        if not summary or all(v is None for v in summary.values()):
+        if not summary:
             continue
         for k, v in summary.items():
             if v is not None:
                 result_totals[k] = v
-        return
 
 
 def _parse_meter_readings_from_tables(tables: list[list[list[str | None]]]) -> dict[str, dict]:
@@ -910,6 +921,11 @@ def parse_epd(pdf_file) -> dict[str, Any]:
             warnings.append("Не удалось извлечь текст из PDF")
             result["confidence"] = 0.0
             return result
+
+        if len(_DOCUMENT_TITLE_RE.findall(full_text)) > 1:
+            raise ValueError(
+                "Файл содержит несколько квитанций. Загрузите одну квитанцию."
+            )
 
         # === Шапка ===
         result["provider_name"] = _extract_provider_name(full_text)

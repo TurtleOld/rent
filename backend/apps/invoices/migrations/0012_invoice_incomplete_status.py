@@ -42,7 +42,7 @@ def restore_processed(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("invoices", "0010_lineitem_paid"),
+        ("invoices", "0011_lineitem_source_precision"),
     ]
 
     operations = [

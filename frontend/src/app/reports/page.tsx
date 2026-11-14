@@ -3,10 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Invoice, getInvoicesAll } from "@/lib/api";
-import { incompleteNote, periodKey, periodLabel, serviceKey, unknownAmountNote } from "@/lib/reports";
+import {
+  buildTariffRows,
+  incompleteNote,
+  periodKey,
+  periodLabel,
+  serviceKey,
+  unknownAmountNote,
+} from "@/lib/reports";
 import LineChart, { type ChartPoint } from "@/components/LineChart";
 import ServiceChart, { type ServiceRow } from "@/components/ServiceChart";
-import TariffDynamicsTable, { type TariffRow } from "@/components/TariffDynamicsTable";
+import TariffDynamicsTable from "@/components/TariffDynamicsTable";
 import styles from "./reports.module.css";
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -96,33 +103,10 @@ export default function ReportsPage() {
     return Array.from(map.entries()).map(([key, { service, rows }]) => ({ key, service, rows }));
   }, [selectedInvoices]);
 
-  // Тарифные строки из выбранного счёта: по каждой услуге берём последние два
-  // тарифа с ненулевым значением и вычисляем % изменения.
-  const tariffRows = useMemo((): TariffRow[] => {
-    if (!selectedInvoices.length) return [];
-    const map = new Map<string, { serviceName: string; unit: string | null; tariffs: number[] }>();
-    for (const inv of selectedInvoices) {
-      for (const item of inv.line_items) {
-        if (item.tariff == null) continue;
-        const tariff = parseFloat(item.tariff);
-        if (!isFinite(tariff)) continue;
-        const key = serviceKey(item);
-        const entry = map.get(key) ?? { serviceName: item.service_name, unit: item.unit ?? null, tariffs: [] };
-        entry.serviceName = item.service_name;
-        entry.tariffs.push(tariff);
-        map.set(key, entry);
-      }
-    }
-    return Array.from(map.values()).map(({ serviceName, unit, tariffs }) => {
-      const last = tariffs[tariffs.length - 1] ?? null;
-      const prev = tariffs.length >= 2 ? tariffs[tariffs.length - 2] : null;
-      const changePct =
-        last != null && prev != null && prev !== 0
-          ? Math.round(((last - prev) / prev) * 10000) / 100
-          : null;
-      return { serviceName, unit, lastTariff: last, prevTariff: prev, changePct };
-    });
-  }, [selectedInvoices]);
+  const tariffRows = useMemo(
+    () => (selectedAccount ? buildTariffRows(invoices, selectedAccount) : []),
+    [invoices, selectedAccount],
+  );
 
   if (loading) return <div className={styles.loading}>Загрузка...</div>;
 
