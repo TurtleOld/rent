@@ -308,3 +308,26 @@
 .changeNeutral {
   color: #6b7280;
 }
+
+.periodLabel {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.72rem;
+  color: #9ca3af;
+}
+
+.tariffNote {
+  display: block;
+  margin-top: 1px;
+  max-width: 220px;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #6b7280;
+  white-space: normal;
+}
+
+.tariffCaption {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: #6b7280;
+}

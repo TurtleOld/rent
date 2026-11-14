@@ -306,7 +306,72 @@ class LineItemQuantityPrecisionTest(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["line_items"][0]["quantity"], "0.954318")
+        # Хранилище хранит 7 знаков, поэтому сериализатор дополняет нулём.
+        self.assertEqual(response.data["line_items"][0]["quantity"], "0.9543180")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class LineItemSourcePrecisionTest(TestCase):
+    """Объём и тариф сохраняются так, как напечатаны в ЕПД."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="source-precision@example.com",
+            email="source-precision@example.com",
+            password="testpassword",
+        )
+        self.invoice = Invoice.objects.create(
+            user=self.user,
+            pdf_file="invoices/test.pdf",
+            status=Invoice.Status.PROCESSING,
+        )
+        from pathlib import Path
+
+        from django.core.files.base import ContentFile
+
+        with open(Path(__file__).parent / "fixtures" / "sample_epd_precision.pdf", "rb") as f:
+            self.invoice.pdf_file.save("precision.pdf", ContentFile(f.read()), save=True)
+
+    def _process(self):
+        from apps.invoices.tasks import _do_process
+
+        _do_process(self.invoice)
+
+    def _line_item(self):
+        self.invoice.refresh_from_db()
+        return LineItem.objects.get(invoice=self.invoice)
+
+    def test_source_values_saved_exactly(self):
+        self._process()
+        li = self._line_item()
+        self.assertEqual(li.quantity, Decimal("0.2468137"))
+        self.assertEqual(li.tariff, Decimal("76543.654321"))
+
+    def test_api_returns_source_precision(self):
+        self._process()
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/invoices/{self.invoice.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item = response.data["line_items"][0]
+        self.assertEqual(item["quantity"], "0.2468137")
+        self.assertEqual(item["tariff"], "76543.654321")
+
+    def test_charge_uses_source_precision_without_warning(self):
+        self._process()
+        li = self._line_item()
+        self.assertEqual(li.amount_charged, Decimal("18892.02"))
+        self.assertEqual(check_line_item(li), [])
+        self.assertFalse(
+            any("количество × тариф" in w for w in self.invoice.warnings)
+        )
+
+    def test_reparse_keeps_source_precision(self):
+        self._process()
+        self._process()
+        li = self._line_item()
+        self.assertEqual(li.quantity, Decimal("0.2468137"))
+        self.assertEqual(li.tariff, Decimal("76543.654321"))
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
